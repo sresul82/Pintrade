@@ -10,19 +10,27 @@ const PORT = process.env.PORT || 5500;
 // ==========================================
 // 1. Middleware
 // ==========================================
-app.use(cors({
-  origin: '*' // Canlıya alırken ['https://siteniz.pages.dev'] ile kısıtlayın
-}));
+app.use(cors()); // En basit CORS ayarı
 app.use(express.json());
+
+// İstekleri logla (Sorunu görmek için)
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // ==========================================
 // 2. MongoDB Bağlantısı & Şema (Cloud Sync)
 // ==========================================
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pintrade';
+const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
-  .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
+if (MONGODB_URI) {
+  mongoose.connect(MONGODB_URI)
+    .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
+    .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
+} else {
+  console.warn('⚠️ MONGODB_URI tanımlı değil, lokal modda çalışılıyor.');
+}
 
 const drawingSchema = new mongoose.Schema({
   syncKey: { type: String, required: true, index: true },
@@ -30,7 +38,6 @@ const drawingSchema = new mongoose.Schema({
   drawings: { type: Array, default: [] }
 }, { timestamps: true });
 
-// Aynı (syncKey, symbol) ikilisi için tek bir kayıt olsun:
 drawingSchema.index({ syncKey: 1, symbol: 1 }, { unique: true });
 const Drawing = mongoose.model('Drawing', drawingSchema);
 
@@ -38,95 +45,66 @@ const Drawing = mongoose.model('Drawing', drawingSchema);
 // 3. API Rotaları (Çizim Senkronizasyonu)
 // ==========================================
 
-// Bütün çizimleri getir
 app.get('/api/sync/drawings', async (req, res) => {
   try {
     const { syncKey } = req.query;
     if (!syncKey) return res.status(400).json({ error: 'syncKey gerekli' });
-
     const records = await Drawing.find({ syncKey });
-    
-    // Frontend'in beklediği format: { "BTCUSDT": [...], "ETHUSDT": [...] }
     const result = {};
-    records.forEach(r => {
-      result[r.symbol] = r.drawings;
-    });
-
+    records.forEach(r => { result[r.symbol] = r.drawings; });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: 'Sunucu hatası' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Sunucu hatası' }); }
 });
 
-// Çizimleri kaydet/güncelle
 app.post('/api/sync/drawings', async (req, res) => {
   try {
     const { syncKey, symbol, drawings } = req.body;
     if (!syncKey || !symbol) return res.status(400).json({ error: 'Eksik parametre' });
-
-    await Drawing.findOneAndUpdate(
-      { syncKey, symbol },
-      { drawings },
-      { upsert: true, new: true }
-    );
-
+    await Drawing.findOneAndUpdate({ syncKey, symbol }, { drawings }, { upsert: true });
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Sunucu hatası' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Sunucu hatası' }); }
 });
 
-// Uyku Önleme (Health Check)
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date() });
-});
+app.get('/health', (req, res) => { res.json({ status: 'ok' }); });
 
 // ==========================================
-// 4. Binance Proxy Rotaları
+// 4. Binance Proxy Rotaları (Daha Basit)
 // ==========================================
+
+app.get('/api/binance/futures/:path*', (req, res) => {
+  const path = req.url.replace('/api/binance/futures', '');
+  proxyRequest('fapi.binance.com', path, res);
+});
+
+app.get('/api/binance/spot/:path*', (req, res) => {
+  const path = req.url.replace('/api/binance/spot', '');
+  proxyRequest('api.binance.com', path, res);
+});
 
 function proxyRequest(targetHost, targetPath, res) {
   const options = {
     hostname: targetHost,
     path:     targetPath,
     method:   'GET',
-    headers:  { 'User-Agent': 'Node.js-Proxy' }
+    headers:  { 'User-Agent': 'Mozilla/5.0' }
   };
 
   const proxyReq = https.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*'
-    });
-    proxyRes.pipe(res, { end: true });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'application/json');
+    proxyRes.pipe(res);
   });
 
   proxyReq.on('error', (err) => {
-    console.error(`[PROXY ERROR] ${targetHost}${targetPath} ->`, err.message);
-    res.status(502).json({ error: 'Proxy hatasi: ' + err.message });
+    res.status(502).json({ error: 'Proxy error' });
   });
 
   proxyReq.end();
 }
 
-app.get('/api/binance/futures/(.*)', (req, res) => {
-  const binancePath = req.originalUrl.replace('/api/binance/futures', '');
-  console.log(`[PROXY Futures] -> https://fapi.binance.com${binancePath}`);
-  proxyRequest('fapi.binance.com', binancePath, res);
-});
-
-app.get('/api/binance/spot/(.*)', (req, res) => {
-  const binancePath = req.originalUrl.replace('/api/binance/spot', '');
-  console.log(`[PROXY Spot] -> https://api.binance.com${binancePath}`);
-  proxyRequest('api.binance.com', binancePath, res);
-});
-
 // ==========================================
 // 5. Sunucuyu Başlat
 // ==========================================
-app.listen(PORT, () => {
-  console.log('\n========================================');
-  console.log(`🚀 PinTrade API Proxy & Sync Server (Express) Başlatıldı!`);
-  console.log(`📍 Port: ${PORT}`);
-  console.log('========================================');
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Sunucu ${PORT} portunda yayında!`);
 });
