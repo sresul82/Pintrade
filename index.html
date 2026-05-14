@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pintrade</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <link rel="stylesheet" href="css/watchlist.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/sidebar.css">
+  <link rel="stylesheet" href="css/drawing-toolbar.css">
+  <link rel="stylesheet" href="css/chart.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── RIGHT SIDEBAR (toggle bar) ── */
+    .right-sidebar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 44px;
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-primary);
+      padding: 4px 0;
+      gap: 2px;
+      z-index: 10;
+    }
+    .rsb-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 40px;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 9px;
+      gap: 2px;
+      transition: background 0.1s, color 0.1s;
+    }
+    .rsb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .rsb-btn.active { color: var(--accent-blue); background: var(--accent-blue-bg); }
+    .rsb-label { font-size: 9px; }
+    .rsb-sep {
+      width: 24px;
+      height: 1px;
+      background: var(--border-primary);
+      margin: 2px 0;
+    }
+    .rsb-clock-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      padding: 6px 2px;
+      color: var(--text-secondary);
+      font-size: 9px;
+      font-family: var(--font-mono);
+      gap: 2px;
+      border-top: 1px solid var(--border-primary);
+      cursor: pointer;
+      line-height: 1.3;
+    }
+    .rsb-clock-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    #rsb-clock-time { font-size: 9px; }
+    #rsb-clock-tz { font-size: 8px; color: var(--text-muted); }
+
+    /* Timezone dropdown */
+    .rsb-tz-menu {
+      position: fixed;
+      right: 44px;
+      bottom: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-lg);
+      min-width: 220px;
+      max-height: 320px;
+      overflow-y: auto;
+      z-index: 500;
+      display: none;
+      padding: 4px 0;
+    }
+    .rsb-tz-menu.open { display: block; }
+    .rsb-tz-item {
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .rsb-tz-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .rsb-tz-item.active { color: var(--accent-blue); }
+
+    /* ── MAIN AREA ── */
+    .main-area {
+      flex: 1;
+      background: var(--bg-primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── NAVBAR ───────────────────────────────────── -->
+    <nav class="navbar">
+      <div class="nb-profile-dropdown" id="nb-profile-dropdown" style="position: relative; height: 100%;">
+        <button class="nb-menu" id="btn-menu" title="Profil Menüsü">
+          <div class="nb-profile-avatar" style="width: 24px; height: 24px; background: var(--accent-green, #2962ff); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">U</div>
+        </button>
+        <div class="nb-dropdown-menu" id="nb-profile-menu" style="left: 0; min-width: 240px; padding: 8px 0; top: 100%;">
+          <div class="nb-profile-header" style="padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-primary); margin-bottom: 4px;">
+            <div style="width: 32px; height: 32px; background: var(--accent-green, #2962ff); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;">U</div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">User Profil</span>
+              <span style="font-size: 11px; color: var(--text-muted);">user@pintrade.com</span>
+            </div>
+          </div>
+          <button class="dropdown-item" style="padding: 8px 16px; border:none; background:transparent; width:100%; text-align:left; font-family:inherit;">
+            <svg style="width:18px;height:18px;margin-right:8px;fill:currentColor;" viewBox="0 0 28 28"><path d="M14 6l-9 7h3v8h4v-5h4v5h4v-8h3l-9-7z"></path></svg> Home
+          </button>
+          <button class="dropdown-item" style="padding: 8px 16px; border:none; background:transparent; width:100%; text-align:left; font-family:inherit;">
+            <svg style="width:18px;height:18px;margin-right:8px;fill:currentColor;" viewBox="0 0 28 28"><path fill-rule="evenodd" d="M14 23a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-17a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-.5 11.5v2h1v-2h-1Zm1.96-6.68c0-.6.41-1.07.96-1.07.56 0 1.04.47 1.04 1.07 0 .58-.45 1.04-.96 1.07-.05 0-.1.01-.15.01-.36 0-.66.25-.8.58-.09.2-.14.43-.14.67v.35h-1V12.5c0-.44.1-.85.28-1.2A1.99 1.99 0 0 1 16.42 10c.87 0 1.58.74 1.58 1.67 0 .84-.57 1.53-1.32 1.65-.05 0-.09.01-.14.01-.22 0-.41.13-.5.33-.05.11-.08.24-.08.38v.46h-1v-.5c0-.4.09-.77.24-1.09.17-.37.45-.66.8-.84.22-.12.47-.19.72-.19Z"></path></svg> Help Center
+          </button>
+          <div class="dropdown-sep"></div>
+          <div style="padding: 8px 16px; display:flex; flex-direction:column; gap:6px;">
+            <label style="font-size:11px; color:var(--text-muted);">Cloud Sync Key</label>
+            <div style="display:flex; gap:4px;">
+              <input type="text" id="sync-key-input" placeholder="Secret sync key..." spellcheck="false" style="width:100%; padding:4px 8px; font-size:11px; background:var(--bg-primary); border:1px solid var(--border-secondary); color:var(--text-primary); border-radius:4px; outline:none;">
+              <button id="btn-sync-key-save" style="background:var(--accent-blue); color:white; border:none; border-radius:4px; padding:0 8px; font-size:10px; cursor:pointer;">Set</button>
+            </div>
+            <div id="sync-status-msg" style="font-size:10px; color:var(--accent-green); margin-top:2px; display:none;">Saved. Syncing...</div>
+          </div>
+          <div class="dropdown-sep"></div>
+          <button class="dropdown-item" id="btn-profile-theme" style="padding: 8px 16px; border:none; background:transparent; width:100%; text-align:left; font-family:inherit; display:flex; justify-content:space-between;">
+            <div style="display:flex; align-items:center;">
+              <svg style="width:18px;height:18px;margin-right:8px;fill:currentColor;" viewBox="0 0 28 28"><path fill-rule="evenodd" d="M14 6a8 8 0 0 0 0 16 7.97 7.97 0 0 0 5.66-2.34 7.97 7.97 0 0 0 2.34-5.66A8 8 0 0 0 14 6Zm-7 8a7 7 0 1 1 14 0 7 7 0 0 1-14 0Z"></path><path d="M14 7v14a7 7 0 0 0 0-14Z"></path></svg> Dark theme
+            </div>
+            <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block; pointer-events:none;">
+              <input type="checkbox" id="profile-theme-toggle" checked style="opacity:0; width:0; height:0;">
+              <span class="toggle-slider" id="profile-theme-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--accent-blue); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                <span class="toggle-circle" id="profile-theme-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--bg-primary); transition:.2s; border-radius:50%; transform:translateX(14px);"></span>
+              </span>
+            </label>
+          </button>
+          <div class="dropdown-sep"></div>
+          <button class="dropdown-item" style="padding: 8px 16px; border:none; background:transparent; width:100%; text-align:left; font-family:inherit;">
+            <svg style="width:18px;height:18px;margin-right:8px;fill:currentColor;" viewBox="0 0 28 28"><path fill-rule="evenodd" d="M18.5 7H21A1.5 1.5 0 0 1 22.5 8.5v11a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19.5v-11A1.5 1.5 0 0 1 7 7h2.5V6A1.5 1.5 0 0 1 11 4.5h6A1.5 1.5 0 0 1 18.5 6v1Zm-1-1h-7V6h7v-.5Zm4 3H6.5v10.5h15V9ZM10 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm1 2.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3-2.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm1 2.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3-2.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm1 2.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg> Keyboard shortcuts <span style="margin-left:auto; color:var(--text-muted); font-size:10px;">Ctrl + /</span>
+          </button>
+          <div class="dropdown-sep"></div>
+          <button class="dropdown-item danger" style="padding: 8px 16px; border:none; background:transparent; width:100%; text-align:left; font-family:inherit; color:var(--accent-red);">
+            <svg style="width:18px;height:18px;margin-right:8px;fill:currentColor;" viewBox="0 0 28 28"><path d="M12 21v-1h8V8h-8V7h9v14h-9ZM6.2 13.5l3.15-3.15-.7-.7L4.3 14l4.35 4.35.7-.7-3.15-3.15H17v-1H6.2Z"></path></svg> Sign out
+          </button>
+        </div>
+      </div>
+
+      <div class="nb-logo">
+        <div class="nb-logo-dot"></div>
+        PINTRADE
+      </div>
+
+      <div class="nb-divider"></div>
+
+      <!-- Symbol Search Dropdown -->
+      <div class="nb-search-container" id="nb-search-container">
+        <div class="nb-search-input-wrapper">
+          <div class="nb-search-exchange" id="nb-search-exchange" title="Borsa Değiştir">BN</div>
+          <input
+            class="nb-sym-search"
+            id="nb-sym-search"
+            type="text"
+            placeholder="Sembol ara..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <!-- Exchange Selection Menu -->
+        <div class="nb-search-exchange-menu" id="nb-search-exchange-menu">
+          <div class="nb-search-exc-item active" data-exchange="binance">Binance</div>
+          <div class="nb-search-exc-item" data-exchange="bybit">Bybit</div>
+        </div>
+        <!-- Search Results Menu -->
+        <div class="nb-search-menu" id="nb-search-menu"></div>
+      </div>
+
+      <!-- Timeframe Group: Favs + Dropdown -->
+      <div class="nb-group-container">
+        <div class="nb-tf-favs" id="nb-tf-favs"></div>
+        
+        <div class="nb-tf-dropdown" id="nb-tf-dropdown">
+          <button class="nb-tf-trigger" id="nb-tf-trigger" title="Periyot seç">
+            <span class="nb-tf-arrow">&#9660;</span>
+          </button>
+          <div class="nb-tf-menu" id="nb-tf-menu">
+            <div class="nb-tf-acc-section"><div class="nb-tf-acc-header"><span>TICKS</span><span class="acc-arrow">&#709;</span></div></div>
+            <div class="nb-tf-menu-sep"></div>
+            <div class="nb-tf-acc-section"><div class="nb-tf-acc-header"><span>SECONDS</span><span class="acc-arrow">&#709;</span></div></div>
+            <div class="nb-tf-menu-sep"></div>
+            <div class="nb-tf-acc-section active">
+              <div class="nb-tf-acc-header"><span>MINUTES</span><span class="acc-arrow">&#708;</span></div>
+              <div class="nb-tf-acc-body">
+                <button class="nb-tf-item" data-tf="1m"><span class="tf-label">1 minute</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="3m"><span class="tf-label">3 minutes</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="5m"><span class="tf-label">5 minutes</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="15m"><span class="tf-label">15 minutes</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="30m"><span class="tf-label">30 minutes</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="45m"><span class="tf-label">45 minutes</span><span class="tf-star">&#9733;</span></button>
+              </div>
+            </div>
+            <div class="nb-tf-menu-sep"></div>
+            <div class="nb-tf-acc-section active">
+              <div class="nb-tf-acc-header"><span>HOURS</span><span class="acc-arrow">&#708;</span></div>
+              <div class="nb-tf-acc-body">
+                <button class="nb-tf-item" data-tf="1H"><span class="tf-label">1 hour</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="2H"><span class="tf-label">2 hours</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="3H"><span class="tf-label">3 hours</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="4H"><span class="tf-label">4 hours</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="6H"><span class="tf-label">6 hours</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="12H"><span class="tf-label">12 hours</span><span class="tf-star">&#9733;</span></button>
+              </div>
+            </div>
+            <div class="nb-tf-menu-sep"></div>
+            <div class="nb-tf-acc-section active">
+              <div class="nb-tf-acc-header"><span>DAYS</span><span class="acc-arrow">&#708;</span></div>
+              <div class="nb-tf-acc-body">
+                <button class="nb-tf-item" data-tf="1D"><span class="tf-label">1 day</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="3D"><span class="tf-label">3 days</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="1W"><span class="tf-label">1 week</span><span class="tf-star">&#9733;</span></button>
+                <button class="nb-tf-item" data-tf="1M"><span class="tf-label">1 month</span><span class="tf-star">&#9733;</span></button>
+              </div>
+            </div>
+            <div class="nb-tf-menu-sep"></div>
+            <div class="nb-tf-acc-section"><div class="nb-tf-acc-header"><span>RANGES</span><span class="acc-arrow">&#709;</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candle Style Group: Favs + Dropdown -->
+      <div class="nb-group-container" style="background: transparent;">
+        <div class="nb-tf-favs" id="nb-ms-favs"></div>
+
+        <div class="nb-dropdown" id="nb-ms-dropdown">
+          <button class="nb-dropdown-trigger nb-tf-trigger" id="nb-ms-trigger" title="Mum Tipi Seç">
+            <span class="nb-dropdown-arrow">&#9660;</span>
+          </button>
+          <div class="nb-dropdown-menu" id="nb-ms-menu">
+            <div class="nb-dropdown-header"><span>Mum Tipi</span></div>
+            <button class="nb-ms-item active" data-style="candlestick" data-label="Candles">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="currentColor"><path d="M17 11v6h3v-6h-3zm-.5-1h4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5z"></path><path d="M18 7h1v3.5h-1zm0 10.5h1V21h-1z"></path><path d="M9 8v12h3V8H9zm-.5-1h4a.5.5 0 0 1 .5.5v13a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5z"></path><path d="M10 4h1v3.5h-1zm0 16.5h1V24h-1z"></path></svg></span><span class="nb-ms-item-label">Candles</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="heikinashi" data-label="Heikin Ashi">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="currentColor"><path d="M9 8v12h3V8H9zm-1-.502C8 7.223 8.215 7 8.498 7h4.004c.275 0 .498.22.498.498v13.004a.493.493 0 0 1-.498.498H8.498A.496.496 0 0 1 8 20.502V7.498z"></path><path d="M10 4h1v3.5h-1z"></path><path d="M17 6v6h3V6h-3zm-1-.5c0-.276.215-.5.498-.5h4.004c.275 0 .498.23.498.5v7c0 .276-.215.5-.498.5h-4.004a.503.503 0 0 1-.498-.5v-7z"></path><path d="M18 2h1v3.5h-1z"></path></svg></span><span class="nb-ms-item-label">Heikin Ashi</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="hollow" data-label="Hollow candles">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="currentColor"><path d="M17 11v6h3v-6h-3zm-.5-1h4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5z"></path><path d="M18 7h1v3.5h-1zm0 10.5h1V21h-1z"></path><path d="M9 8v11h3V8H9zm-.5-1h4a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5v-12a.5.5 0 0 1 .5-.5z"></path><path d="M10 4h1v5h-1zm0 14h1v5h-1zM8.5 9H10v1H8.5zM11 9h1.5v1H11zm-1 1h1v1h-1zm-1.5 1H10v1H8.5zm2.5 0h1.5v1H11zm-1 1h1v1h-1zm-1.5 1H10v1H8.5zm2.5 0h1.5v1H11zm-1 1h1v1h-1zm-1.5 1H10v1H8.5zm2.5 0h1.5v1H11zm-1 1h1v1h-1zm-1.5 1H10v1H8.5zm2.5 0h1.5v1H11z"></path></svg></span><span class="nb-ms-item-label">Hollow candles</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="volume" data-label="Volume candles">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" fill-rule="evenodd" d="M18 4h1v3h3.5c.28 0 .5.22.5.5v13a.5.5 0 0 1-.5.5H19v3h-1v-3h-3.5a.5.5 0 0 1-.5-.5v-13c0-.28.22-.5.5-.5H18V4Zm-3 16h7V8h-7v12ZM10 7H9v3H7.5a.5.5 0 0 0-.5.5v8c0 .28.22.5.5.5H9v3h1v-3h1.5a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H10V7Zm-1 4H8v7h3v-7H9Z"></path></svg></span><span class="nb-ms-item-label">Volume candles</span><span class="item-star">★</span>
+              </button>
+              
+              <div class="nb-dropdown-sep" style="margin:4px 0"></div>
+              
+              <button class="nb-ms-item" data-style="line" data-label="Line">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" d="m25.39 7.31-8.83 10.92-6.02-5.47-7.16 8.56-.76-.64 7.82-9.36 6 5.45L24.61 6.7l.78.62Z"></path></svg></span><span class="nb-ms-item-label">Line</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="line_markers" data-label="Line with markers">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="currentColor"><path fill-rule="evenodd" d="m18.43 15.91 6.96-8.6-.78-.62-6.96 8.6a2.49 2.49 0 0 0-2.63.2l-2.21-2.02A2.5 2.5 0 0 0 10.5 10a2.5 2.5 0 1 0 1.73 4.3l2.12 1.92a2.5 2.5 0 1 0 4.08-.31ZM10.5 14a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm7.5 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"></path><path d="M8.37 13.8c.17.3.4.54.68.74l-5.67 6.78-.76-.64 5.75-6.88Z"></path></svg></span><span class="nb-ms-item-label">Line with markers</span><span class="item-star">★</span>
+              </button>
+              
+              <div class="nb-dropdown-sep" style="margin:4px 0"></div>
+              
+              <button class="nb-ms-item" data-style="area" data-label="Area">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" fill-rule="evenodd" d="m25.35 5.35-9.5 9.5-.35.36-.35-.36-4.65-4.64-8.15 8.14-.7-.7 8.5-8.5.35-.36.35.36 4.65 4.64 9.15-9.14.7.7ZM2 21h1v1H2v-1Zm2-1H3v1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1V9h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v-1h-1v-1h-1v-1h-1v-1h-1v-1h-1v1H9v1H8v1H7v1H6v1H5v1H4v1Zm1 0v1H4v-1h1Zm1 0H5v-1h1v1Zm1 0v1H6v-1h1Zm0-1H6v-1h1v1Zm1 0H7v1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v1h1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v-1h-1v-1h-1v-1h-1v-1h-1v-1h-1v1H9v1H8v1H7v1h1v1Zm1 0v1H8v-1h1Zm0-1H8v-1h1v1Zm1 0H9v1h1v1h1v-1h1v1h1v-1h1v1h1v-1h-1v-1h-1v-1h-1v-1h-1v-1h-1v1H9v1h1v1Zm1 0v1h-1v-1h1Zm0-1v-1h-1v1h1Zm0 0v1h1v1h1v-1h-1v-1h-1Zm6 2v-1h1v1h-1Zm2 0v1h-1v-1h1Zm0-1h-1v-1h1v1Zm1 0h-1v1h1v1h1v-1h1v1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v-1h1v-1h-1v1h-1v1h-1v1h-1v1h1v1Zm1 0h-1v1h1v-1Zm0-1h1v1h-1v-1Zm0-1h1v-1h-1v1Zm0 0v1h-1v-1h1Zm-4 3v1h-1v-1h1Z"></path></svg></span><span class="nb-ms-item-label">Area</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="hlc_area" data-label="HLC area">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="currentColor"><path d="M22 5h1v1h-1zm-1 2V6h1v1zm-1 1V7h1v1zm-1 1V8h1v1zm-1 1V9h1v1zm-1 1v-1h1v1zm-1 1v-1h1v1zm-1 0h1v1h-1zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1 0V7h1v1zM9 9V8h1v1zm-1 1V9h1v1zm-1 1v-1h1v1zm-1 1v-1h1v1zm-1 1v-1h1v1zm0 0v1H4v-1z"></path><path d="M23.34 10.37 15.5 17.7l-5-5-5.15 4.67-.68-.74 5.86-5.32 5 5 7.14-6.67zM6 21H5v1h1zm1-1v1H6v-1zm1-1H7v1h1zm1-1v1H8v-1z"></path><path d="M10 17H9v1h1zm1 0h-1v-1h1zm1 1h-1v-1h1zm1 1v-1h-1v1zm1 1h-1v-1h1zm1 1v-1h-1v1zm1 0v1h-1v-1zm1-1v1h-1v-1zm1-1v1h-1v-1zm1-1h-1v1h1zm1-1v1h-1v-1zm1-1h-1v1h1zm1-1v1h-1v-1zm1-1h-1v1h1zm0 0h1v-1h-1z"></path></svg></span><span class="nb-ms-item-label">HLC area</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="baseline" data-label="Baseline">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" d="m10.49 7.55-.42.7-2.1 3.5.86.5 1.68-2.8 1.8 2.82.84-.54-2.23-3.5-.43-.68Zm12.32 4.72-.84-.54 2.61-4 .84.54-2.61 4Zm-5.3 6.3 1.2-1.84.84.54-1.63 2.5-.43.65-.41-.65-1.6-2.5.85-.54 1.17 1.85ZM4.96 16.75l.86.52-2.4 4-.86-.52 2.4-4ZM3 14v1h1v-1H3Zm2 0h1v1H5v-1Zm2 0v1h1v-1H7Zm2 0h1v1H9v-1Zm2 0v1h1v-1h-1Zm2 0h1v1h-1v-1Zm2 0v1h1v-1h-1Zm2 0h1v1h-1v-1Zm2 0v1h1v-1h-1Zm2 0h1v1h-1v-1Zm2 0v1h1v-1h-1Zm2 0h1v1h-1v-1Z"></path></svg></span><span class="nb-ms-item-label">Baseline</span><span class="item-star">★</span>
+              </button>
+
+              <div class="nb-dropdown-sep" style="margin:4px 0"></div>
+              
+              <button class="nb-ms-item" data-style="volume_footprint" data-label="Volume footprint">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" fill-rule="evenodd" d="M9 4H8v3H6.5a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5H8v3h1v-3h1.5a.5.5 0 0 0 .5-.5v-12a.5.5 0 0 0-.5-.5H9V4ZM7 8v11h3V8H7Zm7-1h9v1h-9V7Zm9 4h-9v1h9v-1Zm-9 4h9v1h-9v-1Zm9 4h-9v1h9v-1Z"></path></svg></span><span class="nb-ms-item-label">Volume footprint</span><span class="item-star">★</span>
+              </button>
+              <button class="nb-ms-item" data-style="session_volume" data-label="Session volume profile">
+                <span class="nb-ms-item-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" fill-rule="evenodd" d="M6 5h6v4h4v4h7v5h-5v4H6V5Zm1 1h4v3H7V6Zm0 4v3h8v-3H7Zm15 4v3H7v-3h15Zm-5 7v-3H7v3h10Z"></path></svg></span><span class="nb-ms-item-label">Session volume profile</span><span class="item-star">★</span>
+              </button>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Layout dropdown -->
+      <div class="nb-group-container nb-dropdown" id="nb-ly-dropdown">
+        <button class="nb-dropdown-trigger" id="nb-ly-trigger" style="height: 100%; display: flex; align-items: center; gap: 4px; border:none; background:transparent;">
+          <span id="nb-ly-icon" style="display:flex; align-items:center;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 21 19" width="18" height="18"><path fill="currentColor" d="M2.5 1C1.67 1 1 1.67 1 2.5v12c0 .83.67 1.5 1.5 1.5h14c.83 0 1.5-.67 1.5-1.5v-12c0-.83-.67-1.5-1.5-1.5h-14ZM0 2.5A2.5 2.5 0 0 1 2.5 0h14A2.5 2.5 0 0 1 19 2.5v12a2.5 2.5 0 0 1-2.5 2.5h-14A2.5 2.5 0 0 1 0 14.5v-12Z"></path></svg></span>
+          <span class="nb-dropdown-arrow">&#9660;</span>
+        </button>
+        <div class="nb-dropdown-menu nb-ly-menu" id="nb-ly-menu" style="min-width: 250px; padding: 0;">
+          <!-- 1 -->
+          <div class="ly-menu-row" style="display:flex; align-items:center; padding: 6px 12px; gap:8px;">
+            <div style="width:20px; color:var(--text-muted); font-size:11px;">1</div>
+            <button class="ly-item active" data-layout="1" style="background:transparent; border:none; color:var(--text-primary); cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 21 19" width="21" height="19"><path fill="currentColor" d="M2.5 1C1.67 1 1 1.67 1 2.5v12c0 .83.67 1.5 1.5 1.5h14c.83 0 1.5-.67 1.5-1.5v-12c0-.83-.67-1.5-1.5-1.5h-14ZM0 2.5A2.5 2.5 0 0 1 2.5 0h14A2.5 2.5 0 0 1 19 2.5v12a2.5 2.5 0 0 1-2.5 2.5h-14A2.5 2.5 0 0 1 0 14.5v-12Z"></path></svg></button>
+          </div>
+          <div class="ly-separator" style="margin:2px 0; border-top:1px solid var(--border-primary);"></div>
+          
+          <!-- 2 -->
+          <div class="ly-menu-row" style="display:flex; align-items:center; padding: 6px 12px; gap:8px;">
+            <div style="width:20px; color:var(--text-muted); font-size:11px;">2</div>
+            <button class="ly-item" data-layout="1+1" style="background:transparent; border:none; color:var(--text-primary); cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 21 19" width="21" height="19"><path fill="currentColor" fill-rule="evenodd" d="M1 2.5C1 1.67 1.67 1 2.5 1H9v15H2.5A1.5 1.5 0 0 1 1 14.5v-12ZM10 16h6.5c.83 0 1.5-.67 1.5-1.5v-12c0-.83-.67-1.5-1.5-1.5H10v15ZM2.5 0A2.5 2.5 0 0 0 0 2.5v12A2.5 2.5 0 0 0 2.5 17h14a2.5 2.5 0 0 0 2.5-2.5v-12A2.5 2.5 0 0 0 16.5 0h-14Z"></path></svg></button>            
+          </div>
+          <div class="ly-separator" style="margin:2px 0; border-top:1px solid var(--border-primary);"></div>
+          
+          <!-- 3 -->
+          <div class="ly-menu-row" style="display:flex; align-items:center; padding: 6px 12px; gap:8px;">
+            <div style="width:20px; color:var(--text-muted); font-size:11px;">3</div>
+            <button class="ly-item" data-layout="1+1+1" style="background:transparent; border:none; color:var(--text-primary); cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 21 19" width="21" height="19"><path fill="currentColor" fill-rule="evenodd" d="M1 2.5C1 1.67 1.67 1 2.5 1H6v15H2.5A1.5 1.5 0 0 1 1 14.5v-12ZM7 16h5V1H7v15Zm6-15v15h3.5c.83 0 1.5-.67 1.5-1.5v-12c0-.83-.67-1.5-1.5-1.5H13ZM2.5 0A2.5 2.5 0 0 0 0 2.5v12A2.5 2.5 0 0 0 2.5 17h14a2.5 2.5 0 0 0 2.5-2.5v-12A2.5 2.5 0 0 0 16.5 0h-14Z"></path></svg></button>
+          </div>
+          <div class="ly-separator" style="margin:2px 0; border-top:1px solid var(--border-primary);"></div>
+
+          <!-- 4 -->
+          <div class="ly-menu-row" style="display:flex; align-items:center; padding: 6px 12px; gap:8px;">
+            <div style="width:20px; color:var(--text-muted); font-size:11px;">4</div>
+            <button class="ly-item" data-layout="2+2" style="background:transparent; border:none; color:var(--text-primary); cursor:pointer;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 21 19" width="21" height="19"><path fill="currentColor" fill-rule="evenodd" d="M1 2.5C1 1.67 1.67 1 2.5 1H9v7H1V2.5ZM1 9v5.5c0 .83.67 1.5 1.5 1.5H9V9H1Zm9 7h6.5c.83 0 1.5-.67 1.5-1.5V9h-8v7Zm8-8V2.5c0-.83-.67-1.5-1.5-1.5H10v7h8ZM2.5 0A2.5 2.5 0 0 0 0 2.5v12A2.5 2.5 0 0 0 2.5 17h14a2.5 2.5 0 0 0 2.5-2.5v-12A2.5 2.5 0 0 0 16.5 0h-14Z"></path></svg></button>
+          </div>
+          <div class="ly-separator" style="margin:2px 0; border-top:1px solid var(--border-primary);"></div>
+          
+          <!-- Sync Header -->
+          <div style="padding: 12px 14px 8px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px;">SYNC IN LAYOUT</div>
+          
+          <!-- Sync Options -->
+          <div class="sync-options" style="display:flex; flex-direction:column; padding: 0 0 12px 0; gap:2px;">
+
+            <div class="sync-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 14px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary);">
+                Symbol 
+                <span style="color:var(--text-muted); cursor:help; font-size: 11px;" title="Symbol changes on all charts within the layout">&#9432;</span>
+              </div>
+              <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block;">
+                <input type="checkbox" data-sync="symbol" checked style="opacity:0; width:0; height:0;">
+                <span class="toggle-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--accent-blue); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                  <span class="toggle-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--bg-primary); transition:.2s; border-radius:50%; transform:translateX(14px);"></span>
+                </span>
+              </label>
+            </div>
+            <div class="sync-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 14px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary);">
+                Interval 
+                <span style="color:var(--text-muted); cursor:help; font-size: 11px;" title="Interval changes on all charts within the layout">&#9432;</span>
+              </div>
+              <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block;">
+                <input type="checkbox" data-sync="interval" style="opacity:0; width:0; height:0;">
+                <span class="toggle-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-tertiary); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                  <span class="toggle-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--text-muted); transition:.2s; border-radius:50%; "></span>
+                </span>
+              </label>
+            </div>
+            <div class="sync-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 14px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary);">
+                Crosshair 
+                <span style="color:var(--text-muted); cursor:help; font-size: 11px;" title="Crosshair is synced across all charts within the layout">&#9432;</span>
+              </div>
+              <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block;">
+                <input type="checkbox" data-sync="crosshair" checked style="opacity:0; width:0; height:0;">
+                <span class="toggle-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--accent-blue); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                  <span class="toggle-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--bg-primary); transition:.2s; border-radius:50%; transform:translateX(14px);"></span>
+                </span>
+              </label>
+            </div>
+            <div class="sync-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 14px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary);">
+                Time 
+                <span style="color:var(--text-muted); cursor:help; font-size: 11px;" title="When a chart is clicked, all charts within the layout display the same point of time">&#9432;</span>
+              </div>
+              <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block;">
+                <input type="checkbox" data-sync="time" style="opacity:0; width:0; height:0;">
+                <span class="toggle-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-tertiary); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                  <span class="toggle-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--text-muted); transition:.2s; border-radius:50%; "></span>
+                </span>
+              </label>
+            </div>
+            <div class="sync-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 14px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary);">
+                Date range 
+                <span style="color:var(--text-muted); cursor:help; font-size: 11px;" title="Date range changes on all charts within the layout">&#9432;</span>
+              </div>
+              <label class="toggle-switch" style="position:relative; width:34px; height:20px; border-radius:10px; display:inline-block;">
+                <input type="checkbox" data-sync="dateRange" style="opacity:0; width:0; height:0;">
+                <span class="toggle-slider" style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:var(--bg-tertiary); transition:.2s; border-radius:10px; border: 1px solid var(--border-secondary);">
+                  <span class="toggle-circle" style="position:absolute; content:''; height:14px; width:14px; left:2px; bottom:2px; background-color:var(--text-muted); transition:.2s; border-radius:50%; "></span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spacer moves everything below it to the right -->
+      <div class="nb-spacer"></div>
+
+      <!-- Navbar Responsive Tools -->
+      <div class="nb-group-container nb-dropdown nb-responsive-tools" id="nb-responsive-tools" style="background:transparent; border:none;">
+        <button class="nb-dropdown-trigger" id="btn-responsive-tools" title="Daha Fazla Araç" style="display:none; align-items:center; justify-content:center; background:transparent; border:none; height:100%; color:var(--text-secondary); cursor:pointer;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+        </button>
+        <div class="nb-dropdown-menu nb-responsive-menu" id="nb-responsive-menu" style="padding:0; border:none; background:transparent;">
+          <!-- Group 1: Indicators, Alert, Replay, Undo, Redo -->
+          <div class="nb-group-container" style="padding: 0 4px;">
+            <div class="nb-indicator-group" style="position:relative; display:flex;">
+              <button class="nb-icon" id="btn-indicators" title="Indicators" style="background:transparent; border:none; color:inherit;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="24" height="24" fill="none"><path stroke="currentColor" d="M6 12l4.8-4.8a1 1 0 0 1 1.4 0l2.7 2.7a1 1 0 0 0 1.3.1L23 5"></path><path fill="currentColor" fill-rule="evenodd" d="M19 12a1 1 0 0 0-1 1v4h-3v-1a1 1 0 0 0-1-1h-3a1 1 0 0 0-1 1v2H7a1 1 0 0 0-1 1v4h17V13a1 1 0 0 0-1-1h-3zm0 10h3v-9h-3v9zm-1 0v-4h-3v4h3zm-4-4.5V22h-3v-6h3v1.5zM10 22v-3H7v3h3z"></path></svg>
+              </button>
+              <button class="nb-tf-trigger" id="btn-indicators-arrow" title="Quick access" style="background:transparent; border:none;"><span class="nb-dropdown-arrow">&#9660;</span></button>
+              <!-- Favori indikatörler dropdown -->
+              <div id="indicator-fav-menu" class="nb-dropdown-menu" style="min-width: 200px; right: 0; padding-bottom: 8px;">
+                <div class="nb-dropdown-header"><span>Favori İndikatörler</span></div>
+                <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 11px;">Henüz favori yok</div>
+              </div>
+            </div>
+            <button class="nb-icon nb-icon-labeled" id="btn-alarm" title="Create Alert" style="background:transparent; border:none; height:100%;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="24" height="24"><path fill="currentColor" d="m19.54 4.5 3.96 4.32-.74.68-3.96-4.32.74-.68ZM7.46 4.5 3.5 8.82l.74.68L8.2 5.18l-.74-.68ZM19.74 10.33A7.5 7.5 0 0 1 21 14.5v.5h1v-.5a8.5 8.5 0 1 0-8.5 8.5h.5v-1h-.5a7.5 7.5 0 1 1 6.24-11.67Z"></path><path fill="currentColor" d="M13 9v5h-3v1h4V9h-1ZM19 20v-4h1v4h4v1h-4v4h-1v-4h-4v-1h4Z"></path></svg>
+              <span class="nb-icon-text">Alert</span>
+            </button>
+            <button class="nb-icon nb-icon-labeled" id="btn-replay" title="Bar Replay" style="background:transparent; border:none; height:100%;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="24" height="24"><path fill="none" stroke="currentColor" d="M13.5 20V9l-6 5.5 6 5.5zM21.5 20V9l-6 5.5 6 5.5z"></path></svg>
+              <span class="nb-icon-text">Replay</span>
+            </button>
+            <button class="nb-icon" id="btn-undo" title="Undo" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18"><path fill="currentColor" d="M8.707 13l2.647 2.646-.707.708L6.792 12.5l3.853-3.854.708.708L8.707 12H14.5a5.5 5.5 0 0 1 5.5 5.5V19h-1v-1.5a4.5 4.5 0 0 0-4.5-4.5H8.707z"></path></svg></button>
+            <button class="nb-icon" id="btn-redo" title="Redo" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18"><path fill="currentColor" d="M18.293 13l-2.647 2.646.707.708 3.854-3.854-3.854-3.854-.707.708L18.293 12H12.5A5.5 5.5 0 0 0 7 17.5V19h1v-1.5a4.5 4.5 0 0 1 4.5-4.5h5.793z"></path></svg></button>
+          </div>
+
+          <!-- Settings & Tools moved left -->
+          <div class="nb-group-container" style="padding: 0 4px;">
+            <button class="nb-icon" id="btn-snapshot" title="Take a snapshot" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.118 6a.5.5 0 0 0-.447.276L9.809 8H5.5A1.5 1.5 0 0 0 4 9.5v10A1.5 1.5 0 0 0 5.5 21h16a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 21.5 8h-4.309l-.862-1.724A.5.5 0 0 0 15.882 6h-4.764zm-1.342-.17A1.5 1.5 0 0 1 11.118 5h4.764a1.5 1.5 0 0 1 1.342.83L17.809 7H21.5A2.5 2.5 0 0 1 24 9.5v10a2.5 2.5 0 0 1-2.5 2.5h-16A2.5 2.5 0 0 1 3 19.5v-10A2.5 2.5 0 0 1 5.5 7h3.691l.585-1.17z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5 18a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm0 1a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z"></path></svg></button>
+            <button class="nb-icon" id="btn-theme" title="Switch theme" style="background:transparent; border:none; height:100%;">☀</button>
+            <button class="nb-icon" id="btn-settings" title="Settings" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" d="M18 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-1 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path><path fill-rule="evenodd" d="M8.5 5h11l5 9-5 9h-11l-5-9 5-9Zm-3.86 9L9.1 6h9.82l4.45 8-4.45 8H9.1l-4.45-8Z"></path></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coin Details Container aligned with Right Panel -->
+      <div class="nb-coin-details" id="nb-coin-details">
+        <div class="nb-cd-item"><div class="nb-cd-label">SYMBOL</div><div class="nb-cd-value" id="cd-symbol">BTCUSDT.P</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label">PRICE</div><div class="nb-cd-value" style="color:var(--accent-teal);" id="cd-price">--</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label">CHANGE</div><div class="nb-cd-value" id="cd-change">--</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label" id="lbl-fr-pct">BN Fr(%)</div><div class="nb-cd-value" id="cd-fr-pct">--</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label" id="lbl-fr-time">BN Fr(h)</div><div class="nb-cd-value" id="cd-fr-time">--</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label">OI(USDT)</div><div class="nb-cd-value" id="cd-oi">--</div></div>
+        <div class="nb-cd-sep"></div>
+        <div class="nb-cd-item"><div class="nb-cd-label">VOLUME</div><div class="nb-cd-value" id="cd-vol">--</div></div>
+      </div>
+    </nav>
+
+    <!-- ── BODY ─────────────────────────────────────── -->
+    <div class="app-body">
+
+      <!-- LEFT TOOLBAR (drawing tools sidebar) -->
+      <div id="sidebar"></div>
+
+      <!-- ANA ALAN — chart eklendi -->
+      <div class="main-area">
+        <div id="chart-root"></div>
+        <!-- Sync Panel - gizli, buildSyncPanel() tarafından doldurulur -->
+        <div id="sync-panel" style="display:none;"></div>
+      </div>
+
+      <!-- RIGHT PANEL (watchlist + detail) -->
+      <div class="right-panel" id="right-panel">
+
+        <!-- WATCHLIST HEADER -->
+        <div class="wl-header">
+          <button class="wl-close" id="wl-close-btn" title="Kapat">✕</button>
+          <div class="wl-tabs">
+            <button class="wl-tab active" data-tab="bn-screener">BN Screener</button>
+            <button class="wl-tab" data-tab="bb-screener">BB Screener</button>
+            <button class="wl-tab" data-tab="bn-all">BN All</button>
+            <button class="wl-tab" data-tab="bb-all">BB All</button>
+          </div>
+        </div>
+
+        <input class="wl-search" id="wl-search" type="text" placeholder="Ara...">
+
+        <div class="wl-col-header" id="wl-col-header"></div>
+
+        <div class="wl-list" id="wl-list"></div>
+
+        <!-- DETAIL / BOT / NEWS SECTION -->
+        <div class="detail-panel" id="detail-panel">
+          <div class="detail-resize" id="detail-resize"></div>
+
+          <div class="detail-tabs">
+            <button class="detail-tab active" data-tab="detail">Detay</button>
+            <button class="detail-tab" data-tab="signals">Bot Sinyalleri</button>
+            <button class="detail-tab" data-tab="news">Haberler</button>
+          </div>
+
+          <div class="detail-body" id="detail-body">
+            <div class="dp-root" id="dp-signals-tab" style="display: none; padding: 12px; color: var(--text-secondary); font-size: 11px; text-align: center;">
+               Bot Sinyalleri bu alanda listelenecek...
+            </div>
+            <div class="dp-root" id="dp-news-tab" style="display: none; padding: 12px; color: var(--text-secondary); font-size: 11px; text-align: center;">
+               İlgili haber akışı bu alanda listelenecek...
+            </div>
+            <div class="dp-root" id="dp-detail-tab">
+              <!-- Üst Kısım -->
+              <div class="dp-tech" id="dp-tech">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div class="dp-coin-info">
+                    <div class="dp-coin-name" id="dp-coin-name">— Coin seç</div>
+                    <div class="dp-ticker-prices">
+                      <div class="dp-price-line">
+                        <span class="dp-price-badge dp-badge-futr">FUTR</span>
+                        <span class="dp-price-futures" id="dp-price-futures">—</span>
+                        <span class="dp-price-change" id="dp-price-change">—</span>
+                      </div>
+                      <div class="dp-price-line">
+                        <span class="dp-price-badge dp-badge-spot">SPOT</span>
+                        <span class="dp-price-spot" id="dp-price-spot">—</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="dp-rsi-row" style="padding-top: 0; margin-top: 13px;">
+                    <span class="dp-rsi-label">RSI</span>
+                    <div class="dp-rsi-card neutral" id="dp-rsi-1m">
+                      <span class="dp-rsi-tf">1m</span>
+                      <span class="dp-rsi-val neutral" id="dp-rsi-1m-val">—</span>
+                    </div>
+                    <div class="dp-rsi-card neutral" id="dp-rsi-5m">
+                      <span class="dp-rsi-tf">5m</span>
+                      <span class="dp-rsi-val neutral" id="dp-rsi-5m-val">—</span>
+                    </div>
+                    <div class="dp-rsi-card neutral" id="dp-rsi-1h">
+                      <span class="dp-rsi-tf">1h</span>
+                      <span class="dp-rsi-val neutral" id="dp-rsi-1h-val">—</span>
+                    </div>
+                    <div class="dp-rsi-card neutral" id="dp-rsi-4h">
+                      <span class="dp-rsi-tf">4h</span>
+                      <span class="dp-rsi-val neutral" id="dp-rsi-4h-val">—</span>
+                    </div>
+                    <div class="dp-rsi-card neutral" id="dp-rsi-1d">
+                      <span class="dp-rsi-tf">1D</span>
+                      <span class="dp-rsi-val neutral" id="dp-rsi-1d-val">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 4'lü Veri Satırı -->
+                <div class="dp-funding-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px;">
+                  <div class="dp-info-card">
+                    <span class="dp-info-label" id="dp-funding-label">Funding (4h)</span>
+                    <span class="dp-info-value green" id="dp-funding">—</span>
+                  </div>
+                  <div class="dp-info-card">
+                    <span class="dp-info-label">Sonraki FR</span>
+                    <span class="dp-info-value blue" id="dp-fr-timer">—</span>
+                  </div>
+                  <div class="dp-info-card">
+                    <span class="dp-info-label">OI(USDT)</span>
+                    <span class="dp-info-value" id="dp-oi-val">—</span>
+                  </div>
+                  <div class="dp-info-card">
+                    <span class="dp-info-label">Volume(USDT)</span>
+                    <span class="dp-info-value" id="dp-vol-val">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Alt Bölüm: L/S + OI Değişimi -->
+              <div class="dp-fund" id="dp-fund" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px 12px 6px;">
+                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
+                  <div class="dp-bars-block" style="gap: 12px; width: 100%;">
+                    <div class="dp-split-row">
+                      <span class="dp-split-title">L/S</span>
+                      <div class="dp-split-bar" style="width: 100%;">
+                        <div class="dp-split-buy" id="dp-ls-buy" style="width:50%;gap:4px">
+                          <span id="dp-ls-buy-vol">—</span><span id="dp-ls-buy-pct">—</span>
+                        </div>
+                        <div class="dp-split-sell" id="dp-ls-sell" style="width:50%;gap:4px">
+                          <span id="dp-ls-sell-pct">—</span><span id="dp-ls-sell-vol">—</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="dp-split-row">
+                      <span class="dp-split-title">Tahta</span>
+                      <div class="dp-split-bar" style="width: 100%;">
+                        <div class="dp-split-buy" id="dp-ob-buy" style="width:50%">—</div>
+                        <div class="dp-split-sell" id="dp-ob-sell" style="width:50%">—</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; padding: 6px 10px;">
+                  <div class="dp-fund-label" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0;">
+                    <span>OI Değişimi (8 periyot)</span>
+                  </div>
+                  <div class="dp-oi-bars" id="dp-oi-bars" style="flex: 1; margin-top: auto;"></div>
+                </div>
+              </div>
+
+              <div class="dp-divider"></div>
+
+              <!-- Fundamental Info -->
+              <div class="dp-spot-info">
+                <div class="dp-fund-title" style="margin-bottom: 6px; font-size: 10px; color: rgba(255, 255, 255, 0.7);">Fundamental Info</div>
+                <div class="dp-spot-grid">
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">Market Cap</div>
+                    <div class="dp-fund-val">
+                      <span id="dp-mcap-val">—</span>
+                      <span class="dp-val-sub green" id="dp-mcap-pct"></span>
+                    </div>
+                  </div>
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">Vol / Mcap (24h)</div>
+                    <div class="dp-fund-val" id="dp-vol-mcap-val">—</div>
+                  </div>
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">Circulating Supply</div>
+                    <div class="dp-fund-val" id="dp-circ-val">—</div>
+                  </div>
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">Max Supply</div>
+                    <div class="dp-fund-val" id="dp-max-val">—</div>
+                  </div>
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">Total Supply</div>
+                    <div class="dp-fund-val" id="dp-total-val">—</div>
+                  </div>
+                  <div class="dp-fund-card align-center">
+                    <div class="dp-fund-label">FDV</div>
+                    <div class="dp-fund-val" id="dp-fdv-val">—</div>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /dp-root -->
+          </div><!-- /detail-body -->
+        </div>
+        <!-- GLOBAL NEWS PANEL -->
+        <div class="global-news-panel" id="global-news-panel" style="display: none;">
+          <div class="gnp-header">
+            <button class="gnp-tab active" data-gnp-tab="global">Global News</button>
+            <button class="gnp-tab" data-gnp-tab="exchange">Exchange News</button>
+          </div>
+          <div class="gnp-body">
+            <div class="gnp-content active" id="gnp-global">
+              <div class="gnp-loading">Haberler yükleniyor...</div>
+            </div>
+            <div class="gnp-content" id="gnp-exchange" style="display: none;">
+              <div class="gnp-loading">Borsa haberleri yükleniyor...</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /#right-panel -->
+
+      <!-- RIGHT SIDEBAR (toggle bar) -->
+      <div class="right-sidebar">
+        <div class="rsb-group-container" style="display:flex; flex-direction:column; gap:4px; width:100%; align-items:center; background: transparent; border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: 4px 0;">
+        <button class="rsb-btn" id="rsb-watchlist" title="Watchlist">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
+            <path fill="currentColor" d="M28 16H16v1h12v-1ZM28 20H16v1h12v-1ZM16 24h12v1H16v-1Z"></path>
+            <path fill="currentColor" fill-rule="evenodd" d="m22 30-10 4V12a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v22l-10-4Zm-9 2.52V12h18v20.52l-9-3.6-9 3.6Z"></path>
+          </svg>
+          <span class="rsb-label">Watch</span>
+        </button>
+        <button class="rsb-btn" id="rsb-alarms" title="Create Alert">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
+            <path fill="currentColor" d="M35 14.66 29.16 9l-.7.72 5.84 5.66.7-.72ZM9 14.66 14.84 9l.7.72-5.84 5.66-.7-.72ZM22 16v7h-5v1h6v-8h-1Z"></path>
+            <path fill="currentColor" fill-rule="evenodd" d="M22 33a11 11 0 1 0 0-22 11 11 0 0 0 0 22Zm0-1a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"></path>
+          </svg>
+          <span class="rsb-label">Alarm</span>
+        </button>
+        <button class="rsb-btn" id="rsb-news" title="News">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
+            <path fill="currentColor" fill-rule="evenodd" d="M10 11h24v22H10V11Zm1 1v20h22V12H11Zm3 3h6v6h-6v-6Zm8 1h8v1h-8v-1Zm0 3h8v1h-8v-1Zm-8 4h16v1H14v-1Zm0 3h16v1H14v-1Zm0 3h16v1H14v-1Z"></path>
+          </svg>
+          <span class="rsb-label">News</span>
+        </button>
+
+        </div>
+        <div class="rsb-spacer" style="flex:1"></div>
+
+        <button class="rsb-clock-btn" id="rsb-clock-btn" title="Timezone Settings">
+          <span id="rsb-clock-time">00:00:00</span>
+          <span id="rsb-clock-tz">UTC</span>
+        </button>
+      </div>
+
+      <!-- Timezone Dropdown -->
+      <div class="rsb-tz-menu" id="rsb-tz-menu">
+        <div class="rsb-tz-item" data-tz="Etc/UTC">UTC</div>
+        <div class="rsb-tz-item" data-tz="exchange">Exchange</div>
+        <div class="rsb-tz-item" data-tz="Pacific/Honolulu">(UTC-10) Honolulu</div>
+        <div class="rsb-tz-item" data-tz="America/Anchorage">(UTC-8) Anchorage</div>
+        <div class="rsb-tz-item" data-tz="America/Los_Angeles">(UTC-7) Los Angeles</div>
+        <div class="rsb-tz-item" data-tz="America/Denver">(UTC-6) Denver</div>
+        <div class="rsb-tz-item" data-tz="America/Chicago">(UTC-5) Chicago</div>
+        <div class="rsb-tz-item" data-tz="America/New_York">(UTC-4) New York</div>
+        <div class="rsb-tz-item" data-tz="America/Sao_Paulo">(UTC-3) Sao Paulo</div>
+        <div class="rsb-tz-item" data-tz="Europe/London">(UTC+0) London</div>
+        <div class="rsb-tz-item" data-tz="Europe/Paris">(UTC+1) Paris</div>
+        <div class="rsb-tz-item" data-tz="Europe/Berlin">(UTC+1) Berlin</div>
+        <div class="rsb-tz-item" data-tz="Europe/Istanbul">(UTC+3) Istanbul</div>
+        <div class="rsb-tz-item" data-tz="Asia/Dubai">(UTC+4) Dubai</div>
+<div class="rsb-tz-item" data-tz="Asia/Ashgabat">(UTC+5) Ashgabat</div>
+        <div class="rsb-tz-item" data-tz="Asia/Tehran">(UTC+3:30) Tehran</div>
+        <div class="rsb-tz-item" data-tz="Asia/Kolkata">(UTC+5:30) Kolkata</div>
+        <div class="rsb-tz-item" data-tz="Asia/Bangkok">(UTC+7) Bangkok</div>
+        <div class="rsb-tz-item" data-tz="Asia/Singapore">(UTC+8) Singapore</div>
+        <div class="rsb-tz-item" data-tz="Asia/Shanghai">(UTC+8) Shanghai</div>
+        <div class="rsb-tz-item" data-tz="Asia/Tokyo">(UTC+9) Tokyo</div>
+        <div class="rsb-tz-item" data-tz="Australia/Sydney">(UTC+9) Sydney</div>
+        <div class="rsb-tz-item" data-tz="Pacific/Auckland">(UTC+10) Auckland</div>
+      </div>
+
+    </div><!-- /.app-body -->
+  </div><!-- /.app -->
+
+
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ── SCRIPTS ──────────────────────────────────── -->
+  <script src="js/lightweight-charts.min.js"></script>
+  <!-- Config & Storage (önce yüklenmeli) -->
+  <script src="js/core/app-config.js"></script>
+  <script src="js/data/binance-api.js"></script>
+  <script src="js/data/bybit-api.js"></script>
+  <script src="js/core/storage.js"></script>
+  <script src="js/core/event-bus.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-utils.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-fibo-tabs.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-position-tabs.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-annotation-tabs.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-standard-tabs.js"></script>
+  <script src="js/drawing/ui/dsd-tabs/dsd-apply.js"></script>
+  <script src="js/drawing/ui/dsd-color-picker.js"></script>
+  <script src="js/drawing/ui/drawing-settings-dialog.js"></script>
+  <script src="js/drawing/ui/property-toolbar.js"></script>
+  <script src="js/drawing/tools/drawing-annotations.js"></script>
+  <script src="js/drawing/tools/drawing-trend.js"></script>
+  <script src="js/drawing/tools/drawing-fibo.js"></script>
+  <script src="js/drawing/tools/drawing-shapes.js"></script>
+  <script src="js/drawing/tools/drawing-patterns.js"></script>
+  <script src="js/drawing/tools/drawing-forecast.js"></script>
+  <script src="js/drawing/core/drawing-core.js"></script>
+
+  <!-- Core Chart Logic -->
+  <script src="js/core/chart-config.js"></script>
+  <script src="js/ui/icons.js"></script>
+  <script src="js/core/session.js"></script>
+  <script src="js/data/chart-data.js"></script>
+  <script src="js/ui/chart-popovers.js"></script>
+  <script src="js/chart/chart-pane.js"></script>
+  <script src="js/chart/chart-layout.js"></script>
+  <script src="js/chart/ui/chart-settings.js"></script>
+  <script src="js/chart/chart-core.js"></script>
+
+  <script src="js/core/app.js"></script>
+  <script src="js/data/news-api.js"></script>
+
+  <!-- Screener modülleri -->
+  <script src="js/screener/search-core.js"></script>
+  <script src="js/screener/fr-tracker.js"></script>
+  <script src="js/screener/funding-interval.js"></script>
+  <script src="js/screener/oi-api.js"></script>
+  <script src="js/screener/screener-core.js"></script>
+  <script src="js/screener/detail-panel.js"></script>
+  <script src="js/ui/sidebar.js"></script>
+
+  <script>
+    App.init();
+    if (typeof SearchCore  !== 'undefined') SearchCore.init();
+    if (typeof ScreenerCore !== 'undefined') ScreenerCore.init();
+    if (typeof DetailPanel  !== 'undefined') DetailPanel.init();
+    if (typeof Sidebar !== 'undefined') Sidebar.init();
+  </script>
+</body>
+</html>
