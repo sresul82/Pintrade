@@ -109,13 +109,13 @@ function proxyRequest(targetHost, targetPath, res) {
   proxyReq.end();
 }
 
-app.get('/api/binance/futures/*', (req, res) => {
+app.get('/api/binance/futures/(.*)', (req, res) => {
   const binancePath = req.originalUrl.replace('/api/binance/futures', '');
   console.log(`[PROXY Futures] -> https://fapi.binance.com${binancePath}`);
   proxyRequest('fapi.binance.com', binancePath, res);
 });
 
-app.get('/api/binance/spot/*', (req, res) => {
+app.get('/api/binance/spot/(.*)', (req, res) => {
   const binancePath = req.originalUrl.replace('/api/binance/spot', '');
   console.log(`[PROXY Spot] -> https://api.binance.com${binancePath}`);
   proxyRequest('api.binance.com', binancePath, res);
