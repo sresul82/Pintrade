@@ -92,6 +92,9 @@ function proxyRequest(targetHost, targetPath, res) {
   const proxyReq = https.request(options, (proxyRes) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     proxyRes.pipe(res);
   });
 
