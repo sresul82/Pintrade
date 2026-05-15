@@ -266,19 +266,24 @@ class BinanceFeed {
 
   // Connect WebSocket for live candle updates
   connectLive(symbol, tf) {
-    console.log(`[BinanceFeed] connectLive initiated for ${symbol}_${tf}`);
     const key      = `${symbol}_${tf}`;
     const interval = BINANCE_TF[tf];
     if (!interval) return;
-    if (this._ws[key]) this.disconnectLive(symbol, tf);
 
-    // ── Futures WebSocket endpoint ─────────────────────────
+    // Zaten açık bir bağlantı varsa önce kapat (Race Condition Koruması)
+    if (this._ws[key]) {
+      console.warn(`[BinanceFeed] Existing WS found for ${key}, closing first.`);
+      this._ws[key].onmessage = null; // handler'ı temizle
+      this._ws[key].close();
+      this._ws[key] = null;
+    }
+
     const wsUrl = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@kline_${interval}`;
-    console.log(`[BinanceFeed] WS Target URL: ${wsUrl}`);
+    console.log(`[BinanceFeed] connectLive initiated for ${key} -> ${wsUrl}`);
     EventBus.emit('feed:status', { exchange: 'binance', status: 'connecting' });
 
     const ws = new WebSocket(wsUrl);
-    this._ws[key] = ws;
+    this._ws[key] = ws; // ÖNCE kaydet
 
     ws.onopen = () => {
       console.log(`[BinanceFeed] WS OPEN successfully connected to ${wsUrl}`);
@@ -286,8 +291,7 @@ class BinanceFeed {
     };
 
     ws.onmessage = async (evt) => {
-      // ── Debug: ham mesajı logla (emit'ten önce) ──────────
-      console.log(`[BinanceFeed] raw msg received, length: ${evt.data.length} | preview: ${evt.data.substring(0, 50)}`);
+      console.log(`[BinanceFeed] raw msg:`, evt.data.substring(0, 80)); // Debug log
 
       let k;
       try {
@@ -298,7 +302,7 @@ class BinanceFeed {
         return;
       }
 
-      if (!k) return; // Ping / stream-başlangıç mesajları k içermez
+      if (!k) return;
 
       const candle = {
         time:   Math.floor(k.t / 1000),
@@ -309,27 +313,26 @@ class BinanceFeed {
         volume: parseFloat(k.v),
       };
 
-      // Persist to IndexedDB — hata olsa da emit'i engellemesin
       try {
         await candleStore.append(symbol, tf, 'binance', candle);
       } catch (e) {
         console.warn('[BinanceFeed] candleStore.append error (non-fatal):', e);
       }
 
-      // Broadcast live tick — her zaman çalışır
       EventBus.emit('feed:tick', { symbol, tf, exchange: 'binance', candle, isClosed: k.x });
-
-      // Broadcast price for watchlist
-      EventBus.emit('feed:price', {
-        symbol,
-        exchange: 'binance',
-        price:    candle.close,
-      });
+      EventBus.emit('feed:price', { symbol, exchange: 'binance', price: candle.close });
     };
 
+    ws.onerror = (err) => {
+      console.error(`[BinanceFeed] WS ERROR for ${key}:`, err);
+      EventBus.emit('feed:status', { exchange: 'binance', status: 'error' });
+    };
 
-    ws.onerror = () => EventBus.emit('feed:status', { exchange: 'binance', status: 'error' });
-    ws.onclose = () => EventBus.emit('feed:status', { exchange: 'binance', status: 'closed' });
+    ws.onclose = () => {
+      console.log(`[BinanceFeed] WS CLOSED for ${key}`);
+      EventBus.emit('feed:status', { exchange: 'binance', status: 'closed' });
+      this._ws[key] = null;
+    };
   }
 
   disconnectLive(symbol, tf) {

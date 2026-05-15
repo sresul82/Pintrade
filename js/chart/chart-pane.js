@@ -469,7 +469,7 @@ class ChartPane {
       // Request real data from DataFeedManager
       // DataFeed will emit 'feed:candles' which we handle below
       DataFeed.load(`pane_${this.idx}`, this.symbol, this.tf, this.exchange);
-    }, 50);
+    }, 150); // 50ms'den 150ms'ye çıkarıldı
   }
 
   // Called when feed:candles arrives for our symbol+tf
@@ -727,6 +727,7 @@ class ChartPane {
 
   // ── Public API ────────────────────────────────────────────
   setSymbol(symbol, exchange) {
+    if (this.symbol === symbol && (!exchange || this.exchange === exchange)) return; // Çift tetiklenme koruması
     this.symbol = symbol;
     if (exchange) this.exchange = exchange;
     this.hdr.querySelector('.pane-sym').textContent = symbol;
@@ -735,6 +736,7 @@ class ChartPane {
   }
 
   setTF(tf) {
+    if (this.tf === tf) return; // Çift tetiklenme koruması
     this.tf = tf;
     this.loaded = false; this._loadData(); this.loaded = true;
 
