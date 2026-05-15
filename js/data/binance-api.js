@@ -27,6 +27,7 @@ const BinanceAPI = (() => {
         limit,
       });
       if (endTime) params.set('endTime', endTime);
+      params.set('_t', Date.now());
 
       const url = `${BASE}/fapi/v1/klines?${params}`;
       const res = await fetch(url);
@@ -51,7 +52,7 @@ const BinanceAPI = (() => {
   /* ── REST: Aktif Perpetual Kontrat Listesi ───────────── */
   async function fetchSymbols() {
     try {
-      const res  = await fetch(`${BASE}/fapi/v1/exchangeInfo`);
+      const res  = await fetch(`${BASE}/fapi/v1/exchangeInfo?_t=${Date.now()}`);
       const data = await res.json();
       return data.symbols
         .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL')
@@ -65,7 +66,7 @@ const BinanceAPI = (() => {
   /* ── REST: 24H Ticker ────────────────────────────────── */
   async function fetchTicker(symbol) {
     try {
-      const res  = await fetch(`${BASE}/fapi/v1/ticker/24hr?symbol=${symbol}`);
+      const res  = await fetch(`${BASE}/fapi/v1/ticker/24hr?symbol=${symbol}&_t=${Date.now()}`);
       return await res.json();
     } catch (e) {
       console.error('[BinanceAPI] fetchTicker error:', e);

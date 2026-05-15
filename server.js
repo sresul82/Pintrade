@@ -82,9 +82,12 @@ app.get('/api/binance/spot/:path*', (req, res) => {
 });
 
 function proxyRequest(targetHost, targetPath, res) {
+  const separator = targetPath.includes('?') ? '&' : '?';
+  const noCachePath = `${targetPath}${separator}_t=${Date.now()}`;
+
   const options = {
     hostname: targetHost,
-    path:     targetPath,
+    path:     noCachePath,
     method:   'GET',
     headers:  { 'User-Agent': 'Mozilla/5.0' }
   };
