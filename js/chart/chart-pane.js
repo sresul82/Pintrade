@@ -356,8 +356,9 @@ class ChartPane {
     }
 
     // Listen for real candle data and live ticks from DataFeed
-    EventBus.on('feed:candles', (payload) => this._onFeedCandles(payload));
-    EventBus.on('feed:tick',    (payload) => this._onFeedTick(payload));
+    EventBus.on('feed:candles',      (payload) => this._onFeedCandles(payload));
+    EventBus.on('feed:olderCandles', (payload) => this._onOlderCandles(payload));
+    EventBus.on('feed:tick',         (payload) => this._onFeedTick(payload));
   }
 
   // ── Global Drawing Refresh ──────────────────────────────
@@ -487,7 +488,27 @@ class ChartPane {
       return;
     }
 
-    const last = candles[candles.length - 1];
+    // ── Sanitize: null/NaN içeren mumları filtrele ──────────
+    const clean = candles
+      .map(d => ({
+        time:   typeof d.time === 'number' ? d.time : parseInt(d.time),
+        open:   parseFloat(d.open),
+        high:   parseFloat(d.high),
+        low:    parseFloat(d.low),
+        close:  parseFloat(d.close),
+        volume: parseFloat(d.volume ?? 0),
+      }))
+      .filter(d =>
+        !isNaN(d.time) && d.time > 0 &&
+        !isNaN(d.open)  && d.open  > 0 &&
+        !isNaN(d.high)  && d.high  > 0 &&
+        !isNaN(d.low)   && d.low   > 0 &&
+        !isNaN(d.close) && d.close > 0
+      );
+
+    if (!clean.length) return; // Temiz veri yoksa chart'a dokunma
+
+    const last = clean[clean.length - 1];
 
     // ── Precision: setData'dan ÖNCE uygula ──────────────────────
     if (last && last.close != null) {
@@ -514,26 +535,26 @@ class ChartPane {
 
     this.series.setData(
       isLine
-        ? candles.map(d => ({ time: d.time, value: d.close }))
-        : candles
+        ? clean.map(d => ({ time: d.time, value: d.close }))
+        : clean
     );
 
     if (this.volSeries) {
-      this.volSeries.setData(candles.map(d => ({
-        time: d.time,
+      this.volSeries.setData(clean.map(d => ({
+        time:  d.time,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
       })));
     }
 
     // Cache candle data for magnet mode snap calculations
-    this.candlesData = candles;
+    this.candlesData = clean;
 
     this._lastPrice      = last?.close ?? null;
     this._lastPriceIsUp  = last && (last.close >= (last.open ?? last.close));
     this._lastCandleTime = last?.time ?? null;
 
-    this._updateVisualLines(candles);
+    this._updateVisualLines(clean);
     requestAnimationFrame(() => this._positionCountdown());
 
     if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
@@ -551,26 +572,114 @@ class ChartPane {
     if (this.exchange && exchange !== this.exchange) return; // sadece bilinen ve bu pane'ye ait borsalar
 
     const isLine = ['line', 'area'].includes(this.chartType);
-    const update = isLine ? { time: candle.time, value: candle.close } : candle;
+
+    // ── Sanitize: tüm alanları sayıya zorla ──────────────────
+    const safe = {
+      time:   typeof candle.time === 'number' ? candle.time : parseInt(candle.time),
+      open:   parseFloat(candle.open),
+      high:   parseFloat(candle.high),
+      low:    parseFloat(candle.low),
+      close:  parseFloat(candle.close),
+      volume: parseFloat(candle.volume),
+    };
+
+    // Geçersiz veri varsa güncelleme yapma
+    if (isNaN(safe.time) || isNaN(safe.close) || isNaN(safe.open) ||
+        isNaN(safe.high) || isNaN(safe.low)) {
+      console.warn('[ChartPane] _onFeedTick: geçersiz candle verisi, atlandı:', candle);
+      return;
+    }
+
+    const update = isLine ? { time: safe.time, value: safe.close } : safe;
 
     try {
       this.series.update(update);
 
       if (this.volSeries) {
         this.volSeries.update({
-          time: candle.time,
-          value: candle.volume,
-          color: candle.close >= candle.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
+          time:  safe.time,
+          value: safe.volume,
+          color: safe.close >= safe.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
         });
       }
 
-      this._lastPrice      = candle.close;
-      this._lastPriceIsUp  = candle.close >= candle.open;
-      this._lastCandleTime = candle.time;
+      this._lastPrice      = safe.close;
+      this._lastPriceIsUp  = safe.close >= safe.open;
+      this._lastCandleTime = safe.time;
     } catch (err) {
       console.warn('[ChartPane] _onFeedTick update failed:', err);
       // Lightweight-charts rejects updates older than last bar — safe to ignore
       // This can happen briefly after setData() before WS sync catches up
+    }
+  }
+
+  // Called when feed:olderCandles arrives (scroll-triggered lazy load)
+  _onOlderCandles({ symbol, tf, exchange, candles }) {
+    if (this._destroyed) return;
+    if (symbol !== this.symbol || tf !== this.tf) return;
+    if (this.exchange && exchange !== this.exchange) return;
+    if (!this.series) return;
+
+    // Boş veri gelirse hiçbir şey yapma — chart'a dokunma
+    if (!candles || !candles.length) return;
+
+    // Sanitize
+    const clean = candles
+      .map(d => ({
+        time:   typeof d.time === 'number' ? d.time : parseInt(d.time),
+        open:   parseFloat(d.open),
+        high:   parseFloat(d.high),
+        low:    parseFloat(d.low),
+        close:  parseFloat(d.close),
+        volume: parseFloat(d.volume ?? 0),
+      }))
+      .filter(d =>
+        !isNaN(d.time) && d.time > 0 &&
+        !isNaN(d.open)  && d.open  > 0 &&
+        !isNaN(d.high)  && d.high  > 0 &&
+        !isNaN(d.low)   && d.low   > 0 &&
+        !isNaN(d.close) && d.close > 0
+      );
+
+    // Temizlendikten sonra hâlâ boşsa dokunma
+    if (!clean.length) return;
+
+    // Mevcut veriden daha eski mumlar geldi mi kontrol et
+    const firstExisting = this.candlesData?.[0]?.time ?? Infinity;
+    const firstNew      = clean[0].time;
+
+    // Eğer gelen veri mevcut veriden daha eski değilse işlem yapma
+    if (firstNew >= firstExisting) return;
+
+    // Visible range'i kaydet — setData sonrası geri yükleyeceğiz
+    let savedRange = null;
+    try { savedRange = this.chart.timeScale().getVisibleLogicalRange(); } catch(_) {}
+
+    const isLine = ['line', 'area'].includes(this.chartType);
+
+    try {
+      this.series.setData(
+        isLine
+          ? clean.map(d => ({ time: d.time, value: d.close }))
+          : clean
+      );
+
+      if (this.volSeries) {
+        this.volSeries.setData(clean.map(d => ({
+          time:  d.time,
+          value: d.volume,
+          color: d.close >= d.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
+        })));
+      }
+
+      this.candlesData = clean;
+
+      // Visible range'i geri yükle — kullanıcının baktığı yere geri dön
+      if (savedRange) {
+        try { this.chart.timeScale().setVisibleLogicalRange(savedRange); } catch(_) {}
+      }
+    } catch(err) {
+      console.warn('[ChartPane] _onOlderCandles setData failed:', err);
     }
   }
 

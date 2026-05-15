@@ -615,7 +615,7 @@ class DataFeedManager {
         const oldestTime = stored.length ? stored[0].time : null;
         // Only fetch if the requested endTime is strictly older than what we have
         // (If endTimeMs >= oldestTime * 1000, it means we already have these candles)
-        if (oldestTime && endTimeMs > oldestTime * 1000) { return; }
+        if (oldestTime && endTimeMs >= oldestTime * 1000) { return; }
 
         const limit  = 500;
         const endMs  = oldestTime ? (oldestTime * 1000 - 1) : endTimeMs;
@@ -627,8 +627,10 @@ class DataFeedManager {
         if (!Array.isArray(data) || !data.length) return;
 
         const candles = data.map(normFn).sort((a, b) => a.time - b.time);
+        if (!candles.length) return;
         const merged  = await candleStore.mergeHistory(symbol, tf, feedName, candles);
-        EventBus.emit('feed:candles', { symbol, tf, exchange: feedName, candles: merged });
+        if (!merged || !merged.length) return;
+        EventBus.emit('feed:olderCandles', { symbol, tf, exchange: feedName, candles: merged });
       } catch (e) {
         console.error(`[DataFeed] loadOlderCandles ${feedName} error:`, e);
       } finally {
