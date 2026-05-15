@@ -256,11 +256,11 @@ const ScreenerCore = (() => {
       const symbols = await _getBinanceSymbols();
 
       // 2) Funding rates
-      const frResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?limit=500`);
+      const frResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?limit=500&_t=${Date.now()}`);
       const frData = await frResp.json();
 
       // 3) 24h ticker (toplu)
-      const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr`);
+      const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?_t=${Date.now()}`);
       const tkData = await tkResp.json();
       const tkMap = {};
       tkData.forEach(t => { tkMap[t.symbol] = t; });
@@ -292,7 +292,7 @@ const ScreenerCore = (() => {
       // 5) OI batch çek — Anlık v1/openInterest ile
       const fetchOI = async (sym, price, oldOi) => {
         try {
-          const r = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/openInterest?symbol=${sym}USDT`);
+          const r = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/openInterest?symbol=${sym}USDT&_t=${Date.now()}`);
           if (!r.ok) return null;
           const d = await r.json();
           if (!d?.openInterest) return null;
@@ -331,7 +331,7 @@ const ScreenerCore = (() => {
     _setLoading();
     try {
       const symbols = await _getBinanceSymbols();
-      const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr`);
+      const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?_t=${Date.now()}`);
       const tkData = await tkResp.json();
       const validSet = new Set(symbols);
 
@@ -445,7 +445,7 @@ const ScreenerCore = (() => {
     if (_symCache.date === _today() && _symCache.binance.length > 0) {
       return _symCache.binance;
     }
-    const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/exchangeInfo`);
+    const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/exchangeInfo?_t=${Date.now()}`);
     const data = await resp.json();
     const syms = data.symbols
       .filter(s => s.status === 'TRADING' && s.symbol.endsWith('USDT'))
