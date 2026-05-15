@@ -270,90 +270,95 @@ class BinanceFeed {
     const interval = BINANCE_TF[tf];
     if (!interval) return;
 
-    // Zaten açık bir bağlantı varsa önce kapat (Race Condition Koruması)
+    // Zaten çalışan bir poll varsa durdur
     if (this._ws[key]) {
-      console.warn(`[BinanceFeed] Existing WS found for ${key}, closing first.`);
-      this._ws[key].onmessage = null; // handler'ı temizle
-      this._ws[key].close();
+      clearInterval(this._ws[key]);
       this._ws[key] = null;
     }
 
-    const wsUrl = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@kline_${interval}`;
-    console.log(`[BinanceFeed] connectLive initiated for ${key} -> ${wsUrl}`);
-    EventBus.emit('feed:status', { exchange: 'binance', status: 'connecting' });
+    console.log(`[BinanceFeed] connectLive (polling) started for ${key}`);
+    EventBus.emit('feed:status', { exchange: 'binance', status: 'open' });
 
-    const ws = new WebSocket(wsUrl);
-    this._ws[key] = ws; // ÖNCE kaydet
+    // Son kapalı mumu takip etmek için
+    let lastClosedTime = null;
 
-    ws.onopen = () => {
-      console.log(`[BinanceFeed] WS OPEN successfully connected to ${wsUrl}`);
-      EventBus.emit('feed:status', { exchange: 'binance', status: 'open' });
-    };
-
-    ws.onmessage = async (evt) => {
-      console.log(`[BinanceFeed] raw msg:`, evt.data.substring(0, 80)); // Debug log
-
-      let k;
+    const poll = async () => {
       try {
-        const msg = JSON.parse(evt.data);
-        k = msg.k;
-      } catch (e) {
-        console.error('[BinanceFeed] JSON parse error:', e);
-        return;
+        const url = `${AppConfig.API.binance.restFutures}/fapi/v1/klines` +
+          `?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=2&_t=${Date.now()}`;
+
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+
+        // Son eleman = şu an açık olan mum
+        const raw = data[data.length - 1];
+        const candle = {
+          time:   Math.floor(raw[0] / 1000),
+          open:   parseFloat(raw[1]),
+          high:   parseFloat(raw[2]),
+          low:    parseFloat(raw[3]),
+          close:  parseFloat(raw[4]),
+          volume: parseFloat(raw[5]),
+        };
+
+        // Bir önceki eleman = kapanmış mum (eğer yeniyse ekle)
+        if (data.length >= 2) {
+          const prevRaw  = data[data.length - 2];
+          const prevTime = Math.floor(prevRaw[0] / 1000);
+          if (prevTime !== lastClosedTime) {
+            lastClosedTime = prevTime;
+            const prevCandle = {
+              time:   prevTime,
+              open:   parseFloat(prevRaw[1]),
+              high:   parseFloat(prevRaw[2]),
+              low:    parseFloat(prevRaw[3]),
+              close:  parseFloat(prevRaw[4]),
+              volume: parseFloat(prevRaw[5]),
+            };
+            try { await candleStore.append(symbol, tf, 'binance', prevCandle); } catch(e) {}
+            EventBus.emit('feed:tick', {
+              symbol, tf, exchange: 'binance',
+              candle: prevCandle, isClosed: true,
+            });
+          }
+        }
+
+        // Mevcut açık mumu güncelle
+        try { await candleStore.append(symbol, tf, 'binance', candle); } catch(e) {}
+
+        EventBus.emit('feed:tick', {
+          symbol, tf, exchange: 'binance',
+          candle, isClosed: false,
+        });
+
+        EventBus.emit('feed:price', {
+          symbol, exchange: 'binance', price: candle.close,
+        });
+
+      } catch(e) {
+        console.warn('[BinanceFeed] poll error:', e);
       }
-
-      if (!k) return;
-
-      const candle = {
-        time:   Math.floor(k.t / 1000),
-        open:   parseFloat(k.o),
-        high:   parseFloat(k.h),
-        low:    parseFloat(k.l),
-        close:  parseFloat(k.c),
-        volume: parseFloat(k.v),
-      };
-
-      try {
-        await candleStore.append(symbol, tf, 'binance', candle);
-      } catch (e) {
-        console.warn('[BinanceFeed] candleStore.append error (non-fatal):', e);
-      }
-
-      EventBus.emit('feed:tick', { symbol, tf, exchange: 'binance', candle, isClosed: k.x });
-      EventBus.emit('feed:price', { symbol, exchange: 'binance', price: candle.close });
     };
 
-    ws.onerror = (err) => {
-      console.error(`[BinanceFeed] WS ERROR for ${key}:`, err);
-      EventBus.emit('feed:status', { exchange: 'binance', status: 'error' });
-    };
-
-    ws.onclose = () => {
-      console.log(`[BinanceFeed] WS CLOSED for ${key}`);
-      EventBus.emit('feed:status', { exchange: 'binance', status: 'closed' });
-      this._ws[key] = null;
-    };
+    // Hemen bir kez çalıştır, sonra her 2 saniyede tekrarla
+    poll();
+    this._ws[key] = setInterval(poll, 2000);
   }
 
   disconnectLive(symbol, tf) {
     const key = `${symbol}_${tf}`;
-    const ws  = this._ws[key];
-    if (ws) {
-      // Null handlers first to prevent stale callbacks
-      ws.onmessage = null;
-      ws.onerror   = null;
-      ws.onclose   = null;
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close(1000, 'TF change');
-      }
+    if (this._ws[key]) {
+      clearInterval(this._ws[key]);
       delete this._ws[key];
+      console.log(`[BinanceFeed] polling stopped for ${key}`);
     }
   }
 
   disconnectAll() {
     Object.keys(this._ws).forEach(k => {
-      const ws = this._ws[k];
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) ws.close();
+      clearInterval(this._ws[k]);
     });
     this._ws = {};
   }
