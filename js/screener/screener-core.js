@@ -40,7 +40,6 @@ const ScreenerCore = (() => {
   let _sortDir  = 'asc';
   let _activeTab = 'bn-screener';
   let _selected  = null;
-  let _ws          = null;
   let _priceMap    = new Map();
   let _frTracker   = null;
   let _oiManager   = null;
@@ -491,23 +490,89 @@ const ScreenerCore = (() => {
     _renderTimer = setTimeout(() => { _applyFilterSort(); _renderTimer = null; }, 1000);
   }
 
-  function _connectWS() {
-    if (_ws) _ws.close();
-    _ws = new WebSocket('wss://fstream.binance.com/ws/!markPrice@arr@1s');
-    _ws.onmessage = (e) => {
-      const arr = JSON.parse(e.data);
+  let _bnPollTimer = null;
+
+  function _startBinancePolling() {
+    if (_bnPollTimer) clearInterval(_bnPollTimer);
+    _pollBinancePrices();
+    _bnPollTimer = setInterval(_pollBinancePrices, 5000);
+  }
+
+  async function _pollBinancePrices() {
+    if (!_activeTab.startsWith('bn')) return;
+
+    try {
+      const res = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?_t=${Date.now()}`);
+      if (!res.ok) return;
+      const arr = await res.json();
+
       let changed = false;
       arr.forEach(d => {
-        if (!d.s.endsWith('USDT')) return;
-        const sym = d.s.replace(/USDT$/, '');
-        _priceMap.set(sym, parseFloat(d.p));
-        if (_frTracker) _frTracker.addFRValue(d.s, parseFloat(d.r));
+        if (!d.symbol.endsWith('USDT')) return;
+        const sym   = d.symbol.replace(/USDT$/, '');
+        const price = parseFloat(d.markPrice);
+        const fr    = parseFloat(d.lastFundingRate);
+
+        _priceMap.set(sym, price);
+
+        if (_frTracker) _frTracker.addFRValue(d.symbol, fr);
+
         const row = _rows.find(r => r.sym === sym);
-        if (row) { row.price = parseFloat(d.p); row.fr = parseFloat(d.r); changed = true; }
+        if (row) {
+          row.price = price;
+          row.fr    = fr;
+          changed   = true;
+        }
       });
+
       if (changed) _throttledRender();
-    };
-    _ws.onclose = () => setTimeout(_connectWS, 3000);
+
+    } catch (e) {
+      console.warn('[ScreenerCore] Binance poll error:', e);
+    }
+  }
+
+  let _bbPollTimer = null;
+
+  function _startBybitPolling() {
+    if (_bbPollTimer) clearInterval(_bbPollTimer);
+    _pollBybitPrices();
+    _bbPollTimer = setInterval(_pollBybitPrices, 5000);
+  }
+
+  async function _pollBybitPrices() {
+    if (!_activeTab.startsWith('bb')) return;
+
+    try {
+      const res = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&_t=${Date.now()}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const list = json?.result?.list || [];
+
+      let changed = false;
+      list.forEach(d => {
+        if (!d.symbol.endsWith('USDT')) return;
+        const sym   = d.symbol.replace(/USDT$/, '');
+        const price = parseFloat(d.lastPrice);
+        const fr    = parseFloat(d.fundingRate);
+        const pct   = parseFloat(d.price24hPcnt) * 100;
+
+        _priceMap.set(sym, price);
+
+        const row = _rows.find(r => r.sym === sym);
+        if (row) {
+          row.price = price;
+          row.fr    = fr;
+          row.pct   = pct;
+          changed   = true;
+        }
+      });
+
+      if (changed) _throttledRender();
+
+    } catch (e) {
+      console.warn('[ScreenerCore] Bybit poll error:', e);
+    }
   }
 
   function _setError() {
@@ -531,6 +596,9 @@ const ScreenerCore = (() => {
     else if (tab === 'bb-screener') _loadBybitScreener();
     else if (tab === 'bn-all')  _loadBinanceAll();
     else if (tab === 'bb-all')  _loadBybitAll();
+
+    if (tab.startsWith('bn')) _pollBinancePrices();
+    if (tab.startsWith('bb')) _pollBybitPrices();
   }
 
   /* ── Init ─────────────────────────────────────────── */
@@ -561,7 +629,8 @@ const ScreenerCore = (() => {
 
     if (window.FRTracker) _frTracker = new FRTracker();
     if (window.OIManager) _oiManager = new OIManager();
-    _connectWS();
+    _startBinancePolling();
+    _startBybitPolling();
     setInterval(() => {
       if (_activeTab === 'bn-screener') _loadBinanceScreener();
       else if (_activeTab === 'bb-screener') _loadBybitScreener();
@@ -571,28 +640,7 @@ const ScreenerCore = (() => {
     console.log('[ScreenerCore] Initialized ✓');
   }
 
-  function _connectWS() {
-    if (_ws) _ws.close();
-    _ws = new WebSocket('wss://fstream.binance.com/ws/!markPrice@arr@1s');
-    _ws.onmessage = (e) => {
-      const arr = JSON.parse(e.data);
-      let changed = false;
-      arr.forEach(d => {
-        if (!d.s.endsWith('USDT')) return;
-        const sym = d.s.replace(/USDT$/, '');
-        const fr  = parseFloat(d.r);
-        const price = parseFloat(d.p);
-        _priceMap.set(sym, price);
-        if (_frTracker) _frTracker.addFRValue(d.s, fr);
-        if (_activeTab.startsWith('bn')) {
-          const row = _rows.find(r => r.sym === sym);
-          if (row) { row.price = price; row.fr = fr; changed = true; }
-        }
-      });
-      if (changed) _throttledRender();
-    };
-    _ws.onclose = () => setTimeout(_connectWS, 3000);
-  }
+
 
   // Public: seçili coin'in screener satırını döndür (Navbar için)
   function getRow(sym) {
