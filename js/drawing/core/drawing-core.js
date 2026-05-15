@@ -1469,7 +1469,7 @@ window.DrawingManager = (() => {
     ctx.save();
     ctx.globalAlpha = inProgress ? 0.7 : ((d.style?.opacity ?? 100) / 100);
     ctx.strokeStyle = d.style?.color || '#0969da';
-    ctx.lineWidth = d.style?.width || 2;
+    ctx.lineWidth = d.style?.width || 1;
 
     let dashArr = d.style?.dash || [];
     if (d.style?.lineStyle === 'dashed') dashArr = [8, 5];

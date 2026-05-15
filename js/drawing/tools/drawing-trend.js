@@ -350,14 +350,10 @@ window.DrawingTrend = (() => {
       // Arrow / Circle Caps (Her zaman orijinal a ve b noktalarında)
       if (capLeft === 'arrow') {
         _drawArrowHead(ctx, b, a); // b'den a'ya doğru
-      } else if (capLeft === 'normal') {
-        _drawCircleCap(ctx, a);
       }
 
       if (capRight === 'arrow') {
         _drawArrowHead(ctx, a, b); // a'dan b'ye doğru
-      } else if (capRight === 'normal') {
-        _drawCircleCap(ctx, b);
       }
 
       // Midpoint
