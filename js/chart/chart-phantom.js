@@ -50,6 +50,7 @@ var ChartPhantom = (() => {
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
+        autoscaleInfoProvider: () => null, // [FIX] Zoom/fit content hesabından hariç tut
       });
 
       // Phantom scale'i gizle
