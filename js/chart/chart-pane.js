@@ -731,21 +731,35 @@ class ChartPane {
     const isLine = ['line', 'area'].includes(this.chartType);
 
     try {
+      // Eski mumları mevcut mumlarla birleştir — mevcut mumları kaybetme
+      const existing    = this.candlesData ?? [];
+      const existingSet = new Set(existing.map(d => d.time));
+      const onlyNew     = clean.filter(d => !existingSet.has(d.time));
+      const merged      = [...onlyNew, ...existing].sort((a, b) => a.time - b.time);
+
+      // Duplicate time değerlerini temizle (son gelen kazanır)
+      const dedupeMap = new Map();
+      merged.forEach(d => dedupeMap.set(d.time, d));
+      const deduped = Array.from(dedupeMap.values()).sort((a, b) => a.time - b.time);
+
       this.series.setData(
         isLine
-          ? clean.map(d => ({ time: d.time, value: d.close }))
-          : clean
+          ? deduped.map(d => ({ time: d.time, value: d.close }))
+          : deduped
       );
 
       if (this.volSeries) {
-        this.volSeries.setData(clean.map(d => ({
+        this.volSeries.setData(deduped.map(d => ({
           time:  d.time,
           value: d.volume,
           color: d.close >= d.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
         })));
       }
 
-      this.candlesData = clean;
+      this.candlesData = deduped;
+
+      // Phantom'ı güncelle — birleşik veriyle zaman eksenini yenile
+      if (window.ChartPhantom) ChartPhantom.update(this);
 
       // Visible range'i geri yükle — kullanıcının baktığı yere geri dön
       if (savedRange) {
