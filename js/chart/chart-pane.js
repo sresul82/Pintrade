@@ -483,9 +483,7 @@ class ChartPane {
     
     // Eğer REST API'den hiç veri gelmemişse (ör. lokalde CORS hatası), 
     // chart'ı boş olarak başlat ki en azından WebSocket'ten gelen canlı veriler çizilebilsin.
-    if (!candles || !candles.length) {
-      this.series.setData([]);
-      if (this.volSeries) this.volSeries.setData([]);
+    if (!candles || !candles.length) {      
       return;
     }
 
