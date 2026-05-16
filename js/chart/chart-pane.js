@@ -457,6 +457,11 @@ class ChartPane {
         title: this.symName !== false ? (this.symbol || 'USD') : '',
       });
     }
+
+    // [ChartPhantom] Initialize the invisible phantom series that extends the time
+    // axis to the right. Called every time the series is rebuilt (chart type change,
+    // symbol change, TF change) so the extension is always in sync.
+    if (window.ChartPhantom) ChartPhantom.init(this);
   }
 
   _loadData() {
@@ -553,6 +558,11 @@ class ChartPane {
 
     // Cache candle data for magnet mode snap calculations
     this.candlesData = deduped;
+
+    // [ChartPhantom] After candle data is set, update the invisible phantom series
+    // so the time axis extends 500 bars into the future. This allows drawing tools
+    // to work beyond the last real candle without disappearing.
+    if (window.ChartPhantom) ChartPhantom.update(this);
 
     this._lastPrice      = last?.close ?? null;
     this._lastPriceIsUp  = last && (last.close >= (last.open ?? last.close));
@@ -1372,6 +1382,9 @@ class ChartPane {
     if (this.ro) this.ro.disconnect();
     // Disconnect live WebSocket feed for this pane
     DataFeed.unload(`pane_${this.idx}`);
+    // [ChartPhantom] Clean up the phantom series before destroying the chart pane
+    // to avoid memory leaks and stale series references.
+    if (window.ChartPhantom) ChartPhantom.destroy(this);
     if (this.chart) { try { this.chart.remove(); } catch(_) {} }
     if (this.wrap?.parentNode) this.wrap.parentNode.removeChild(this.wrap);
   }

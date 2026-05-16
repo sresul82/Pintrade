@@ -766,6 +766,10 @@
   <script src="js/core/session.js"></script>
   <script src="js/data/chart-data.js"></script>
   <script src="js/ui/chart-popovers.js"></script>
+  <!-- [ChartPhantom] Invisible phantom series that extends the time axis 500 bars
+       to the right of the last candle. Enables drawing tools to work and remain
+       visible beyond the last real bar. Must load before chart-pane.js. -->
+  <script src="js/chart/chart-phantom.js"></script>
   <script src="js/chart/chart-pane.js"></script>
   <script src="js/chart/chart-layout.js"></script>
   <script src="js/chart/ui/chart-settings.js"></script>
