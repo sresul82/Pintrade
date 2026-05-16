@@ -9,7 +9,7 @@
    Kullanım: ChartPhantom.init(chartPane) — chart hazır olduktan sonra
 ────────────────────────────────────────────────────────── */
 
-const ChartPhantom = (() => {
+var ChartPhantom = (() => {
 
   // TF → saniye cinsinden bar süresi
   const TF_SECONDS = {
