@@ -44,20 +44,13 @@ var ChartPhantom = (() => {
     try {
       // Görünmez LineSeries oluştur
       pane._phantomSeries = pane.chart.addLineSeries({
-        color:       'rgba(0,0,0,0)',   // Tamamen şeffaf
-        lineWidth:   1,
-        priceScaleId: 'phantom_scale',  // Ayrı scale — fiyat eksenini etkilemez
-        lastValueVisible: false,
-        priceLineVisible: false,
+        color:                  'rgba(0,0,0,0)', // Tamamen şeffaf — kullanıcı görmez
+        lineWidth:              1,
+        overlay:                true,            // [FIX] Fiyat eksenine bağlanmaz, zoom/fit hesabına girmez
+        scaleMargins:           { top: 0, bottom: 0 },
+        lastValueVisible:       false,
+        priceLineVisible:       false,
         crosshairMarkerVisible: false,
-        autoscaleInfoProvider: () => null, // [FIX] Zoom/fit content hesabından hariç tut
-      });
-
-      // Phantom scale'i gizle
-      pane.chart.priceScale('phantom_scale').applyOptions({
-        visible:       false,
-        scaleMargins:  { top: 0, bottom: 0 },
-        borderVisible: false,
       });
 
       // Phantom veriyi oluştur ve set et
