@@ -318,7 +318,7 @@ class BinanceFeed {
               volume: parseFloat(prevRaw[5]),
             };
             try { await candleStore.append(symbol, tf, 'binance', prevCandle); } catch(e) {}
-            EventBus.emit('feed:tick', {
+            EventBus.emit('feed:liveCandle', {
               symbol, tf, exchange: 'binance',
               candle: prevCandle, isClosed: true,
             });
@@ -328,7 +328,7 @@ class BinanceFeed {
         // Mevcut açık mumu güncelle
         try { await candleStore.append(symbol, tf, 'binance', candle); } catch(e) {}
 
-        EventBus.emit('feed:tick', {
+        EventBus.emit('feed:liveCandle', {
           symbol, tf, exchange: 'binance',
           candle, isClosed: false,
         });

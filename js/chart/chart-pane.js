@@ -359,6 +359,7 @@ class ChartPane {
     EventBus.on('feed:candles',      (payload) => this._onFeedCandles(payload));
     EventBus.on('feed:olderCandles', (payload) => this._onOlderCandles(payload));
     EventBus.on('feed:tick',         (payload) => this._onFeedTick(payload));
+    EventBus.on('feed:liveCandle',   (payload) => this._onLiveCandle(payload));
   }
 
   // ── Global Drawing Refresh ──────────────────────────────
@@ -610,6 +611,65 @@ class ChartPane {
       console.warn('[ChartPane] _onFeedTick update failed:', err);
       // Lightweight-charts rejects updates older than last bar — safe to ignore
       // This can happen briefly after setData() before WS sync catches up
+    }
+  }
+
+  // Binance polling'den gelen canlı mum güncellemesi
+  // feed:tick'ten farkı: geçmiş veri yüklenmeden önce series.update() çağırmaz
+  _onLiveCandle({ symbol, tf, exchange, candle, isClosed }) {
+    if (this._destroyed) return;
+    if (symbol !== this.symbol || tf !== this.tf) return;
+    if (this.exchange && exchange !== this.exchange) return;
+    if (!this.series) return;
+
+    // Geçmiş veri henüz yüklenmedişse update() çağırma — Value is null hatası olur
+    if (!this._initialDataLoaded) return;
+
+    // candlesData boşsa update() çağırma
+    if (!this.candlesData || !this.candlesData.length) return;
+
+    const safe = {
+      time:   typeof candle.time === 'number' ? candle.time : parseInt(candle.time),
+      open:   parseFloat(candle.open),
+      high:   parseFloat(candle.high),
+      low:    parseFloat(candle.low),
+      close:  parseFloat(candle.close),
+      volume: parseFloat(candle.volume),
+    };
+
+    if (isNaN(safe.time) || isNaN(safe.close) || isNaN(safe.open) ||
+        isNaN(safe.high) || isNaN(safe.low)) return;
+
+    // Gelen mumun time değeri mevcut son mumdan KÜÇÜKSE update() çağırma
+    const lastExistingTime = this.candlesData[this.candlesData.length - 1]?.time;
+    if (lastExistingTime && safe.time < lastExistingTime) return;
+
+    const isLine = ['line', 'area'].includes(this.chartType);
+    const update = isLine ? { time: safe.time, value: safe.close } : safe;
+
+    try {
+      this.series.update(update);
+
+      if (this.volSeries) {
+        this.volSeries.update({
+          time:  safe.time,
+          value: safe.volume,
+          color: safe.close >= safe.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
+        });
+      }
+
+      this._lastPrice      = safe.close;
+      this._lastPriceIsUp  = safe.close >= safe.open;
+      this._lastCandleTime = safe.time;
+
+      // candlesData'yı güncelle
+      if (lastExistingTime && safe.time === lastExistingTime) {
+        this.candlesData[this.candlesData.length - 1] = safe; // Mevcut son mumu güncelle
+      } else {
+        this.candlesData.push(safe); // Yeni mum ekle
+      }
+    } catch(err) {
+      console.warn('[ChartPane] _onLiveCandle update failed:', err);
     }
   }
 
