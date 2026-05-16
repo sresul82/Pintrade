@@ -507,7 +507,12 @@ class ChartPane {
 
     if (!clean.length) return; // Temiz veri yoksa chart'a dokunma
 
-    const last = clean[clean.length - 1];
+    // Duplicate time değerlerini temizle (son gelen kazanır)
+    const seen = new Map();
+    clean.forEach(d => seen.set(d.time, d));
+    const deduped = Array.from(seen.values()).sort((a, b) => a.time - b.time);
+
+    const last = deduped[deduped.length - 1];
 
     // ── Precision: setData'dan ÖNCE uygula ──────────────────────
     if (last && last.close != null) {
@@ -534,12 +539,12 @@ class ChartPane {
 
     this.series.setData(
       isLine
-        ? clean.map(d => ({ time: d.time, value: d.close }))
-        : clean
+        ? deduped.map(d => ({ time: d.time, value: d.close }))
+        : deduped
     );
 
     if (this.volSeries) {
-      this.volSeries.setData(clean.map(d => ({
+      this.volSeries.setData(deduped.map(d => ({
         time:  d.time,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(8,153,129,.4)' : 'rgba(242,54,69,.4)',
@@ -547,13 +552,13 @@ class ChartPane {
     }
 
     // Cache candle data for magnet mode snap calculations
-    this.candlesData = clean;
+    this.candlesData = deduped;
 
     this._lastPrice      = last?.close ?? null;
     this._lastPriceIsUp  = last && (last.close >= (last.open ?? last.close));
     this._lastCandleTime = last?.time ?? null;
 
-    this._updateVisualLines(clean);
+    this._updateVisualLines(deduped);
     requestAnimationFrame(() => this._positionCountdown());
 
     if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {

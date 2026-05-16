@@ -87,13 +87,25 @@ class CandleStore {
       await this.set(symbol, tf, exchange, [candle]);
       return;
     }
+
+    // Önce son elemana bak (hızlı yol — çoğu durumda yeterli)
     const last = existing[existing.length - 1];
     if (last.time === candle.time) {
-      // Update the open bar in place
       existing[existing.length - 1] = candle;
+      await this.set(symbol, tf, exchange, existing);
+      return;
+    }
+
+    // Son eleman değilse tüm dizide ara (duplicate koruması)
+    const idx = existing.findIndex(c => c.time === candle.time);
+    if (idx !== -1) {
+      // Zaten var — güncelle
+      existing[idx] = candle;
     } else {
+      // Yeni mum — ekle
       existing.push(candle);
     }
+
     await this.set(symbol, tf, exchange, existing);
   }
 
