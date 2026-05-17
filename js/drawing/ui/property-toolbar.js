@@ -328,8 +328,7 @@ window.PropertyToolbar = (() => {
       const item = e.target.closest('.pt-w-item');
       if (!item) return;
       onSelect(parseInt(item.dataset.w));
-      el.querySelectorAll('.pt-w-item').forEach(c => c.style.background = 'transparent');
-      item.style.background = '#2a2e39';
+      _closeAllMenus(); // [FIX] Seçim sonrası menüyü kapat — render hemen gerçekleşsin
     });
 
     _outsideHandler = function(e) {
@@ -365,12 +364,7 @@ window.PropertyToolbar = (() => {
       const item = e.target.closest('.pt-fs-item');
       if (!item) return;
       onSelect(parseInt(item.dataset.s));
-      el.querySelectorAll('.pt-fs-item').forEach(c => {
-        c.style.background = 'transparent';
-        c.style.color = '#d1d4dc';
-      });
-      item.style.background = '#2962ff';
-      item.style.color = '#fff';
+      _closeAllMenus(); // [FIX] Seçim sonrası menüyü kapat — render hemen gerçekleşsin
     });
 
     _outsideHandler = function(e) {
@@ -412,8 +406,7 @@ window.PropertyToolbar = (() => {
       const item = e.target.closest('.pt-s-item');
       if (!item) return;
       onSelect(item.dataset.s);
-      el.querySelectorAll('.pt-s-item').forEach(c => c.style.background = 'transparent');
-      item.style.background = '#2a2e39';
+      _closeAllMenus(); // [FIX] Seçim sonrası menüyü kapat — render hemen gerçekleşsin
     });
 
     _outsideHandler = function(e) {
