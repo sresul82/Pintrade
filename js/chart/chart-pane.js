@@ -292,6 +292,9 @@ class ChartPane {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
       if (!range) return;
       if (this._lazyLoadThrottle) return;
+      // [FIX] Eğer range.from çok negatifse (< -100) bu fitContent() tetiklemesidir,
+      // gerçek kullanıcı scroll'u değil. loadOlderCandles çağırma — mumlar kaybolur.
+      if (range.from < -100) return;
       // If the left edge of the visible range is within 50 bars of the data start, load more
       if (range.from < 50) {
         this._lazyLoadThrottle = true;
