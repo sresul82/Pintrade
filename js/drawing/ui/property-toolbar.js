@@ -440,7 +440,7 @@ window.PropertyToolbar = (() => {
     const isPosition = ['longpos', 'shortpos', 'posforecast'].includes(_drawing.tool);
 
     const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'triangle', 'arc'].includes(_drawing.tool);
-    const hasText = !['vline', 'arrowdraw', 'channel', 'regression', 'flattopbottom', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'curve', 'doublecurve', 'polyline', 'pathtool'].includes(_drawing.tool);
+    const hasText = !['vline', 'arrowdraw', 'channel', 'regression', 'flattopbottom', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'curve', 'doublecurve', 'polyline', 'pathtool', 'trendangle'].includes(_drawing.tool);
     const hasAlert = !['rotatedrect', 'triangle', 'polyline', 'pathtool', 'circle', 'arc', 'curve', 'doublecurve'].includes(_drawing.tool);
 
     _panel = document.createElement('div');
