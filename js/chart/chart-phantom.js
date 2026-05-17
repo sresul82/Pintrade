@@ -29,7 +29,7 @@ var ChartPhantom = (() => {
     '1M':  2592000,
   };
 
-  const PHANTOM_BARS = 500; // Sağa uzatılacak bar sayısı
+  const PHANTOM_BARS = 1000; // Sağa uzatılacak bar sayısı
 
   /**
    * Verilen ChartPane'e phantom seri ekler.
