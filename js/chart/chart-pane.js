@@ -325,6 +325,29 @@ class ChartPane {
     });
     this.ro.observe(this.cvs);
 
+    // [FIX] Zaman cetveline çift tıklandığında fitContent() phantom'ın 500 barını
+    // da ekrana sığdırır — mumlar sola kayar. Çift tıklamayı yakalayıp gerçek
+    // mum aralığına geri döneriz.
+    this.cvs.addEventListener('dblclick', () => {
+      // Çift tıklama anında gerçek mumların logical range'ini hesapla
+      const candles = this.candlesData;
+      if (!candles || candles.length === 0) return;
+
+      // fitContent() çalışıp bittikten sonra geri yükle
+      setTimeout(() => {
+        if (!this.chart || !this.candlesData || !this.candlesData.length) return;
+        try {
+          const ts         = this.chart.timeScale();
+          const totalBars  = this.candlesData.length;
+          // Ekranda görünür bar sayısını koru — varsayılan olarak son 150 bar
+          const visibleBars = 150;
+          const toBar      = totalBars - 1;          // son mum
+          const fromBar    = Math.max(0, toBar - visibleBars);
+          ts.setVisibleLogicalRange({ from: fromBar, to: toBar + 12 }); // +12 rightOffset
+        } catch(_) {}
+      }, 50);
+    });
+
     // Start countdown if enabled
     if (this.lblCountdown) this._updateCountdown();
 
