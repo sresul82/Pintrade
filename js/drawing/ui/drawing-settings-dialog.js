@@ -80,7 +80,7 @@ const DrawingSettingsDialog = (() => {
     trendline:    { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
     ray:          { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
     extended:     { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
-    infoline:     { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:false, hasFill:false, coordsMode:'p2'       },
+    infoline:     { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
     trendangle:   { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:false, coordsMode:'p2' },
     arrowdraw:    { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true,  hasFill:false, coordsMode:'p2'       },
     channel:      { priceLabel:false, extend:true,  midpoint:false, stats:false, capArrows:false, hasFill:true,  coordsMode:'p2'       },

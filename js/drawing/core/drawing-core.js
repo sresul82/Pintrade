@@ -1485,7 +1485,7 @@ window.DrawingManager = (() => {
     if (d.tool === 'extended')  window.DrawingTrend.drawExtended(ctx, d, pane, selected);
     if (d.tool === 'trendangle') window.DrawingTrend.drawTrendAngle(ctx, d, pane, selected);
     if (d.tool === 'channel') window.DrawingTrend.drawChannel(ctx, d, pane);
-    if (d.tool === 'infoline') window.DrawingTrend.drawInfoLine(ctx, d, pane);
+    if (d.tool === 'infoline') window.DrawingTrend.drawInfoLine(ctx, d, pane, selected);
     if (d.tool === 'flattopbottom') window.DrawingTrend.drawFlatTopBottom(ctx, d, pane);
     if (d.tool === 'regression') window.DrawingTrend.drawRegressionTrend(ctx, d, pane);
     if (d.tool === 'pitchfork') window.DrawingTrend.drawPitchfork(ctx, d, pane, 'standard');

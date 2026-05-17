@@ -511,71 +511,11 @@ window.DrawingTrend = (() => {
       ctx.setLineDash([]);
     }
 
-  function _drawInfoLine(ctx, d, pane) {
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane);
-      if (!a || !b) return;
-  
-      // Draw the base line
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-  
-      // Stats calculation
-      const priceDiff = d.p2.price - d.p1.price;
-      const pricePct  = d.p1.price ? (priceDiff / d.p1.price) * 100 : 0;
-      const sign      = priceDiff >= 0 ? '+' : '';
-      const angleRad  = Math.atan2(-(b.y - a.y), b.x - a.x);
-      const angleDeg  = (angleRad * 180 / Math.PI).toFixed(1);
-  
-      // Count bars in range
-      let barCount = 0;
-      const candles = pane.candlesData;
-      if (candles && candles.length) {
-        const toSec = t => typeof t === 'object'
-          ? new Date(t.year, t.month - 1, t.day).getTime() / 1000 : t;
-        const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
-        const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
-        barCount = candles.filter(c => { const ct = toSec(c.time); return ct >= tMin && ct <= tMax; }).length;
-      }
-  
-      const color = d.style?.color || '#2962ff';
-      const upColor   = '#26a69a';
-      const downColor = '#ef5350';
-      const lineColor = priceDiff >= 0 ? upColor : downColor;
-  
-      // Stat box position: just above midpoint
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2;
-      ctx.save();
-      ctx.setLineDash([]);
-      ctx.font = '11px "JetBrains Mono", monospace';
-      const lines = [
-        `${sign}${priceDiff.toFixed(2)}  ${sign}${pricePct.toFixed(2)}%`,
-        `${barCount} bars  ${angleDeg}°`
-      ];
-      const pad = 7, lh = 16;
-      const maxW = Math.max(...lines.map(l => ctx.measureText(l).width));
-      const bw = maxW + pad * 2, bh = lines.length * lh + pad * 2;
-      const bx = mx - bw / 2, by = my - bh - 10;
-  
-      // Background
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = '#1e222d';
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4);
-      else ctx.rect(bx, by, bw, bh);
-      ctx.fill(); ctx.stroke();
-  
-      // Text
-      ctx.globalAlpha = 1;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = lineColor;
-      ctx.fillText(lines[0], bx + pad, by + pad);
-      ctx.fillStyle = '#d1d4dc';
-      ctx.fillText(lines[1], bx + pad, by + pad + lh);
-      ctx.restore();
+  function _drawInfoLine(ctx, d, pane, selected) {
+      d.style = d.style || {};
+      if (d.style.statsOn === undefined) d.style.statsOn = true;
+      if (d.style.alwaysStats === undefined) d.style.alwaysStats = true;
+      _drawTrendLine(ctx, d, pane, selected);
     }
 
   function _drawFlatTopBottom(ctx, d, pane) {
