@@ -1483,7 +1483,7 @@ window.DrawingManager = (() => {
     if (d.tool === 'trendline') window.DrawingTrend.drawTrendLine(ctx, d, pane, selected);
     if (d.tool === 'ray')       window.DrawingTrend.drawRay(ctx, d, pane, selected);
     if (d.tool === 'extended')  window.DrawingTrend.drawExtended(ctx, d, pane, selected);
-    if (d.tool === 'trendangle') window.DrawingTrend.drawTrendAngle(ctx, d, pane);
+    if (d.tool === 'trendangle') window.DrawingTrend.drawTrendAngle(ctx, d, pane, selected);
     if (d.tool === 'channel') window.DrawingTrend.drawChannel(ctx, d, pane);
     if (d.tool === 'infoline') window.DrawingTrend.drawInfoLine(ctx, d, pane);
     if (d.tool === 'flattopbottom') window.DrawingTrend.drawFlatTopBottom(ctx, d, pane);

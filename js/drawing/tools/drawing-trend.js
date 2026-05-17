@@ -146,8 +146,8 @@ window.DrawingTrend = (() => {
       _drawArrowHead(ctx, a, endPt);
     }
 
-  function _drawTrendAngle(ctx, d, pane) {
-      _drawTrendLine(ctx, d, pane);
+  function _drawTrendAngle(ctx, d, pane, selected) {
+      _drawTrendLine(ctx, d, pane, selected);
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (!a || !b) return;
@@ -184,12 +184,17 @@ window.DrawingTrend = (() => {
       const ty = a.y + (arcRadius + 5) * Math.sin(midAngle);
       ctx.fillText(`${angleDeg}°`, tx, ty);
       ctx.restore();
+
+      if (selected || !!d.style?.alwaysStats) {
+        _drawTrendStats(ctx, d, pane, a, b);
+      }
     }
 
   function _drawTrendStats(ctx, d, pane, a, b) {
       const s = d.style || {};
       if (s.statsOn === false) return;
-      const activeStats = s.statsFields || [];
+      const ALL_STAT_FIELDS = ['Price range','Percent change','Bars range','Date/time range','Angle'];
+      const activeStats = s.statsFields ?? ALL_STAT_FIELDS;
       if (activeStats.length === 0) return;
 
       const priceDiff = d.p2.price - d.p1.price;

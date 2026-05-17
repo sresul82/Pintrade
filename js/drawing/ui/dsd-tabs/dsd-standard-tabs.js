@@ -23,7 +23,8 @@ window.DSDStandardTabs = (() => {
     const fillColor  = s.fillColor || 'rgba(41,98,255,0.1)';
 
     const statFields = ['Price range','Percent change','Bars range','Date/time range','Angle'];
-    const activeStats = s.statsFields || [];
+    const ALL_STAT_FIELDS = ['Price range','Percent change','Bars range','Date/time range','Angle'];
+    const activeStats = s.statsFields ?? ALL_STAT_FIELDS;
     let statsLabel = 'Hidden';
     if (activeStats.length === 1) statsLabel = activeStats[0];
     else if (activeStats.length > 1) statsLabel = activeStats[0] + ', ...';
@@ -205,7 +206,7 @@ window.DSDStandardTabs = (() => {
       </div>
       <div class="dsd-row dsd-row-check" style="display: flex; gap: 16px;">
         <label class="dsd-checkbox-label">
-          <input type="checkbox" id="dsd-stats-on" ${s.statsOn !== false ? 'checked' : ''}>
+          <input type="checkbox" id="dsd-stats-on" ${s.statsOn === true ? 'checked' : ''}>
           Stats on/off
         </label>
         <label class="dsd-checkbox-label">

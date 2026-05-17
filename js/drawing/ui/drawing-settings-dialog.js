@@ -915,6 +915,26 @@ const DrawingSettingsDialog = (() => {
       });
     }
 
+    // Stats on/off checkbox
+    const statsOnCb = overlay.querySelector('#dsd-stats-on');
+    if (statsOnCb) {
+      statsOnCb.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.statsOn = statsOnCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // Always show checkbox
+    const alwaysStatsCb = overlay.querySelector('#dsd-alwaysstats');
+    if (alwaysStatsCb) {
+      alwaysStatsCb.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.alwaysStats = alwaysStatsCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
     // Bold / Italic from Text tab
     const boldBtn   = overlay.querySelector('#dsd-bold');
     const italicBtn = overlay.querySelector('#dsd-italic');
