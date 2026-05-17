@@ -252,8 +252,7 @@ window.PropertyToolbar = (() => {
         activeHex = cell.dataset.c;
         applyOpacity();
         emit();
-        el.querySelectorAll('.ptc-cell').forEach(c => c.classList.remove('ptc-active'));
-        cell.classList.add('ptc-active');
+        _closeAllMenus(); // [FIX] Renk seçilince picker'ı kapat — render hemen gerçekleşsin
         return;
       }
       if (e.target.closest('#pt-add-custom')) {
