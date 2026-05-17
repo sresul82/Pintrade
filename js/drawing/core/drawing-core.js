@@ -768,7 +768,7 @@ window.DrawingManager = (() => {
       }
 
       // If single click on an already selected trendline -> open trendline inline text editor
-      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended'].includes(ds.d.tool)) {
+      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline'].includes(ds.d.tool)) {
         _openTrendlineTextEditor(ds.d, pane, e);
       }
 

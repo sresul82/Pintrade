@@ -451,8 +451,8 @@ window.DrawingTrend = (() => {
         ctx.restore();
       }
 
-      // "Add Text" hint — shown when selected but no text yet
-      if (selected && !hasText) {
+      // "Add Text" hint — shown when selected but no text yet (not for trendangle)
+      if (selected && !hasText && d.tool !== 'trendangle') {
         ctx.save();
         ctx.font = '12px "JetBrains Mono", sans-serif';
         ctx.fillStyle = '#d1d4dc';
