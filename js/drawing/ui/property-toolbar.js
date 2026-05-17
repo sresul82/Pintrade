@@ -82,6 +82,16 @@ window.PropertyToolbar = (() => {
   let _saveTimeout = null;
   function _redraw() {
     if (_drawing && window.DrawingManager) {
+      // [FIX] Seçili çizimin stilini State içinde de anında güncelle.
+      // Böylece requestRedrawAll() doğru stili render eder — 1-2 sn gecikme ortadan kalkar.
+      if (window.State && _symbol) {
+        const drawings = State.getDrawings(_symbol);
+        const target = drawings.find(d => d.id === _drawing.id);
+        if (target) {
+          target.style = JSON.parse(JSON.stringify(_drawing.style));
+          State.set('drawings', State.get('drawings'), true); // silent — State'i kirletmeden güncelle
+        }
+      }
       DrawingManager.updateToolStyle(_drawing.tool, _drawing.style);
     }
     clearTimeout(_saveTimeout);
