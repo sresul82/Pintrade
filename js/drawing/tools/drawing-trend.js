@@ -467,7 +467,7 @@ window.DrawingTrend = (() => {
         else                             { hcx = (a.x + b.x) / 2; hcy = (a.y + b.y) / 2; }
 
         if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
-        window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: 36, hh: 10, angle: drawAngle };
+        window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: 36, hh: 10, angle: lineAngle };
       } else {
         // Hint gösterilmiyorsa kaydı temizle
         if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
