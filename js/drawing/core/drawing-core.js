@@ -662,7 +662,8 @@ window.DrawingManager = (() => {
             if (['texttool', 'note', 'callout'].includes(htDrawing?.tool) && isSelected) {
               pane.cvs.style.cursor = 'text';
             } else if (isOverHint) {
-              pane.cvs.style.cursor = 'text';
+              const hintAngle = window._trendTextHintAreas?.[htDrawing.id]?.angle ?? 0;
+              pane.cvs.style.cursor = _makeBeamCursor(hintAngle);
             } else {
               pane.cvs.style.cursor = 'pointer';
             }
@@ -807,6 +808,21 @@ window.DrawingManager = (() => {
     const lx = dx * cos - dy * sin;
     const ly = dx * sin + dy * cos;
     return Math.abs(lx) <= area.hw && Math.abs(ly) <= area.hh;
+  }
+
+  // Hint açısına göre döndürülmüş SVG beam cursor üretir
+  function _makeBeamCursor(angleRad) {
+    const deg = Math.round(angleRad * 180 / Math.PI);
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>
+      <g transform='rotate(${deg}, 12, 12)'>
+        <line x1='12' y1='2' x2='12' y2='22' stroke='white' stroke-width='1.5'/>
+        <line x1='8'  y1='2' x2='16' y2='2'  stroke='white' stroke-width='1.5'/>
+        <line x1='8'  y1='22' x2='16' y2='22' stroke='white' stroke-width='1.5'/>
+        <line x1='12' y1='2' x2='12' y2='22' stroke='black' stroke-width='0.5' stroke-dasharray='1,2'/>
+      </g>
+    </svg>`;
+    const encoded = `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, text`;
+    return encoded;
   }
 
   // ── TrendLine inline text editor ──────────────────────────────────────────
