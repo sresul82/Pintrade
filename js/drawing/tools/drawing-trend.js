@@ -39,6 +39,15 @@ window.DrawingTrend = (() => {
     return null;
   }
 
+  // Bir zaman değerini canvas X koordinatına çevirir
+  function _timeToX(pane, t) {
+    if (t == null) return null;
+    try {
+      const x = pane.chart.timeScale().timeToCoordinate(t);
+      return (x == null || !isFinite(x)) ? null : x;
+    } catch(_) { return null; }
+  }
+
   function _formatPrice(price) {
     if (typeof window.formatPrice === 'function') {
       return window.formatPrice(price);
