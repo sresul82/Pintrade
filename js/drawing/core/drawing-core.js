@@ -1366,7 +1366,13 @@ window.DrawingManager = (() => {
         if (matchKey !== undefined && vis[matchKey] === false) return; // hidden on this TF
       }
       const isSelected = d.id === _selectedId;
-      _renderDrawing(ctx, d, pane, isSelected, isInProgress);
+      try {
+        ctx.save();
+        _renderDrawing(ctx, d, pane, isSelected, isInProgress);
+      } catch (e) {
+        console.warn('[DrawingManager] Render error for tool:', d.tool, d.id, e);
+        try { ctx.restore(); } catch(_) {}
+      }
     });
 
     // ── Custom magnet crosshair (replaces hidden LWC crosshair) ──
