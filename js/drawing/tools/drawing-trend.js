@@ -89,13 +89,14 @@ window.DrawingTrend = (() => {
     ctx.restore();
   }
 
-  function _drawHLine(ctx, d, pane) {
+  function _drawHLine(ctx, d, pane, selected) {
       try {
         if (d.price == null || !isFinite(d.price)) return;
         const y = pane.series.priceToCoordinate(d.price);
         if (y == null || !isFinite(y)) return;
         const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
         const s = d.style || {};
+
         ctx.save();
         ctx.strokeStyle = s.color || '#2962ff';
         ctx.lineWidth   = s.width || 1;
@@ -103,13 +104,51 @@ window.DrawingTrend = (() => {
         if (s.lineStyle === 'dashed') dashArr = [8, 5];
         else if (s.lineStyle === 'dotted') dashArr = [3, 3];
         ctx.setLineDash(dashArr);
-        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
+
+        // Çizgiyi çiz
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
         ctx.stroke();
+
+        // Price label (sağ kenar)
+        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
+
+        // Metin (Settings'ten veya inline editörden)
+        const hlineText = s.text || '';
+        if (hlineText) {
+          ctx.save();
+          ctx.font = `${s.bold ? 'bold ' : ''}${s.italic ? 'italic ' : ''}${s.fontSize || 14}px "JetBrains Mono", sans-serif`;
+          ctx.fillStyle = s.textColor || (s.color || '#2962ff');
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.globalAlpha = 1;
+          ctx.fillText(hlineText, w / 2, y - 5);
+          ctx.restore();
+        }
+
+        // "Add Text" hint (seçili, metin yok)
+        if (selected && !hlineText) {
+          const hintText = 'Add Text';
+          ctx.save();
+          ctx.font = '12px "JetBrains Mono", sans-serif';
+          ctx.fillStyle = s.color || '#2962ff';
+          ctx.globalAlpha = 0.6;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(hintText, w / 2, y - 5);
+          const hintTextW = ctx.measureText(hintText).width;
+          ctx.restore();
+
+          // Hint alanını global map'e kaydet (cursor + click için)
+          if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+          window._trendTextHintAreas[d.id] = { cx: w / 2, cy: y - 11, hw: hintTextW / 2 + 6, hh: 10, angle: 0 };
+        } else {
+          if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
+        }
+
         ctx.restore();
-      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
+      } catch(e) { console.warn('[HLine] render error', e); }
     }
 
   function _drawVLine(ctx, d, pane) {

@@ -73,7 +73,7 @@ const DrawingSettingsDialog = (() => {
   // hasFill    : show background fill row
   // coordsMode : 'p2'=two points | 'p1only'=one point | 'priceOnly'=price only | 'timeOnly'=time only
   const TOOL_CAPS = {
-    hline:        { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'priceOnly' },
+    hline:        { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:true, coordsMode:'priceOnly' },
     hray:         { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },
     vline:        { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'timeOnly'  },
     crossline:    { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },

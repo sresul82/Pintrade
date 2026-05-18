@@ -672,7 +672,7 @@ window.DrawingManager = (() => {
           const isPos = ['longpos', 'shortpos', 'posforecast'].includes(tool);
           if (ht === 'line' || ht === 'body' || ht === 'rect_body') {
             // texttool/note/callout: always text cursor when selected; trendline/ray/extended/infoline: text only over hint area
-            const hintTools = ['trendline', 'ray', 'extended', 'infoline'];
+            const hintTools = ['trendline', 'ray', 'extended', 'infoline', 'hline'];
             const isSelected = htDrawing?.id === _selectedId;
             const isOverHint = isSelected && hintTools.includes(htDrawing?.tool)
               && _isOverTrendTextHint(x, y, htDrawing?.id);
@@ -681,6 +681,8 @@ window.DrawingManager = (() => {
             } else if (isOverHint) {
               const hintAngle = window._trendTextHintAreas?.[htDrawing.id]?.angle ?? 0;
               pane.cvs.style.cursor = _makeBeamCursor(hintAngle);
+            } else if (htDrawing?.tool === 'hline') {
+              pane.cvs.style.cursor = 'ns-resize';
             } else {
               pane.cvs.style.cursor = 'pointer';
             }
@@ -791,9 +793,9 @@ window.DrawingManager = (() => {
         window.DrawingAnnotations.openInlineTextEditor(ds.d, pane, { x: e.clientX - pane.cvs.getBoundingClientRect().left, y: e.clientY - pane.cvs.getBoundingClientRect().top });
       }
 
-      // If single click on already selected trendline AND over the "Add Text" hint -> open inline editor
+      // If single click on already selected trendline/hline AND over the "Add Text" hint -> open inline editor
       // Double-click koruması: 280ms sonra aç, bu sürede dblclick gelirse iptal et
-      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline'].includes(ds.d.tool)) {
+      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline', 'hline'].includes(ds.d.tool)) {
         const cx = e.clientX - pane.cvs.getBoundingClientRect().left;
         const cy = e.clientY - pane.cvs.getBoundingClientRect().top;
         if (_isOverTrendTextHint(cx, cy, ds.d.id)) {
@@ -1551,7 +1553,7 @@ window.DrawingManager = (() => {
       if (d.style?.lineStyle === 'dotted') dashArr = [3, 3];
       ctx.setLineDash(dashArr);
 
-    if (d.tool === 'hline') window.DrawingTrend.drawHLine(ctx, d, pane);
+    if (d.tool === 'hline') window.DrawingTrend.drawHLine(ctx, d, pane, selected);
     if (d.tool === 'vline') window.DrawingTrend.drawVLine(ctx, d, pane);
     if (d.tool === 'hray') window.DrawingTrend.drawHRay(ctx, d, pane);
     if (d.tool === 'crossline') window.DrawingTrend.drawCrossLine(ctx, d, pane);
