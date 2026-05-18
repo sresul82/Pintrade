@@ -677,6 +677,12 @@ window.PropertyToolbar = (() => {
           <div id="pt-line-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${hex};"></div>
         </button>
 
+        <!-- Fill Color -->
+        <button id="pt-btn-fillcolor" class="pt-btn pt-btn-color" title="Fill color">
+          ${paintBucketSvg}
+          <div id="pt-fill-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.fillColor || 'rgba(9, 105, 218, 0.2)'};"></div>
+        </button>
+
         <!-- Text -->
         <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
           ${textSvg}

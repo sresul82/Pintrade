@@ -1511,7 +1511,7 @@ window.DrawingManager = (() => {
       const b = _pt2xy(d.p2, pane);
       if (a && b) {
         pts.push({ ...a, id: 'ch_p1' });
-        pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, type: 'square', id: 'ch_mid_top' });
+        pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, id: 'ch_mid_top' });
         pts.push({ ...b, id: 'ch_p2' });
 
         if (d.p3) {
@@ -1522,7 +1522,7 @@ window.DrawingManager = (() => {
             const botB = { x: b.x, y: b.y + dy };
             const botMid = { x: (botA.x + botB.x) / 2, y: (botA.y + botB.y) / 2 };
             pts.push({ ...botA, id: 'ch_bot_p1' });
-            pts.push({ ...botMid, type: 'square', id: 'ch_mid_bot' });
+            pts.push({ ...botMid, id: 'ch_mid_bot' });
             pts.push({ ...botB, id: 'ch_bot_p2' });
           }
         }

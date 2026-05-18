@@ -39,11 +39,13 @@ window.DSDStandardTabs = (() => {
     
     if (d.tool === 'channel') {
       const channelLevels = s.channelLevels || [
-        { v: 0,    active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
-        { v: 0.25, active: false, color: '#787b86',             style: 'dashed', width: 1 },
-        { v: 0.5,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
-        { v: 0.75, active: false, color: '#787b86',             style: 'dashed', width: 1 },
-        { v: 1,    active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
+        { v: -0.25, active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 0,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
+        { v: 0.25,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 0.5,   active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 0.75,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
+        { v: 1.25,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
       ];
 
       const extRight  = s.extendRight !== undefined ? !!s.extendRight : false;
@@ -56,11 +58,19 @@ window.DSDStandardTabs = (() => {
         const dashAttr = lvl.style === 'dashed' ? 'stroke-dasharray="8,5"'
                        : lvl.style === 'dotted' ? 'stroke-dasharray="3,3"' : '';
         const dimStyle = (!lvl.active && !isEdge) ? 'opacity:0.4;' : '';
+        
+        let checkboxHtml = '';
+        if (!isEdge) {
+          checkboxHtml = `<input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>`;
+        } else {
+          // Add a spacer to align with the checkbox visually
+          checkboxHtml = `<span style="display:inline-block; width:13px; margin-right:5px;"></span>`;
+        }
+        
         return `
         <div class="dsd-row dsd-row-check" style="${dimStyle}">
           <label class="dsd-checkbox-label" style="width:104px; flex-shrink:0;">
-            <input type="checkbox" class="js-ch-level-active" data-idx="${i}"
-              ${lvl.active ? 'checked' : ''} ${isEdge ? 'disabled' : ''}>
+            ${checkboxHtml}
             ${lvl.v}
           </label>
           <div class="dsd-row-controls">
