@@ -55,7 +55,7 @@ window.DSDColorPicker = (() => {
     const pop = document.createElement('div');
     pop.id = 'dsd-color-pal';
     pop._anchorEl = anchorEl;
-    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:10px;box-shadow:0 6px 20px rgba(0,0,0,0.5);width:242px;`;
+    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:10px;box-shadow:0 6px 20px rgba(0,0,0,0.5);width:242px;`;
 
     const mainRows = TV_PALETTE.map(row =>
       `<div style="display:flex;gap:2px;margin-bottom:2px;">${
@@ -71,7 +71,7 @@ window.DSDColorPicker = (() => {
       <div>${mainRows}</div>
       <div style="height:1px;background:#2a2e39;margin:6px -10px;"></div>
       <div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;">${neonRow}
-        <div id="dsd-pc-add" style="width:18px;height:18px;border-radius:2px;cursor:pointer;border:1px solid #878a95;display:flex;align-items:center;justify-content:center;color:#787b86;">
+        <div id="dsd-pc-add" style="width:18px;height:18px;border-radius:2px;cursor:pointer;border:1px solid #7d808b;display:flex;align-items:center;justify-content:center;color:#787b86;">
           <svg viewBox="0 0 10 10" width="10" height="10" stroke="currentColor"><path d="M5 1v8M1 5h8" stroke-width="1.5"/></svg>
         </div>
       </div>
@@ -79,7 +79,7 @@ window.DSDColorPicker = (() => {
       <div style="margin-top:4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
           <span style="font-size:11px;color:#787b86;">Opacity</span>
-          <span id="dsd-pc-opval" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #878a95;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
+          <span id="dsd-pc-opval" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #7d808b;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
         </div>
         <div style="position:relative;height:12px;border-radius:6px;overflow:hidden;background:repeating-conic-gradient(#363c4e 0% 25%,#2a2e39 0% 50%) 50%/10px 10px;cursor:pointer;" id="dsd-pc-track">
           <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(${cr},${cg},${cb},0),rgba(${cr},${cg},${cb},1));pointer-events:none;"></div>
@@ -172,7 +172,7 @@ window.DSDColorPicker = (() => {
     const pop = document.createElement('div');
     pop.id = 'dsd-combined-pop';
     pop._anchorEl = anchorEl;
-    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:8px;box-shadow:0 6px 24px rgba(0,0,0,0.6);width:196px;`;
+    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:8px;box-shadow:0 6px 24px rgba(0,0,0,0.6);width:196px;`;
 
     const emit = () => onApply({ color: buildC(activeHex, activeOp), width: selW, style: selS });
 
@@ -196,7 +196,7 @@ window.DSDColorPicker = (() => {
         <div style="margin-bottom:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
             <span style="font-size:11px;color:#787b86;">Opacity</span>
-            <span id="dsd-cmb-opval" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #878a95;padding:2px 6px;border-radius:3px;">${activeOp}%</span>
+            <span id="dsd-cmb-opval" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #7d808b;padding:2px 6px;border-radius:3px;">${activeOp}%</span>
           </div>
           <div style="position:relative;height:12px;border-radius:6px;overflow:hidden;background:repeating-conic-gradient(#363c4e 0% 25%,#2a2e39 0% 50%) 50%/10px 10px;cursor:pointer;" id="dsd-cmb-track">
             <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(${cr},${cg},${cb},0),rgba(${cr},${cg},${cb},1));pointer-events:none;"></div>
@@ -209,7 +209,7 @@ window.DSDColorPicker = (() => {
       html += `<div style="padding:2px 0 6px;font-size:11px;color:#5d606b;letter-spacing:0.5px;text-transform:uppercase;">Thickness</div>
                <div style="display:flex;gap:2px;margin-bottom:8px;">`;
       widths.forEach(w => {
-        html += `<div class="dsd-cmb-w" data-w="${w}" style="flex:1;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${w===selW?'#2a2e39':'#131722'};border:1px solid ${w===selW?'#2962ff':'#878a95'};border-radius:3px;">
+        html += `<div class="dsd-cmb-w" data-w="${w}" style="flex:1;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${w===selW?'#2a2e39':'#131722'};border:1px solid ${w===selW?'#2962ff':'#7d808b'};border-radius:3px;">
                    <svg width="24" height="${w+1}"><line x1="0" y1="${(w+1)/2}" x2="24" y2="${(w+1)/2}" stroke="#d1d4dc" stroke-width="${w}"/></svg>
                  </div>`;
       });
@@ -218,7 +218,7 @@ window.DSDColorPicker = (() => {
       html += `<div style="padding:2px 0 6px;font-size:11px;color:#5d606b;letter-spacing:0.5px;text-transform:uppercase;">Style</div>
                <div style="display:flex;gap:2px;">`;
       styles.forEach(st => {
-        html += `<div class="dsd-cmb-s" data-s="${st.key}" style="flex:1;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${st.key===selS?'#2a2e39':'#131722'};border:1px solid ${st.key===selS?'#2962ff':'#878a95'};border-radius:3px;" title="${st.label}">
+        html += `<div class="dsd-cmb-s" data-s="${st.key}" style="flex:1;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${st.key===selS?'#2a2e39':'#131722'};border:1px solid ${st.key===selS?'#2962ff':'#7d808b'};border-radius:3px;" title="${st.label}">
                    <svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#d1d4dc" stroke-width="2" ${st.dash}/></svg>
                  </div>`;
       });
@@ -302,7 +302,7 @@ window.DSDColorPicker = (() => {
     const pop = document.createElement('div');
     pop.id = 'dsd-line-pop';
     pop._anchorEl = anchorEl;
-    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:8px 0;box-shadow:0 6px 24px rgba(0,0,0,0.6);min-width:160px;`;
+    pop.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:8px 0;box-shadow:0 6px 24px rgba(0,0,0,0.6);min-width:160px;`;
 
     const renderPop = () => {
       pop.innerHTML = `
@@ -431,7 +431,7 @@ window.DSDColorPicker = (() => {
 
     pEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <div id="adv-preview" style="width:24px;height:24px;background:${baseHex};border:1px solid #878a95;border-radius:4px;"></div>
+        <div id="adv-preview" style="width:24px;height:24px;background:${baseHex};border:1px solid #7d808b;border-radius:4px;"></div>
         <input id="adv-hex" type="text" value="${baseHex.toUpperCase()}" style="width:70px;background:#131722;border:1px solid #2962ff;color:#d1d4dc;padding:4px;border-radius:4px;font-family:'JetBrains Mono',monospace;outline:none;font-size:12px;">
       </div>
       <div style="display:flex;gap:12px;">
@@ -444,8 +444,8 @@ window.DSDColorPicker = (() => {
           <div id="adv-hue-thumb" style="position:absolute;width:100%;height:4px;border:1px solid #000;background:#fff;top:${aH*150}px;left:0;transform:translateY(-50%);pointer-events:none;"></div>
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid #878a95;padding-top:12px;">
-        <button id="adv-cancel" style="background:transparent;border:1px solid #878a95;color:#d1d4dc;padding:6px 16px;border-radius:4px;cursor:pointer;">Cancel</button>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid #7d808b;padding-top:12px;">
+        <button id="adv-cancel" style="background:transparent;border:1px solid #7d808b;color:#d1d4dc;padding:6px 16px;border-radius:4px;cursor:pointer;">Cancel</button>
         <button id="adv-ok" style="background:#2962ff;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500;">Ok</button>
       </div>
     `;

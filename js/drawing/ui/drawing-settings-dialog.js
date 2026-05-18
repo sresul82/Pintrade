@@ -139,7 +139,7 @@ const DrawingSettingsDialog = (() => {
     menu.className = 'dsd-template-menu';
     
     // Default styling for menu to match others
-    menu.style.cssText = 'position:fixed; z-index:999999; background:#1e222d; border:1px solid #878a95; border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,0.6); min-width:200px; padding:4px 0; color:#d1d4dc; font-size:13px;';
+    menu.style.cssText = 'position:fixed; z-index:999999; background:#1e222d; border:1px solid #7d808b; border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,0.6); min-width:200px; padding:4px 0; color:#d1d4dc; font-size:13px;';
 
     const toolKey = `dsb-templates-${d.tool}`;
     const templates = JSON.parse(localStorage.getItem(toolKey) || '{}');
@@ -155,7 +155,7 @@ const DrawingSettingsDialog = (() => {
     `;
 
     if (templateNames.length > 0) {
-      html += `<div style="height:1px; background:#878a95; margin:4px 0;"></div>`;
+      html += `<div style="height:1px; background:#7d808b; margin:4px 0;"></div>`;
       templateNames.forEach(name => {
         html += `
           <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 16px; cursor:pointer; transition:background 0.2s;" class="dsd-tmpl-item" data-tmpl-action="apply-custom" data-tmpl-name="${name}">
@@ -815,7 +815,7 @@ const DrawingSettingsDialog = (() => {
         const side = btn.dataset.side;
         const menu = document.createElement('div');
         menu.id = 'dsd-cap-menu';
-        menu.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.55);min-width:130px;top:${rect.bottom+2}px;left:${rect.left}px;`;
+        menu.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.55);min-width:130px;top:${rect.bottom+2}px;left:${rect.left}px;`;
 
         capOptions.forEach(opt => {
           const item = document.createElement('div');
@@ -1100,6 +1100,57 @@ const DrawingSettingsDialog = (() => {
             EventBus.emit('drawing:settings:saved');
           });
         }
+      });
+
+
+      // Channel Levels bindings
+      overlay.querySelectorAll('.js-ch-level-combo').forEach(combo => {
+        combo.addEventListener('mousedown', (e) => e.stopPropagation());
+        combo.addEventListener('click', (e) => {
+          e.stopPropagation();
+          let lvlArr = drawing.style.channelLevels;
+          if (!lvlArr) return; // Should exist after render
+          
+          let idx = parseInt(combo.dataset.idx);
+          const lvl = lvlArr[idx];
+          if (!lvl) return;
+
+          const curC = lvl.color || '#2962ff';
+          const curW = lvl.width || 1;
+          const curS = lvl.style || 'solid';
+
+          DSDColorPicker.showCombinedLineSettings(combo, curC, curW, curS, true, ({ color: newColor, width: newWidth, style: newStyle }) => {
+            const swatch = combo.querySelector('.js-ch-level-color');
+            if (swatch) {
+              swatch.style.background = newColor;
+              swatch.dataset.color = newColor;
+            }
+            const previewPath = combo.querySelector('.js-ch-level-preview path');
+            if (previewPath) {
+               previewPath.setAttribute('stroke', newColor);
+               previewPath.setAttribute('stroke-width', newWidth);
+               previewPath.removeAttribute('stroke-dasharray');
+               if (newStyle === 'dashed') previewPath.setAttribute('stroke-dasharray', '8,5');
+               else if (newStyle === 'dotted') previewPath.setAttribute('stroke-dasharray', '3,3');
+            }
+            
+            lvl.color = newColor;
+            lvl.width = newWidth;
+            lvl.style = newStyle;
+            
+            DSDApply.applyFromForm(overlay, drawing);
+            EventBus.emit('drawing:settings:saved');
+          });
+        });
+      });
+
+      overlay.querySelectorAll('.js-ch-level-active').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const row = inp.closest('.dsd-ch-levels-group');
+          if (row) row.style.opacity = inp.checked ? '1' : '0.4';
+          DSDApply.applyFromForm(overlay, drawing);
+          EventBus.emit('drawing:settings:saved');
+        });
       });
 
 

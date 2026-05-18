@@ -108,10 +108,10 @@ window.PropertyToolbar = (() => {
 
     const el = document.createElement('div');
     el.id = 'pt-adv-picker';
-    el.style.cssText = `position:fixed;z-index:100000;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;`;
+    el.style.cssText = `position:fixed;z-index:100000;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;`;
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <div id="ap-preview" style="width:24px;height:24px;background:${baseHex};border:1px solid #878a95;border-radius:4px;flex-shrink:0;"></div>
+        <div id="ap-preview" style="width:24px;height:24px;background:${baseHex};border:1px solid #7d808b;border-radius:4px;flex-shrink:0;"></div>
         <input id="ap-hex" type="text" value="${baseHex.toUpperCase()}" style="flex:1;background:#131722;border:1px solid #2962ff;color:#d1d4dc;padding:4px 6px;border-radius:4px;font-family:monospace;font-size:12px;outline:none;"/>
         <button id="ap-add" style="background:#d1d4dc;color:#131722;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Add</button>
       </div>
@@ -126,7 +126,7 @@ window.PropertyToolbar = (() => {
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid #2a2e39;">
-        <button id="ap-cancel" style="background:transparent;border:1px solid #878a95;color:#d1d4dc;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Cancel</button>
+        <button id="ap-cancel" style="background:transparent;border:1px solid #7d808b;color:#d1d4dc;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Cancel</button>
         <button id="ap-ok" style="background:#d1d4dc;color:#131722;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Ok</button>
       </div>
     `;
@@ -182,7 +182,7 @@ window.PropertyToolbar = (() => {
     const {r:cr, g:cg, b:cb} = _hexToRgb(baseHex);
 
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:10px;box-shadow:0 6px 20px rgba(0,0,0,0.5);width:242px;`;
+    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:10px;box-shadow:0 6px 20px rgba(0,0,0,0.5);width:242px;`;
 
     const mainRows = TV_PALETTE.map(row =>
       `<div style="display:flex;gap:2px;margin-bottom:2px;">
@@ -199,7 +199,7 @@ window.PropertyToolbar = (() => {
       <div style="height:1px;background:#2a2e39;margin:6px -10px;"></div>
       <div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;">
         ${neonRow}
-        <div id="pt-add-custom" style="width:18px;height:18px;border-radius:2px;cursor:pointer;border:1px solid #878a95;display:flex;align-items:center;justify-content:center;color:#787b86;">
+        <div id="pt-add-custom" style="width:18px;height:18px;border-radius:2px;cursor:pointer;border:1px solid #7d808b;display:flex;align-items:center;justify-content:center;color:#787b86;">
           <svg viewBox="0 0 10 10" width="10" height="10" stroke="currentColor"><path d="M5 1v8M1 5h8" stroke-width="1.5"/></svg>
         </div>
       </div>
@@ -207,7 +207,7 @@ window.PropertyToolbar = (() => {
       <div style="margin-top:4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
           <span style="font-size:11px;color:#787b86;">Opacity</span>
-          <span id="pt-op-val" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #878a95;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
+          <span id="pt-op-val" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #7d808b;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
         </div>
         <div style="position:relative;height:12px;border-radius:6px;overflow:hidden;background:repeating-conic-gradient(#363c4e 0% 25%,#2a2e39 0% 50%) 50%/10px 10px;cursor:pointer;" id="pt-op-track">
           <div id="pt-op-overlay" style="position:absolute;inset:0;background:linear-gradient(to right,rgba(${cr},${cg},${cb},0),rgba(${cr},${cg},${cb},1));pointer-events:none;"></div>
@@ -299,7 +299,7 @@ window.PropertyToolbar = (() => {
     _closeAllMenus();
 
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:100px;`;
+    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:100px;`;
 
     const items = [1,2,3,4];
     el.innerHTML = items.map(w => `
@@ -338,7 +338,7 @@ window.PropertyToolbar = (() => {
     _closeAllMenus();
 
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:60px;max-height:200px;overflow-y:auto;`;
+    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:60px;max-height:200px;overflow-y:auto;`;
 
     const items = [10, 11, 12, 14, 16, 20, 24, 28, 32, 40, 80];
     el.innerHTML = items.map(s => `
@@ -374,7 +374,7 @@ window.PropertyToolbar = (() => {
     _closeAllMenus();
 
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:130px;`;
+    el.style.cssText = `position:fixed;z-index:50000;background:#1e222d;border:1px solid #7d808b;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.5);min-width:130px;`;
 
     const styles = [
       { key:'solid',  label:'Line',        svg:'<line x1="0" y1="1" x2="28" y2="1" stroke="currentColor" stroke-width="2"/>' },
