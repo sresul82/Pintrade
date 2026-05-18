@@ -612,34 +612,81 @@ window.DrawingTrend = (() => {
   }
 
   function _drawChannel(ctx, d, pane) {
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane);
-      if (!a || !b) return;
-      ctx.strokeStyle = d.style?.color || '#0969da';
-      ctx.lineWidth = d.style?.width || 1;
-      let dashArr = d.style?.dash || [];
-      if (d.style?.lineStyle === 'dashed') dashArr = [8,5];
-      if (d.style?.lineStyle === 'dotted') dashArr = [3,3];
-      ctx.setLineDash(dashArr);
-      
-      const offset = d.channelOffset || 40;
-      
-      // Fill
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = d.style?.fillColor || 'rgba(9, 105, 218, 0.2)';
+    const a = _pt2xy(d.p1, pane);
+    const b = _pt2xy(d.p2, pane);
+    if (!a || !b) return;
+
+    const s = d.style || {};
+
+    // p3 sabitlenmemişse sadece üst çizgiyi çiz (çizim devam ediyor)
+    if (!d.p3) {
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      ctx.lineTo(b.x, b.y + offset);
-      ctx.lineTo(a.x, a.y + offset);
+      ctx.stroke();
+      return;
+    }
+
+    const c = _pt2xy(d.p3, pane);
+    if (!c) return;
+
+    // Kanal vektörü: p3'ün p1'e göre fiyat farkı kanal yüksekliğini belirler
+    // Alt çizgi: üst çizginin her noktasına aynı dy eklenir (paralel)
+    const dy = c.y - a.y;
+
+    const botAx = a.x, botAy = a.y + dy;
+    const botBx = b.x, botBy = b.y + dy;
+
+    // Level tanımları — varsayılan (settings'ten gelen varsa kullan)
+    const defaultLevels = [
+      { v: -0.25, active: false, color: '#787b86', style: 'solid',  width: 1 },
+      { v: 0,     active: true,  color: s.color || '#2962ff', style: 'solid', width: s.width || 1 },
+      { v: 0.25,  active: false, color: '#787b86', style: 'dashed', width: 1 },
+      { v: 0.5,   active: false, color: '#787b86', style: 'dashed', width: 1 },
+      { v: 0.75,  active: false, color: '#787b86', style: 'dashed', width: 1 },
+      { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid', width: s.width || 1 },
+      { v: 1.25,  active: false, color: '#787b86', style: 'solid',  width: 1 },
+    ];
+    const levels = s.channelLevels || defaultLevels;
+
+    // Background fill (level 0 ile 1 arasını doldur)
+    if (s.showBg !== false) {
+      ctx.save();
+      ctx.fillStyle = s.fillColor || 'rgba(9, 105, 218, 0.2)';
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(botBx, botBy);
+      ctx.lineTo(botAx, botAy);
       ctx.closePath();
       ctx.fill();
-  
-      // Borders
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(a.x, a.y + offset); ctx.lineTo(b.x, b.y + offset); ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.restore();
     }
+
+    // Her level çizgisini render et
+    for (const lvl of levels) {
+      if (!lvl.active) continue;
+
+      const ly1 = a.y + dy * lvl.v;
+      const ly2 = b.y + dy * lvl.v;
+
+      ctx.save();
+      ctx.strokeStyle = lvl.color || s.color || '#2962ff';
+      ctx.lineWidth   = lvl.width || 1;
+
+      let dash = [];
+      if (lvl.style === 'dashed') dash = [8, 5];
+      else if (lvl.style === 'dotted') dash = [3, 3];
+      ctx.setLineDash(dash);
+
+      ctx.beginPath();
+      ctx.moveTo(a.x, ly1);
+      ctx.lineTo(b.x, ly2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   function _drawInfoLine(ctx, d, pane, selected) {
       d.style = d.style || {};

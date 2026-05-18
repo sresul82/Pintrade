@@ -272,7 +272,7 @@ window.DrawingManager = (() => {
 
     // ── Two-point drawing tools (click-click) ──────────
     const TWO_PT_TOOLS = [
-      'trendline', 'ray', 'extended', 'rect', 'channel', 'arrowdraw', 'trendangle',
+      'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
       'infoline', 'flattopbottom', 'regression',
       'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral',
       'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed',
@@ -315,7 +315,7 @@ window.DrawingManager = (() => {
     const THREE_PT_TOOLS = [
       'fib-ext', 'fib-channel', 'fib-timebased',
       'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch',
-      'rotatedrect', 'triangle', 'arc', 'curve'
+      'rotatedrect', 'triangle', 'arc', 'curve', 'channel'
     ];
     if (THREE_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
@@ -692,6 +692,12 @@ window.DrawingManager = (() => {
             pane.cvs.style.cursor = 'ns-resize';
           } else if (ht === 'endTime' && isPos) {
             pane.cvs.style.cursor = 'ew-resize';
+          } else if (tool === 'channel' && (ht === 'ch_p1' || ht === 'ch_p2' || ht === 'ch_bot_p1' || ht === 'ch_bot_p2')) {
+            pane.cvs.style.cursor = 'default';
+          } else if (tool === 'channel' && (ht === 'ch_mid_top' || ht === 'ch_mid_bot')) {
+            pane.cvs.style.cursor = 'ns-resize';
+          } else if (tool === 'channel' && ht === 'line') {
+            pane.cvs.style.cursor = 'pointer';
           } else if (ht === 'p1' || ht === 'p2' || ht === 'p3') {
             if (tool === 'rotatedrect' && (ht === 'p1' || ht === 'p2')) {
               pane.cvs.style.cursor = 'default';
@@ -1499,6 +1505,27 @@ window.DrawingManager = (() => {
         pts.push({ x: x1, y: y2, id: 'rect_bl' });
         pts.push({ x: mx, y: y2, type: 'square', id: 'rect_bm' });
         pts.push({ x: x2, y: y2, id: 'rect_br' });
+      }
+    } else if (d.tool === 'channel') {
+      const a = _pt2xy(d.p1, pane);
+      const b = _pt2xy(d.p2, pane);
+      if (a && b) {
+        pts.push({ ...a, id: 'ch_p1' });
+        pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, type: 'square', id: 'ch_mid_top' });
+        pts.push({ ...b, id: 'ch_p2' });
+
+        if (d.p3) {
+          const c = _pt2xy(d.p3, pane);
+          if (c) {
+            const dy = c.y - a.y;
+            const botA = { x: a.x, y: a.y + dy };
+            const botB = { x: b.x, y: b.y + dy };
+            const botMid = { x: (botA.x + botB.x) / 2, y: (botA.y + botB.y) / 2 };
+            pts.push({ ...botA, id: 'ch_bot_p1' });
+            pts.push({ ...botMid, type: 'square', id: 'ch_mid_bot' });
+            pts.push({ ...botB, id: 'ch_bot_p2' });
+          }
+        }
       }
     } else if (d.tool === 'rotatedrect') {
       const a = _pt2xy(d.p1, pane);
@@ -2325,8 +2352,25 @@ window.DrawingManager = (() => {
       }
 
       if (d.tool === 'channel') {
-        const offset = d.channelOffset || 40;
-        if (_distToSegment(x, y, p1.x, p1.y + offset, p2.x, p2.y + offset) <= tolerance) return 'line';
+        if (a && b) {
+          if (Math.hypot(x - a.x, y - a.y) <= 8) return 'ch_p1';
+          if (Math.hypot(x - b.x, y - b.y) <= 8) return 'ch_p2';
+          const midTopX = (a.x + b.x) / 2, midTopY = (a.y + b.y) / 2;
+          if (Math.hypot(x - midTopX, y - midTopY) <= 8) return 'ch_mid_top';
+        }
+        if (d.p3) {
+          const c = _pt2xy(d.p3, pane);
+          if (c && a && b) {
+            const dy = c.y - a.y;
+            const botAx = a.x, botAy = a.y + dy;
+            const botBx = b.x, botBy = b.y + dy;
+            const midBotX = (botAx + botBx) / 2, midBotY = (botAy + botBy) / 2;
+            if (Math.hypot(x - botAx, y - botAy) <= 8) return 'ch_bot_p1';
+            if (Math.hypot(x - botBx, y - botBy) <= 8) return 'ch_bot_p2';
+            if (Math.hypot(x - midBotX, y - midBotY) <= 8) return 'ch_mid_bot';
+            if (_distToSegment(x, y, botAx, botAy, botBx, botBy) <= tolerance) return 'line';
+          }
+        }
       }
 
       // Precise geometric line-hit testing for complex tools
