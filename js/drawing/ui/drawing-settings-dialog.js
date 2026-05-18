@@ -1108,16 +1108,14 @@ const DrawingSettingsDialog = (() => {
         combo.addEventListener('mousedown', (e) => e.stopPropagation());
         combo.addEventListener('click', (e) => {
           e.stopPropagation();
+          drawing.style = drawing.style || {};
           let lvlArr = drawing.style.channelLevels;
-          if (!lvlArr) return; // Should exist after render
-          
           let idx = parseInt(combo.dataset.idx);
-          const lvl = lvlArr[idx];
-          if (!lvl) return;
+          const lvl = (lvlArr && lvlArr[idx]) ? lvlArr[idx] : null;
 
-          const curC = lvl.color || '#2962ff';
-          const curW = lvl.width || 1;
-          const curS = lvl.style || 'solid';
+          const curC = lvl ? lvl.color : '#2962ff';
+          const curW = lvl ? lvl.width : 1;
+          const curS = lvl ? lvl.style : 'solid';
 
           DSDColorPicker.showCombinedLineSettings(combo, curC, curW, curS, true, ({ color: newColor, width: newWidth, style: newStyle }) => {
             const swatch = combo.querySelector('.js-ch-level-color');
@@ -1134,9 +1132,16 @@ const DrawingSettingsDialog = (() => {
                else if (newStyle === 'dotted') previewPath.setAttribute('stroke-dasharray', '3,3');
             }
             
-            lvl.color = newColor;
-            lvl.width = newWidth;
-            lvl.style = newStyle;
+            if (!drawing.style.channelLevels) {
+               drawing.style.channelLevels = [];
+            }
+            if (!drawing.style.channelLevels[idx]) {
+               drawing.style.channelLevels[idx] = { v: 0, active: true };
+            }
+            
+            drawing.style.channelLevels[idx].color = newColor;
+            drawing.style.channelLevels[idx].width = newWidth;
+            drawing.style.channelLevels[idx].style = newStyle;
             
             DSDApply.applyFromForm(overlay, drawing);
             EventBus.emit('drawing:settings:saved');
