@@ -1367,11 +1367,9 @@ window.DrawingManager = (() => {
       }
       const isSelected = d.id === _selectedId;
       try {
-        ctx.save();
         _renderDrawing(ctx, d, pane, isSelected, isInProgress);
       } catch (e) {
         console.warn('[DrawingManager] Render error for tool:', d.tool, d.id, e);
-        try { ctx.restore(); } catch(_) {}
       }
     });
 
@@ -1543,14 +1541,15 @@ window.DrawingManager = (() => {
 
   function _renderDrawing(ctx, d, pane, selected, inProgress) {
     ctx.save();
-    ctx.globalAlpha = inProgress ? 0.7 : ((d.style?.opacity ?? 100) / 100);
-    ctx.strokeStyle = d.style?.color || '#0969da';
-    ctx.lineWidth = d.style?.width || 1;
+    try {
+      ctx.globalAlpha = inProgress ? 0.7 : ((d.style?.opacity ?? 100) / 100);
+      ctx.strokeStyle = d.style?.color || '#0969da';
+      ctx.lineWidth = d.style?.width || 1;
 
-    let dashArr = d.style?.dash || [];
-    if (d.style?.lineStyle === 'dashed') dashArr = [8, 5];
-    if (d.style?.lineStyle === 'dotted') dashArr = [3, 3];
-    ctx.setLineDash(dashArr);
+      let dashArr = d.style?.dash || [];
+      if (d.style?.lineStyle === 'dashed') dashArr = [8, 5];
+      if (d.style?.lineStyle === 'dotted') dashArr = [3, 3];
+      ctx.setLineDash(dashArr);
 
     if (d.tool === 'hline') window.DrawingTrend.drawHLine(ctx, d, pane);
     if (d.tool === 'vline') window.DrawingTrend.drawVLine(ctx, d, pane);
@@ -1641,8 +1640,9 @@ window.DrawingManager = (() => {
     if (d.tool === 'elliott-double') window.DrawingPatterns.drawElliottDouble(ctx, d, pane);
     if (d.tool === 'elliott-triple') window.DrawingPatterns.drawElliottTriple(ctx, d, pane);
 
-
-    ctx.restore();
+    } finally {
+      ctx.restore();
+    }
 
     if (selected) {
       ctx.save();
