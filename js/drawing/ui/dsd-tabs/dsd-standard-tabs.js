@@ -36,9 +36,9 @@ window.DSDStandardTabs = (() => {
     ).join('');
 
     let html = '';
-    
+
     if (d.tool === 'channel') {
-      const channelLevels = s.channelLevels || [
+      const defaultLevels = [
         { v: -0.25, active: false, color: '#787b86',             style: 'dashed', width: 1 },
         { v: 0,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
         { v: 0.25,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
@@ -47,6 +47,16 @@ window.DSDStandardTabs = (() => {
         { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
         { v: 1.25,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
       ];
+      
+      let channelLevels = s.channelLevels;
+      if (!channelLevels || channelLevels.length === 0) {
+        channelLevels = defaultLevels;
+      } else {
+        defaultLevels.forEach(dl => {
+          if (!channelLevels.find(cl => cl.v === dl.v)) channelLevels.push(dl);
+        });
+        channelLevels.sort((a,b) => a.v - b.v);
+      }
 
       const extRight  = s.extendRight !== undefined ? !!s.extendRight : false;
       const extLeft   = s.extendLeft  !== undefined ? !!s.extendLeft  : false;

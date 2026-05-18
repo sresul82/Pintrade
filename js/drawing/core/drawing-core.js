@@ -1517,7 +1517,11 @@ window.DrawingManager = (() => {
         if (d.p3) {
           const c = _pt2xy(d.p3, pane);
           if (c) {
-            const dy = c.y - a.y;
+            let m = 0;
+            if (b.x !== a.x) {
+              m = (b.y - a.y) / (b.x - a.x);
+            }
+            const dy = c.y - a.y - m * (c.x - a.x);
             const botA = { x: a.x, y: a.y + dy };
             const botB = { x: b.x, y: b.y + dy };
             const botMid = { x: (botA.x + botB.x) / 2, y: (botA.y + botB.y) / 2 };
@@ -2361,7 +2365,11 @@ window.DrawingManager = (() => {
         if (d.p3) {
           const c = _pt2xy(d.p3, pane);
           if (c && a && b) {
-            const dy = c.y - a.y;
+            let m = 0;
+            if (b.x !== a.x) {
+              m = (b.y - a.y) / (b.x - a.x);
+            }
+            const dy = c.y - a.y - m * (c.x - a.x);
             const botAx = a.x, botAy = a.y + dy;
             const botBx = b.x, botBy = b.y + dy;
             const midBotX = (botAx + botBx) / 2, midBotY = (botAy + botBy) / 2;

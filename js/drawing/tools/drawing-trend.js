@@ -631,8 +631,12 @@ window.DrawingTrend = (() => {
     if (!c) return;
 
     // Kanal vektörü: p3'ün p1'e göre fiyat farkı kanal yüksekliğini belirler
-    // Alt çizgi: üst çizginin her noktasına aynı dy eklenir (paralel)
-    const dy = c.y - a.y;
+    // Alt çizgi: üst çizginin eğimi (m) dikkate alınarak c'den geçen paralel çizgi bulunur
+    let m = 0;
+    if (b.x !== a.x) {
+      m = (b.y - a.y) / (b.x - a.x);
+    }
+    const dy = c.y - a.y - m * (c.x - a.x);
 
     const botAx = a.x, botAy = a.y + dy;
     const botBx = b.x, botBy = b.y + dy;
@@ -647,7 +651,15 @@ window.DrawingTrend = (() => {
       { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid', width: s.width || 1 },
       { v: 1.25,  active: false, color: '#787b86', style: 'solid',  width: 1 },
     ];
-    const levels = s.channelLevels || defaultLevels;
+    let levels = s.channelLevels;
+    if (!levels || levels.length === 0) {
+      levels = defaultLevels;
+    } else {
+      defaultLevels.forEach(dl => {
+        if (!levels.find(cl => cl.v === dl.v)) levels.push(dl);
+      });
+      levels.sort((a,b) => a.v - b.v);
+    }
 
     // Background fill (level 0 ile 1 arasını doldur)
     if (s.showBg !== false) {
