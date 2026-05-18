@@ -211,13 +211,13 @@ window.DSDStandardTabs = (() => {
       };
       html += `
           <div class="dsd-cap-drop" style="position:relative;margin-right:4px;">
-            <div class="dsd-cap-drop-btn" data-side="left" style="display:flex;align-items:center;gap:6px;background:#131722;border:1px solid #363c4e;border-radius:4px;height:30px;padding:0 8px;cursor:pointer;color:#d1d4dc;">
+            <div class="dsd-cap-drop-btn" data-side="left" style="display:flex;align-items:center;gap:6px;background:#131722;border:1px solid #878a95;border-radius:4px;height:30px;padding:0 8px;cursor:pointer;color:#d1d4dc;">
               <span class="dsd-cap-icon" style="transform:scaleX(-1);">${capLabels[capLeft] || capLabels.normal}</span>
               <svg width="10" height="10" viewBox="0 0 10 10" style="flex-shrink:0;color:#787b86;"><path d="M2 3.5l3 3 3-3" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>
             </div>
           </div>
           <div class="dsd-cap-drop" style="position:relative;">
-            <div class="dsd-cap-drop-btn" data-side="right" style="display:flex;align-items:center;gap:6px;background:#131722;border:1px solid #363c4e;border-radius:4px;height:30px;padding:0 8px;cursor:pointer;color:#d1d4dc;">
+            <div class="dsd-cap-drop-btn" data-side="right" style="display:flex;align-items:center;gap:6px;background:#131722;border:1px solid #878a95;border-radius:4px;height:30px;padding:0 8px;cursor:pointer;color:#d1d4dc;">
               <span class="dsd-cap-icon">${capLabels[capRight] || capLabels.normal}</span>
               <svg width="10" height="10" viewBox="0 0 10 10" style="flex-shrink:0;color:#787b86;"><path d="M2 3.5l3 3 3-3" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>
             </div>
@@ -342,7 +342,7 @@ window.DSDStandardTabs = (() => {
       </div>
 
       <div class="dsd-row" style="margin-bottom:16px;">
-        <textarea class="dsd-textarea" id="dsd-text" placeholder="Add text" style="min-height:140px; border-radius:6px; border:1px solid #363c4e; background:#131722; color:#d1d4dc; padding:8px;">${text}</textarea>
+        <textarea class="dsd-textarea" id="dsd-text" placeholder="Add text" style="min-height:140px; border-radius:6px; border:1px solid #878a95; background:#131722; color:#d1d4dc; padding:8px;">${text}</textarea>
       </div>
 
       <div class="dsd-row">

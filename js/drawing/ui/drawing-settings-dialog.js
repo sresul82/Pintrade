@@ -139,7 +139,7 @@ const DrawingSettingsDialog = (() => {
     menu.className = 'dsd-template-menu';
     
     // Default styling for menu to match others
-    menu.style.cssText = 'position:fixed; z-index:999999; background:#1e222d; border:1px solid #363c4e; border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,0.6); min-width:200px; padding:4px 0; color:#d1d4dc; font-size:13px;';
+    menu.style.cssText = 'position:fixed; z-index:999999; background:#1e222d; border:1px solid #878a95; border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,0.6); min-width:200px; padding:4px 0; color:#d1d4dc; font-size:13px;';
 
     const toolKey = `dsb-templates-${d.tool}`;
     const templates = JSON.parse(localStorage.getItem(toolKey) || '{}');
@@ -155,7 +155,7 @@ const DrawingSettingsDialog = (() => {
     `;
 
     if (templateNames.length > 0) {
-      html += `<div style="height:1px; background:#363c4e; margin:4px 0;"></div>`;
+      html += `<div style="height:1px; background:#878a95; margin:4px 0;"></div>`;
       templateNames.forEach(name => {
         html += `
           <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 16px; cursor:pointer; transition:background 0.2s;" class="dsd-tmpl-item" data-tmpl-action="apply-custom" data-tmpl-name="${name}">
@@ -815,7 +815,7 @@ const DrawingSettingsDialog = (() => {
         const side = btn.dataset.side;
         const menu = document.createElement('div');
         menu.id = 'dsd-cap-menu';
-        menu.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #363c4e;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.55);min-width:130px;top:${rect.bottom+2}px;left:${rect.left}px;`;
+        menu.style.cssText = `position:fixed;z-index:99999;background:#1e222d;border:1px solid #878a95;border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,0.55);min-width:130px;top:${rect.bottom+2}px;left:${rect.left}px;`;
 
         capOptions.forEach(opt => {
           const item = document.createElement('div');
