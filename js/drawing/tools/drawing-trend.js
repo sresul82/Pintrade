@@ -84,6 +84,14 @@ window.DrawingTrend = (() => {
       const y = pane.series.priceToCoordinate(d.price);
       if (y === null) return;
       const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+      const s = d.style || {};
+      ctx.strokeStyle = s.color || '#2962ff';
+      ctx.lineWidth   = s.width || 1;
+      let dashArr = s.dash || [];
+      if (s.lineStyle === 'dashed') dashArr = [8, 5];
+      if (s.lineStyle === 'dotted') dashArr = [3, 3];
+      ctx.setLineDash(dashArr);
+      if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
 
@@ -99,6 +107,14 @@ window.DrawingTrend = (() => {
       const x = _timeToX(pane, d.time);
       if (y === null || x === null) return;
       const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+      const s = d.style || {};
+      ctx.strokeStyle = s.color || '#2962ff';
+      ctx.lineWidth   = s.width || 1;
+      let dashArr = s.dash || [];
+      if (s.lineStyle === 'dashed') dashArr = [8, 5];
+      if (s.lineStyle === 'dotted') dashArr = [3, 3];
+      ctx.setLineDash(dashArr);
+      if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(w, y); ctx.stroke();
     }
 
@@ -185,14 +201,14 @@ window.DrawingTrend = (() => {
       ctx.fillText(`${angleDeg}°`, tx, ty);
       ctx.restore();
 
-      if (selected || !!d.style?.alwaysStats) {
+      if (d.style?.statsOn === true && (selected || !!d.style?.alwaysStats)) {
         _drawTrendStats(ctx, d, pane, a, b);
       }
     }
 
   function _drawTrendStats(ctx, d, pane, a, b) {
       const s = d.style || {};
-      if (s.statsOn === false) return;
+      if (s.statsOn !== true) return;
       const ALL_STAT_FIELDS = ['Price range','Percent change','Bars range','Date/time range','Angle'];
       const activeStats = s.statsFields ?? ALL_STAT_FIELDS;
       if (activeStats.length === 0) return;
@@ -478,7 +494,7 @@ window.DrawingTrend = (() => {
         if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
       }
 
-      if (selected || !!s.alwaysStats) {
+      if (s.statsOn === true && (selected || !!s.alwaysStats)) {
         _drawTrendStats(ctx, d, pane, a, b);
       }
     }

@@ -206,7 +206,7 @@ window.DrawingManager = (() => {
       return true;
     }
     if (_activeTool === 'hray') {
-      _finishDrawing(pane.symbol, { tool: 'hray', price, time, id: _uid(), style: _getToolStyle('hray') });
+      _finishDrawing(pane.symbol, { tool: 'hray', price, time, p1: { time, price }, id: _uid(), style: _getToolStyle('hray') });
       _lastPointerdownClaimed = true;
       return true;
     }
