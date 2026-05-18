@@ -143,6 +143,9 @@ window.DrawingTrend = (() => {
           // Hint alanını global map'e kaydet (cursor + click için)
           if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
           window._trendTextHintAreas[d.id] = { cx: w / 2, cy: y - 5, hw: hintTextW / 2 + 6, hh: 10, angle: 0 };
+        } else if (selected && hlineText) {
+          const tw = ctx.measureText(hlineText).width;
+          window._trendTextHintAreas[d.id] = { cx: w / 2, cy: y - 5, hw: tw / 2 + 6, hh: 10, angle: 0 };
         } else {
           if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
         }

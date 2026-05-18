@@ -670,7 +670,7 @@ window.DrawingManager = (() => {
         } else if (ht) {
           const tool = htDrawing ? htDrawing.tool : '';
           const isPos = ['longpos', 'shortpos', 'posforecast'].includes(tool);
-          if (ht === 'line' || ht === 'body' || ht === 'rect_body') {
+          if (ht === 'line' || ht === 'body' || ht === 'rect_body' || ht === 'midpoint') {
             // texttool/note/callout: always text cursor when selected; trendline/ray/extended/infoline: text only over hint area
             const hintTools = ['trendline', 'ray', 'extended', 'infoline', 'hline'];
             const isSelected = htDrawing?.id === _selectedId;
@@ -681,7 +681,7 @@ window.DrawingManager = (() => {
             } else if (isOverHint) {
               const hintAngle = window._trendTextHintAreas?.[htDrawing.id]?.angle ?? 0;
               pane.cvs.style.cursor = _makeBeamCursor(hintAngle);
-            } else if (htDrawing?.tool === 'hline') {
+            } else if (htDrawing?.tool === 'hline' && ht === 'midpoint') {
               pane.cvs.style.cursor = 'ns-resize';
             } else {
               pane.cvs.style.cursor = 'pointer';
@@ -2212,6 +2212,10 @@ window.DrawingManager = (() => {
               const lx = _timeToX(pane, d.time);
               if (lx != null && isFinite(lx) && x >= lx - tolerance) return 'line';
             }
+          } else if (d.tool === 'hline') {
+            const cvsW = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+            if (Math.abs(x - cvsW / 2) <= tolerance * 2) return 'midpoint';
+            return 'line';
           } else {
             return 'line';
           }
