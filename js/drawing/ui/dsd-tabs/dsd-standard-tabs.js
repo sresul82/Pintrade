@@ -57,6 +57,8 @@ window.DSDStandardTabs = (() => {
         });
         channelLevels.sort((a,b) => a.v - b.v);
       }
+      // Write back so dsd-apply.js can access levels by index on OK
+      s.channelLevels = channelLevels;
 
       const extRight  = s.extendRight !== undefined ? !!s.extendRight : false;
       const extLeft   = s.extendLeft  !== undefined ? !!s.extendLeft  : false;
@@ -67,40 +69,38 @@ window.DSDStandardTabs = (() => {
         const isEdge   = (lvl.v === 0 || lvl.v === 1);
         const dashAttr = lvl.style === 'dashed' ? 'stroke-dasharray="8,5"'
                        : lvl.style === 'dotted' ? 'stroke-dasharray="3,3"' : '';
-        const dimStyle = (!lvl.active && !isEdge) ? 'opacity:0.4;' : '';
-        
-        let checkboxHtml = '';
-        if (!isEdge) {
-          checkboxHtml = `<input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>`;
-        } else {
-          // Add a spacer to align with the checkbox visually
-          checkboxHtml = `<span style="display:inline-block; width:13px; margin-right:5px;"></span>`;
-        }
-        
+        const rowOpacity = (!lvl.active && !isEdge) ? 'opacity:0.45;' : '';
+
+        // Checkbox: shown for non-edge levels; spacer preserves alignment for 0 and 1
+        const checkboxHtml = !isEdge
+          ? `<input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>`
+          : `<span style="display:inline-block;width:14px;height:14px;flex-shrink:0;"></span>`;
+
         return `
-        <div class="dsd-row dsd-row-check" style="${dimStyle}">
-          <label class="dsd-checkbox-label" style="width:104px; flex-shrink:0;">
+        <div class="dsd-row dsd-row-check" style="${rowOpacity}">
+          <label class="dsd-checkbox-label">
             ${checkboxHtml}
-            ${lvl.v}
+            <span class="dsd-ch-level-val-box">${lvl.v}</span>
           </label>
-          <div class="dsd-row-controls">
-            <div class="dsd-line-combo" title="Color, thickness, style">
-              <div class="dsd-color-swatch js-ch-level-color"
-                data-idx="${i}" data-color="${lvl.color}"
-                style="background:${lvl.color}; cursor:pointer;"></div>
-              <div class="dsd-combo-divider"></div>
-              <div class="dsd-combo-preview">
-                <svg width="28" height="16" viewBox="0 0 28 16">
-                  <path stroke="${lvl.color}" stroke-width="${lvl.width}" ${dashAttr} d="M0 8h28"/>
-                </svg>
-              </div>
+          <div class="dsd-line-combo js-ch-level-combo" data-idx="${i}" title="Color, thickness, style" style="margin-left:auto; margin-right:0;">
+            <div class="dsd-color-swatch js-ch-level-color"
+              data-idx="${i}" data-color="${lvl.color}"
+              style="background:${lvl.color}; cursor:pointer;"></div>
+            <div class="dsd-combo-divider"></div>
+            <div class="dsd-combo-preview">
+              <svg width="28" height="16" viewBox="0 0 28 16">
+                <path stroke="${lvl.color}" stroke-width="${lvl.width}" ${dashAttr} d="M0 8h28"/>
+              </svg>
             </div>
           </div>
         </div>`;
       }).join('');
 
       html += `
-      ${levelsHtml}
+      <div class="dsd-ch-levels-group">
+        ${levelsHtml}
+      </div>
+
 
       <div class="dsd-section-label">EXTEND LINE</div>
       <div class="dsd-row dsd-row-check">
@@ -117,7 +117,7 @@ window.DSDStandardTabs = (() => {
       </div>
 
       <div class="dsd-row dsd-row-check">
-        <label class="dsd-checkbox-label" style="width:104px; flex-shrink:0;">
+        <label class="dsd-checkbox-label" style="width:144px; flex-shrink:0;">
           <input type="checkbox" id="dsd-showbg" ${showBg ? 'checked' : ''}>
           Background
         </label>

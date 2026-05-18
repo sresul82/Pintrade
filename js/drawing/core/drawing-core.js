@@ -471,6 +471,100 @@ window.DrawingManager = (() => {
         } else if (_dragState.hitType === 'p4') {
           const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
           d.p4 = { time, price };
+        } else if (d.tool === 'channel' && (_dragState.hitType === 'ch_p1' || _dragState.hitType === 'ch_p2')) {
+          // Corner on top line: snap to candle, keep channel height (p3 offset from p1 preserved)
+          const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
+          const isP1 = _dragState.hitType === 'ch_p1';
+          const origA = _pt2xy(_dragState.origP1, pane);
+          const origC = _pt2xy(_dragState.origP3, pane);
+          const origB = _pt2xy(_dragState.origP2, pane);
+          if (isP1) {
+            d.p1 = { time, price };
+            // Keep p3 at the same perpendicular offset from p1
+            if (origA && origC && origB) {
+              let m = 0;
+              if (origB.x !== origA.x) m = (origB.y - origA.y) / (origB.x - origA.x);
+              const origDy = origC.y - origA.y - m * (origC.x - origA.x);
+              const newAX = pane.chart.timeScale().timeToCoordinate(time);
+              const newAY = pane.series.priceToCoordinate(price);
+              if (newAX !== null && newAY !== null) {
+                const newBX = _timeToX(pane, d.p2.time);
+                const newBY = pane.series.priceToCoordinate(d.p2.price);
+                let nm = 0;
+                if (newBX !== null && newAX !== null && newBX !== newAX) nm = (newBY - newAY) / (newBX - newAX);
+                const p3PixelX = newAX;
+                const p3PixelY = newAY + origDy;
+                d.p3 = {
+                  time: pane.chart.timeScale().coordinateToTime(p3PixelX),
+                  price: pane.series.coordinateToPrice(p3PixelY)
+                };
+              }
+            }
+          } else {
+            d.p2 = { time, price };
+          }
+        } else if (d.tool === 'channel' && (_dragState.hitType === 'ch_bot_p1' || _dragState.hitType === 'ch_bot_p2')) {
+          // Corner on bottom line: snap to candle, update p3 to preserve perpendicular offset
+          const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
+          const isBot1 = _dragState.hitType === 'ch_bot_p1';
+          const aX = _timeToX(pane, d.p1.time);
+          const aY = pane.series.priceToCoordinate(d.p1.price);
+          const bX = _timeToX(pane, d.p2.time);
+          const bY = pane.series.priceToCoordinate(d.p2.price);
+          const newY = pane.series.priceToCoordinate(price);
+          if (aX !== null && aY !== null && bX !== null && bY !== null && newY !== null) {
+            let m = 0;
+            if (bX !== aX) m = (bY - aY) / (bX - aX);
+            const newX = isBot1 ? aX : bX;
+            const dy = newY - (isBot1 ? aY : bY);
+            const p3PxX = aX;
+            const p3PxY = aY + dy;
+            d.p3 = {
+              time: pane.chart.timeScale().coordinateToTime(p3PxX),
+              price: pane.series.coordinateToPrice(p3PxY)
+            };
+          }
+        } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_top') {
+          // Middle of top line: move entire channel perpendicular to itself
+          const aX = _timeToX(pane, _dragState.origP1.time);
+          const aY = pane.series.priceToCoordinate(_dragState.origP1.price);
+          const bX = _timeToX(pane, _dragState.origP2.time);
+          const bY = pane.series.priceToCoordinate(_dragState.origP2.price);
+          if (aX !== null && aY !== null && bX !== null && bY !== null) {
+            // Unit normal of the channel line
+            const lineLen = Math.hypot(bX - aX, bY - aY);
+            const nx = lineLen > 0 ? -(bY - aY) / lineLen : 0;
+            const ny = lineLen > 0 ? (bX - aX) / lineLen : 1;
+            // Project mouse delta onto normal direction
+            const proj = dx * nx + dy * ny;
+            d.p1.time = pane.chart.timeScale().coordinateToTime(aX + nx * proj);
+            d.p1.price = pane.series.coordinateToPrice(aY + ny * proj);
+            d.p2.time = pane.chart.timeScale().coordinateToTime(bX + nx * proj);
+            d.p2.price = pane.series.coordinateToPrice(bY + ny * proj);
+            // p3 follows along (shift by same perpendicular amount)
+            const cX = _timeToX(pane, _dragState.origP3.time);
+            const cY = pane.series.priceToCoordinate(_dragState.origP3.price);
+            if (cX !== null && cY !== null) {
+              d.p3.time = pane.chart.timeScale().coordinateToTime(cX + nx * proj);
+              d.p3.price = pane.series.coordinateToPrice(cY + ny * proj);
+            }
+          }
+        } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_bot') {
+          // Middle of bottom line: adjust channel height perpendicular to top line
+          const aX = _timeToX(pane, _dragState.origP1.time);
+          const aY = pane.series.priceToCoordinate(_dragState.origP1.price);
+          const bX = _timeToX(pane, _dragState.origP2.time);
+          const bY = pane.series.priceToCoordinate(_dragState.origP2.price);
+          const cX = _timeToX(pane, _dragState.origP3.time);
+          const cY = pane.series.priceToCoordinate(_dragState.origP3.price);
+          if (aX !== null && aY !== null && bX !== null && bY !== null && cX !== null && cY !== null) {
+            const lineLen = Math.hypot(bX - aX, bY - aY);
+            const nx = lineLen > 0 ? -(bY - aY) / lineLen : 0;
+            const ny = lineLen > 0 ? (bX - aX) / lineLen : 1;
+            const proj = dx * nx + dy * ny;
+            d.p3.time = pane.chart.timeScale().coordinateToTime(cX + nx * proj);
+            d.p3.price = pane.series.coordinateToPrice(cY + ny * proj);
+          }
         } else if (/^p\d+$/.test(_dragState.hitType) && d.points) {
           const idx = parseInt(_dragState.hitType.slice(1)) - 1;
           if (idx >= 0 && idx < d.points.length) {

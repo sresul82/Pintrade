@@ -241,6 +241,36 @@ window.DSDApply = (() => {
       s.visibility = s.visibility || {};
       visCbs.forEach(cb => { s.visibility[cb.dataset.tf] = cb.checked; });
     }
+
+    // ── Channel-specific apply ──────────────────────────────────────
+    if (drawing.tool === 'channel') {
+      // Level active toggles (only non-edge levels have checkboxes)
+      const levelCbs     = overlay.querySelectorAll('.js-ch-level-active');
+      const levelSwatches = overlay.querySelectorAll('.js-ch-level-color');
+
+      if ((levelCbs.length > 0 || levelSwatches.length > 0) && s.channelLevels && s.channelLevels.length > 0) {
+        levelCbs.forEach(cb => {
+          const idx = parseInt(cb.dataset.idx);
+          if (!isNaN(idx) && s.channelLevels[idx]) s.channelLevels[idx].active = cb.checked;
+        });
+        levelSwatches.forEach(sw => {
+          const idx = parseInt(sw.dataset.idx);
+          if (!isNaN(idx) && s.channelLevels[idx] && sw.dataset.color) s.channelLevels[idx].color = sw.dataset.color;
+        });
+      }
+
+      // Extend toggles (override what the general block above wrote)
+      const extL = get('dsd-ext-left');
+      const extR = get('dsd-ext-right');
+      if (extL) s.extendLeft  = extL.checked;
+      if (extR) s.extendRight = extR.checked;
+
+      // Background toggle + fill color
+      const bgCb  = get('dsd-showbg');
+      if (bgCb)  s.showBg   = bgCb.checked;
+      const fillSw = overlay.querySelector('.js-fill-color');
+      if (fillSw && fillSw.dataset.color) s.fillColor = fillSw.dataset.color;
+    }
   }
 
 
