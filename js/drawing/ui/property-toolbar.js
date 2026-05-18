@@ -664,6 +664,45 @@ window.PropertyToolbar = (() => {
 
         ${commonEndHtml}
       `;
+    } else if (_drawing.tool === 'channel') {
+      _panel.innerHTML = `
+        ${dragHtml}
+
+        <!-- Template -->
+        <button id="pt-btn-template" class="pt-btn" title="Templates">${templateSvg}</button>
+
+        <!-- Line Color -->
+        <button id="pt-btn-color" class="pt-btn pt-btn-color" title="Line color">
+          ${pencilSvg}
+          <div id="pt-line-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${hex};"></div>
+        </button>
+
+        <!-- Text -->
+        <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
+          ${textSvg}
+          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#d1d4dc'};"></div>
+        </button>
+
+        <!-- Line Width -->
+        <button id="pt-btn-width" class="pt-btn" title="Line width" style="gap:4px;padding:4px 6px;min-width:60px;">
+          <span id="pt-width-label" style="display:flex;align-items:center;gap:4px;">
+            <svg width="28" height="16" viewBox="0 0 28 16">${dashSvg}</svg>
+            <span style="font-size:12px;color:#d1d4dc;">${width}px</span>
+          </span>
+        </button>
+
+        <!-- Line Style -->
+        <button id="pt-btn-style" class="pt-btn" title="Line style" style="padding:4px 6px;">
+          <span id="pt-style-icon" style="display:flex;align-items:center;">
+            <svg width="28" height="16" viewBox="0 0 28 16">${dashSvg}</svg>
+          </span>
+        </button>
+
+        <!-- Settings -->
+        <button id="pt-btn-settings" class="pt-btn" title="Settings">${settingsSvg}</button>
+
+        ${commonEndHtml}
+      `;
     } else if (_drawing.tool === 'flagmark') {
       _panel.innerHTML = `
         ${dragHtml}
