@@ -5,7 +5,7 @@
 const AppConfig = (() => {
 
   const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const BACKEND_URL = IS_LOCAL ? 'http://localhost:5500' : 'https://pintrade.up.railway.app';
+  const BACKEND_URL = IS_LOCAL ? 'http://localhost:5500' : 'https://pintrade.onrender.com';
 
   /* ── API ──────────────────────────────────────────────── */
   const API = {
