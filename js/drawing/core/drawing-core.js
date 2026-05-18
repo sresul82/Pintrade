@@ -24,6 +24,7 @@ window.DrawingManager = (() => {
   // preventing LWC from receiving orphaned pointerup events that corrupt its pan state.
   let _lastPointerdownClaimed = false;
   let _globalLock = false;
+  let _pendingTextEditTimer = null;
 
   let _toolStyles = {};
 
@@ -653,9 +654,14 @@ window.DrawingManager = (() => {
           const tool = htDrawing ? htDrawing.tool : '';
           const isPos = ['longpos', 'shortpos', 'posforecast'].includes(tool);
           if (ht === 'line' || ht === 'body' || ht === 'rect_body') {
-            // texttool/note/callout/trendline: if already selected, show I-beam cursor for editing
-            const isEditable = ['texttool', 'note', 'callout', 'trendline', 'ray', 'extended'].includes(htDrawing?.tool);
-            if (isEditable && htDrawing.id === _selectedId) {
+            // texttool/note/callout: always text cursor when selected; trendline/ray/extended/infoline: text only over hint area
+            const hintTools = ['trendline', 'ray', 'extended', 'infoline'];
+            const isSelected = htDrawing?.id === _selectedId;
+            const isOverHint = isSelected && hintTools.includes(htDrawing?.tool)
+              && _isOverTrendTextHint(x, y, htDrawing?.id);
+            if (['texttool', 'note', 'callout'].includes(htDrawing?.tool) && isSelected) {
+              pane.cvs.style.cursor = 'text';
+            } else if (isOverHint) {
               pane.cvs.style.cursor = 'text';
             } else {
               pane.cvs.style.cursor = 'pointer';
@@ -767,15 +773,40 @@ window.DrawingManager = (() => {
         window.DrawingAnnotations.openInlineTextEditor(ds.d, pane, { x: e.clientX - pane.cvs.getBoundingClientRect().left, y: e.clientY - pane.cvs.getBoundingClientRect().top });
       }
 
-      // If single click on an already selected trendline -> open trendline inline text editor
+      // If single click on already selected trendline AND over the "Add Text" hint -> open inline editor
+      // Double-click koruması: 280ms sonra aç, bu sürede dblclick gelirse iptal et
       if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline'].includes(ds.d.tool)) {
-        _openTrendlineTextEditor(ds.d, pane, e);
+        const cx = e.clientX - pane.cvs.getBoundingClientRect().left;
+        const cy = e.clientY - pane.cvs.getBoundingClientRect().top;
+        if (_isOverTrendTextHint(cx, cy, ds.d.id)) {
+          const capturedD = ds.d;
+          const capturedPane = pane;
+          const capturedE = e;
+          _pendingTextEditTimer = setTimeout(() => {
+            _pendingTextEditTimer = null;
+            _openTrendlineTextEditor(capturedD, capturedPane, capturedE);
+          }, 280);
+        }
       }
 
       _dragState = null;
       State.save();
       requestRedrawAll();
     }
+  }
+
+  // Farenin "Add Text" hint alanı üzerinde olup olmadığını kontrol eder
+  function _isOverTrendTextHint(x, y, drawingId) {
+    const area = window._trendTextHintAreas?.[drawingId];
+    if (!area) return false;
+    // Hint alanı döndürülmüş — fareyi hint'in lokal koordinat sistemine çevir
+    const dx = x - area.cx;
+    const dy = y - area.cy;
+    const cos = Math.cos(-area.angle);
+    const sin = Math.sin(-area.angle);
+    const lx = dx * cos - dy * sin;
+    const ly = dx * sin + dy * cos;
+    return Math.abs(lx) <= area.hw && Math.abs(ly) <= area.hh;
   }
 
   // ── TrendLine inline text editor ──────────────────────────────────────────
@@ -903,6 +934,12 @@ window.DrawingManager = (() => {
   }
 
   function onDoubleClick(pane, e) {
+    // Bekleyen inline text editörünü iptal et — double-click'te sadece settings açılır
+    if (_pendingTextEditTimer) {
+      clearTimeout(_pendingTextEditTimer);
+      _pendingTextEditTimer = null;
+    }
+
     const rect = pane.cvs.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;

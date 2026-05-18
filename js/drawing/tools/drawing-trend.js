@@ -458,6 +458,19 @@ window.DrawingTrend = (() => {
         ctx.fillStyle = '#d1d4dc';
         _drawParallelText(ctx, 'Add Text', 0.35);
         ctx.restore();
+
+        // Hint alanının canvas koordinatlarını global map'e kaydet (cursor ve hit-test için)
+        const textAlignH = s.textAlignH || 'center';
+        let hcx, hcy;
+        if (textAlignH === 'left')       { hcx = a.x; hcy = a.y; }
+        else if (textAlignH === 'right') { hcx = b.x; hcy = b.y; }
+        else                             { hcx = (a.x + b.x) / 2; hcy = (a.y + b.y) / 2; }
+
+        if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+        window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: 36, hh: 10, angle: drawAngle };
+      } else {
+        // Hint gösterilmiyorsa kaydı temizle
+        if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
       }
 
       if (selected || !!s.alwaysStats) {
