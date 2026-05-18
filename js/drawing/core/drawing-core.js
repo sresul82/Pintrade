@@ -194,23 +194,26 @@ window.DrawingManager = (() => {
       return true;
     }
 
-    // ── Single-click drawing tools ─────────────────────
     if (_activeTool === 'hline') {
+      if (price == null || !isFinite(price)) return false;
       _finishDrawing(pane.symbol, { tool: 'hline', price, id: _uid(), style: _getToolStyle('hline') });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'vline') {
+      if (time == null) return false;
       _finishDrawing(pane.symbol, { tool: 'vline', time, id: _uid(), style: _getToolStyle('vline') });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'hray') {
+      if (price == null || !isFinite(price) || time == null) return false;
       _finishDrawing(pane.symbol, { tool: 'hray', price, time, p1: { time, price }, id: _uid(), style: _getToolStyle('hray') });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'crossline') {
+      if (price == null || !isFinite(price) || time == null) return false;
       _finishDrawing(pane.symbol, { tool: 'crossline', price, time, id: _uid(), style: _getToolStyle('crossline') });
       _lastPointerdownClaimed = true;
       return true;
@@ -2129,20 +2132,26 @@ window.DrawingManager = (() => {
     }
 
     if (d.tool === 'hline' || d.tool === 'crossline' || d.tool === 'hray') {
-      const ly = pane.series.priceToCoordinate(d.price);
-      if (ly !== null && Math.abs(y - ly) <= tolerance) {
-        if (d.tool === 'hray') {
-          const lx = _timeToX(pane, d.time);
-          if (lx !== null && x >= lx - tolerance) return 'line';
-        } else {
-          return 'line';
+      if (d.price != null && isFinite(d.price)) {
+        const ly = pane.series.priceToCoordinate(d.price);
+        if (ly != null && isFinite(ly) && Math.abs(y - ly) <= tolerance) {
+          if (d.tool === 'hray') {
+            if (d.time != null) {
+              const lx = _timeToX(pane, d.time);
+              if (lx != null && isFinite(lx) && x >= lx - tolerance) return 'line';
+            }
+          } else {
+            return 'line';
+          }
         }
       }
     }
 
     if (d.tool === 'vline' || d.tool === 'crossline') {
-      const lx = _timeToX(pane, d.time);
-      if (lx !== null && Math.abs(x - lx) <= tolerance) return 'line';
+      if (d.time != null) {
+        const lx = _timeToX(pane, d.time);
+        if (lx != null && isFinite(lx) && Math.abs(x - lx) <= tolerance) return 'line';
+      }
     }
 
     if (['vwap', 'arrowmarker', 'arrowup', 'arrowdown'].includes(d.tool) && d.p1) {

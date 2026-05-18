@@ -81,53 +81,98 @@ window.DrawingTrend = (() => {
   }
 
   function _drawHLine(ctx, d, pane) {
-      const y = pane.series.priceToCoordinate(d.price);
-      if (y === null) return;
-      const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const s = d.style || {};
-      ctx.strokeStyle = s.color || '#2962ff';
-      ctx.lineWidth   = s.width || 1;
-      let dashArr = s.dash || [];
-      if (s.lineStyle === 'dashed') dashArr = [8, 5];
-      if (s.lineStyle === 'dotted') dashArr = [3, 3];
-      ctx.setLineDash(dashArr);
-      if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      try {
+        if (d.price == null || !isFinite(d.price)) return;
+        const y = pane.series.priceToCoordinate(d.price);
+        if (y == null || !isFinite(y)) return;
+        const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const s = d.style || {};
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth   = s.width || 1;
+        let dashArr = [];
+        if (s.lineStyle === 'dashed') dashArr = [8, 5];
+        else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+        ctx.setLineDash(dashArr);
+        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.restore();
+      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
   function _drawVLine(ctx, d, pane) {
-      const x = _timeToX(pane, d.time);
-      if (x === null) return;
-      const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      try {
+        if (d.time == null) return;
+        const x = _timeToX(pane, d.time);
+        if (x == null || !isFinite(x)) return;
+        const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+        const s = d.style || {};
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth   = s.width || 1;
+        let dashArr = [];
+        if (s.lineStyle === 'dashed') dashArr = [8, 5];
+        else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+        ctx.setLineDash(dashArr);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+        ctx.restore();
+      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
   function _drawHRay(ctx, d, pane) {
-      const y = pane.series.priceToCoordinate(d.price);
-      const x = _timeToX(pane, d.time);
-      if (y === null || x === null) return;
-      const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const s = d.style || {};
-      ctx.strokeStyle = s.color || '#2962ff';
-      ctx.lineWidth   = s.width || 1;
-      let dashArr = s.dash || [];
-      if (s.lineStyle === 'dashed') dashArr = [8, 5];
-      if (s.lineStyle === 'dotted') dashArr = [3, 3];
-      ctx.setLineDash(dashArr);
-      if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(w, y); ctx.stroke();
+      try {
+        if (d.price == null || !isFinite(d.price)) return;
+        if (d.time == null) return;
+        const y = pane.series.priceToCoordinate(d.price);
+        const x = _timeToX(pane, d.time);
+        if (y == null || !isFinite(y) || x == null || !isFinite(x)) return;
+        const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const s = d.style || {};
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth   = s.width || 1;
+        let dashArr = [];
+        if (s.lineStyle === 'dashed') dashArr = [8, 5];
+        else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+        ctx.setLineDash(dashArr);
+        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.restore();
+      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
   function _drawCrossLine(ctx, d, pane) {
-      const y = pane.series.priceToCoordinate(d.price);
-      const x = _timeToX(pane, d.time);
-      if (y === null || x === null) return;
-      const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-      ctx.beginPath(); 
-      ctx.moveTo(0, y); ctx.lineTo(w, y); 
-      ctx.moveTo(x, 0); ctx.lineTo(x, h); 
-      ctx.stroke();
+      try {
+        if (d.price == null || !isFinite(d.price)) return;
+        if (d.time == null) return;
+        const y = pane.series.priceToCoordinate(d.price);
+        const x = _timeToX(pane, d.time);
+        if (y == null || !isFinite(y) || x == null || !isFinite(x)) return;
+        const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+        const s = d.style || {};
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth   = s.width || 1;
+        let dashArr = [];
+        if (s.lineStyle === 'dashed') dashArr = [8, 5];
+        else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+        ctx.setLineDash(dashArr);
+        ctx.beginPath();
+        ctx.moveTo(0, y); ctx.lineTo(w, y);
+        ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        ctx.stroke();
+        ctx.restore();
+      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
   function _drawArrowHead(ctx, a, b) {
