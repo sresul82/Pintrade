@@ -2214,6 +2214,7 @@ window.DrawingManager = (() => {
             }
           } else if (d.tool === 'hline') {
             const cvsW = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+            if (x < 0 || x > cvsW) return null; // fiyat cetveli alanında hit verme
             if (Math.abs(x - cvsW / 2) <= tolerance * 2) return 'midpoint';
             return 'line';
           } else {

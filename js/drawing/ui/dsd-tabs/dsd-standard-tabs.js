@@ -37,6 +37,65 @@ window.DSDStandardTabs = (() => {
 
     let html = '';
     
+    if (d.tool === 'channel') {
+      const channelLevels = s.channelLevels || [
+        { v: 0,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
+        { v: 0.25,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 0.5,   active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 0.75,  active: false, color: '#787b86',             style: 'dashed', width: 1 },
+        { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid',  width: s.width || 1 },
+      ];
+
+      const extRight = s.extendRight !== undefined ? !!s.extendRight : false;
+      const extLeft  = s.extendLeft  !== undefined ? !!s.extendLeft  : false;
+      const showBg   = s.showBg !== false;
+      const fillColor = s.fillColor || 'rgba(9,105,218,0.2)';
+
+      const levelsHtml = channelLevels.map((lvl, i) => {
+        const isEdge = (lvl.v === 0 || lvl.v === 1);
+        const dashAttr = lvl.style === 'dashed' ? 'stroke-dasharray="8,5"' : lvl.style === 'dotted' ? 'stroke-dasharray="3,3"' : '';
+        return `
+        <div class="dsd-row dsd-row-inline" style="gap:8px; align-items:center; margin-bottom:4px;">
+          <input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${lvl.active ? 'checked' : ''} ${isEdge ? 'disabled' : ''} style="flex-shrink:0;">
+          <input type="number" class="dsd-input js-ch-level-val" data-idx="${i}" value="${lvl.v}" step="0.05" style="width:64px; ${!lvl.active && !isEdge ? 'opacity:0.4;' : ''}">
+          <div class="dsd-color-swatch js-ch-level-color" data-idx="${i}" data-color="${lvl.color}" style="background:${lvl.color}; width:24px; height:24px; border-radius:4px; cursor:pointer; flex-shrink:0;"></div>
+          <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0;${!lvl.active && !isEdge ? 'opacity:0.4;' : ''}">
+            <line x1="0" y1="5" x2="28" y2="5" stroke="${lvl.color}" stroke-width="${lvl.width}" ${dashAttr}/>
+          </svg>
+        </div>`;
+      }).join('');
+
+      html += `
+      ${levelsHtml}
+
+      <div class="dsd-section-label" style="margin-top:12px;">EXTEND</div>
+      <div class="dsd-row dsd-row-check">
+        <label class="dsd-checkbox-label">
+          <input type="checkbox" id="dsd-ext-right" ${extRight ? 'checked' : ''}>
+          Extend right line
+        </label>
+      </div>
+      <div class="dsd-row dsd-row-check">
+        <label class="dsd-checkbox-label">
+          <input type="checkbox" id="dsd-ext-left" ${extLeft ? 'checked' : ''}>
+          Extend left line
+        </label>
+      </div>
+
+      <div class="dsd-row dsd-row-check" style="margin-top:8px;">
+        <label class="dsd-checkbox-label" style="width:104px; flex-shrink:0;">
+          <input type="checkbox" id="dsd-showbg" ${showBg ? 'checked' : ''}>
+          Background
+        </label>
+        <div class="dsd-row-controls">
+          <div class="dsd-color-swatch js-fill-color" style="background:${fillColor}" data-color="${fillColor}" title="Fill color"></div>
+        </div>
+      </div>
+      `;
+
+      return html;
+    }
+
     if (d.tool === 'rect' || d.tool === 'rotatedrect' || d.tool === 'circle' || d.tool === 'ellipse') {
       const showMidline = s.showMidline !== false;
       const midlineStyle = s.midlineStyle || 'solid';
