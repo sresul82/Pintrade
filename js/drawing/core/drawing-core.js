@@ -196,7 +196,7 @@ window.DrawingManager = (() => {
 
     // ── Single-click drawing tools ─────────────────────
     if (_activeTool === 'hline') {
-      _finishDrawing(pane.symbol, { tool: 'hline', price, id: _uid(), style: { ..._lastDrawingStyle } });
+      _finishDrawing(pane.symbol, { tool: 'hline', price, id: _uid(), style: _getToolStyle('hline') });
       _lastPointerdownClaimed = true;
       return true;
     }
@@ -595,9 +595,23 @@ window.DrawingManager = (() => {
             if (d.tool === 'hline') {
               const origY = pane.series.priceToCoordinate(_dragState.origPrice);
               d.price = pane.series.coordinateToPrice(origY + dy);
+            } else if (d.tool === 'hray') {
+              const origY = pane.series.priceToCoordinate(_dragState.origPrice);
+              const origX = _timeToX(pane, _dragState.origTime);
+              d.price = pane.series.coordinateToPrice(origY + dy);
+              d.time  = pane.chart.timeScale().coordinateToTime(origX + dx);
+              if (d.p1) {
+                d.p1.price = d.price;
+                d.p1.time  = d.time;
+              }
             } else if (d.tool === 'vline') {
               const origX = _timeToX(pane, _dragState.origTime);
               d.time = pane.chart.timeScale().coordinateToTime(origX + dx);
+            } else if (d.tool === 'crossline') {
+              const origX = _timeToX(pane, _dragState.origTime);
+              const origY = pane.series.priceToCoordinate(_dragState.origPrice);
+              d.time  = pane.chart.timeScale().coordinateToTime(origX + dx);
+              d.price = pane.series.coordinateToPrice(origY + dy);
             } else {
               if (d.p1 && _dragState.origP1) {
                 const origP1X = _timeToX(pane, _dragState.origP1.time);
