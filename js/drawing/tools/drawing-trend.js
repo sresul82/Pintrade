@@ -469,7 +469,11 @@ window.DrawingTrend = (() => {
         else                             { hcx = (a.x + b.x) / 2; hcy = (a.y + b.y) / 2; }
 
         if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
-        window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: 36, hh: 10, angle: lineAngle };
+        ctx.save();
+        ctx.font = '12px "JetBrains Mono", sans-serif';
+        const hintTextW = ctx.measureText(hasText ? trendText : 'Add Text').width;
+        ctx.restore();
+        window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: hintTextW / 2 + 4, hh: 8, angle: lineAngle };
       } else {
         if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
       }
