@@ -1113,9 +1113,18 @@ const DrawingSettingsDialog = (() => {
           let idx = parseInt(combo.dataset.idx);
           const lvl = (lvlArr && lvlArr[idx]) ? lvlArr[idx] : null;
 
-          const curC = lvl ? lvl.color : '#2962ff';
-          const curW = lvl ? lvl.width : 1;
-          const curS = lvl ? lvl.style : 'solid';
+          const swatch = combo.querySelector('.js-ch-level-color');
+          const previewPath = combo.querySelector('.dsd-combo-preview path');
+          
+          const curC = lvl ? lvl.color : (swatch ? swatch.dataset.color : '#2962ff');
+          const curW = lvl ? lvl.width : (previewPath ? parseInt(previewPath.getAttribute('stroke-width')) || 1 : 1);
+          let inferredStyle = 'solid';
+          if (previewPath) {
+             const dash = previewPath.getAttribute('stroke-dasharray');
+             if (dash === '8,5') inferredStyle = 'dashed';
+             if (dash === '3,3') inferredStyle = 'dotted';
+          }
+          const curS = lvl ? lvl.style : inferredStyle;
 
           DSDColorPicker.showCombinedLineSettings(combo, curC, curW, curS, true, ({ color: newColor, width: newWidth, style: newStyle }) => {
             const swatch = combo.querySelector('.js-ch-level-color');
@@ -1123,7 +1132,7 @@ const DrawingSettingsDialog = (() => {
               swatch.style.background = newColor;
               swatch.dataset.color = newColor;
             }
-            const previewPath = combo.querySelector('.js-ch-level-preview path');
+            const previewPath = combo.querySelector('.dsd-combo-preview path');
             if (previewPath) {
                previewPath.setAttribute('stroke', newColor);
                previewPath.setAttribute('stroke-width', newWidth);
@@ -1151,8 +1160,8 @@ const DrawingSettingsDialog = (() => {
 
       overlay.querySelectorAll('.js-ch-level-active').forEach(inp => {
         inp.addEventListener('change', () => {
-          const row = inp.closest('.dsd-ch-levels-group');
-          if (row) row.style.opacity = inp.checked ? '1' : '0.4';
+          const row = inp.closest('.dsd-row');
+          if (row) row.style.opacity = inp.checked ? '1' : '0.45';
           DSDApply.applyFromForm(overlay, drawing);
           EventBus.emit('drawing:settings:saved');
         });
