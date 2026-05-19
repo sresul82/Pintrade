@@ -525,22 +525,22 @@ window.DrawingManager = (() => {
             };
           }
         } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_top') {
-          // Middle of top line: adjust channel height perpendicular to top line (resize from top)
+          // Middle of top line: adjust channel height without changing p1/p2 time (resize from top)
           const aX = _timeToX(pane, _dragState.origP1.time);
           const aY = pane.series.priceToCoordinate(_dragState.origP1.price);
           const bX = _timeToX(pane, _dragState.origP2.time);
           const bY = pane.series.priceToCoordinate(_dragState.origP2.price);
           if (aX !== null && aY !== null && bX !== null && bY !== null) {
-            const lineLen = Math.hypot(bX - aX, bY - aY);
-            const nx = lineLen > 0 ? -(bY - aY) / lineLen : 0;
-            const ny = lineLen > 0 ? (bX - aX) / lineLen : 1;
-            const proj = dx * nx + dy * ny;
+            let m = 0;
+            if (bX !== aX) {
+              m = (bY - aY) / (bX - aX);
+            }
+            const shiftY = dy - m * dx;
             
-            // Only move p1 and p2. p3 stays the same, which keeps the bottom line in place and resizes the channel!
-            d.p1.time = pane.chart.timeScale().coordinateToTime(aX + nx * proj);
-            d.p1.price = pane.series.coordinateToPrice(aY + ny * proj);
-            d.p2.time = pane.chart.timeScale().coordinateToTime(bX + nx * proj);
-            d.p2.price = pane.series.coordinateToPrice(bY + ny * proj);
+            // Only move p1 and p2 vertically to stick to mouse. p3 stays the same!
+            // Time is UNCHANGED so the channel doesn't slide left/right.
+            d.p1.price = pane.series.coordinateToPrice(aY + shiftY);
+            d.p2.price = pane.series.coordinateToPrice(bY + shiftY);
           }
 
         } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_bot') {
@@ -2427,7 +2427,7 @@ window.DrawingManager = (() => {
 
       const isSelected = d.id === _selectedId;
       const hitTolerance = (isSelected && ['trendline', 'ray', 'extended'].includes(d.tool)) ? 20 : tolerance;
-      if (d.tool !== 'rect' && _distToSegment(x, y, p1.x, p1.y, p2.x, p2.y) <= hitTolerance) return 'line';
+      if (d.tool !== 'rect' && d.tool !== 'channel' && _distToSegment(x, y, p1.x, p1.y, p2.x, p2.y) <= hitTolerance) return 'line';
       if (d.tool === 'rect') {
         const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
         const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
@@ -2449,6 +2449,7 @@ window.DrawingManager = (() => {
           if (Math.hypot(x - b.x, y - b.y) <= 8) return 'ch_p2';
           const midTopX = (a.x + b.x) / 2, midTopY = (a.y + b.y) / 2;
           if (Math.hypot(x - midTopX, y - midTopY) <= 8) return 'ch_mid_top';
+          if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
         }
         if (d.p3) {
           const c = _pt2xy(d.p3, pane);
