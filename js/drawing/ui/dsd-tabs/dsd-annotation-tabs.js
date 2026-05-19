@@ -200,9 +200,9 @@ window.DSDAnnotationTabs = (() => {
         <!-- Row 4: Border — swatch + line-preview in ONE grouped box (like the reference) -->
         <div style="display:flex; align-items:center; margin-bottom:16px;">
           <span style="color:#d1d4dc; font-size:13px; min-width:110px;">Border</span>
-          <div style="display:flex; align-items:center; border:1px solid #878a95; border-radius:4px; overflow:hidden; flex-shrink:0;">
+          <div style="display:flex; align-items:center; border:1px solid #7d808b; border-radius:4px; overflow:hidden; flex-shrink:0;">
             <div class="dsd-color-swatch js-callout-border"
-                 data-color="${borderColor}" style="background-color:${borderColor}; border-right:1px solid #878a95; border-radius:0;"></div>
+                 data-color="${borderColor}" style="background-color:${borderColor}; border-right:1px solid #7d808b; border-radius:0;"></div>
             <button id="dsd-callout-border-combo"
                     style="display:flex; align-items:center; justify-content:center; background:#1e222d; border:none; padding:0 10px; height:32px; cursor:pointer; gap:4px; min-width:70px;">
               <svg width="32" height="3" viewBox="0 0 32 3">

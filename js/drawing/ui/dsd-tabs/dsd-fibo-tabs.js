@@ -5,7 +5,8 @@
 window.DSDFiboTabs = (() => {
 
 function renderFibStyleTab(d) {
-    const s = d.style || {};
+    d.style = d.style || {};
+    const s = d.style;
     const color = s.color || '#58a6ff';
     const width = s.width || 1;
     const dash  = JSON.stringify(s.dash || []);
@@ -256,7 +257,8 @@ function renderFibStyleTab(d) {
   }
 
   function renderFibSpeedfanTab(d) {
-    const s = d.style || {};
+    d.style = d.style || {};
+    const s = d.style;
     const defaultPrices = [
       { v: 0, color: '#787b86', active: true },
       { v: 0.25, color: '#f44336', active: true },

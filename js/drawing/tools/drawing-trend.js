@@ -643,13 +643,13 @@ window.DrawingTrend = (() => {
 
     // Level tanımları — varsayılan (settings'ten gelen varsa kullan)
     const defaultLevels = [
-      { v: -0.25, active: false, color: '#787b86', style: 'solid',  width: 1 },
+      { v: -0.25, active: false, color: '#787b86', style: 'dashed', width: 1 },
       { v: 0,     active: true,  color: s.color || '#2962ff', style: 'solid', width: s.width || 1 },
       { v: 0.25,  active: false, color: '#787b86', style: 'dashed', width: 1 },
       { v: 0.5,   active: false, color: '#787b86', style: 'dashed', width: 1 },
       { v: 0.75,  active: false, color: '#787b86', style: 'dashed', width: 1 },
       { v: 1,     active: true,  color: s.color || '#2962ff', style: 'solid', width: s.width || 1 },
-      { v: 1.25,  active: false, color: '#787b86', style: 'solid',  width: 1 },
+      { v: 1.25,  active: false, color: '#787b86', style: 'dashed', width: 1 },
     ];
     let levels = s.channelLevels;
     if (!levels || levels.length === 0) {
