@@ -549,6 +549,23 @@ window.DrawingManager = (() => {
               d.p3.price = pane.series.coordinateToPrice(cY + ny * proj);
             }
           }
+        } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_top') {
+          // Middle of top line: adjust channel height perpendicular to top line
+          const aX = _timeToX(pane, _dragState.origP1.time);
+          const aY = pane.series.priceToCoordinate(_dragState.origP1.price);
+          const bX = _timeToX(pane, _dragState.origP2.time);
+          const bY = pane.series.priceToCoordinate(_dragState.origP2.price);
+          if (aX !== null && aY !== null && bX !== null && bY !== null) {
+            const lineLen = Math.hypot(bX - aX, bY - aY);
+            const nx = lineLen > 0 ? -(bY - aY) / lineLen : 0;
+            const ny = lineLen > 0 ? (bX - aX) / lineLen : 1;
+            const proj = dx * nx + dy * ny;
+            
+            d.p1.time = pane.chart.timeScale().coordinateToTime(aX + nx * proj);
+            d.p1.price = pane.series.coordinateToPrice(aY + ny * proj);
+            d.p2.time = pane.chart.timeScale().coordinateToTime(bX + nx * proj);
+            d.p2.price = pane.series.coordinateToPrice(bY + ny * proj);
+          }
         } else if (d.tool === 'channel' && _dragState.hitType === 'ch_mid_bot') {
           // Middle of bottom line: adjust channel height perpendicular to top line
           const aX = _timeToX(pane, _dragState.origP1.time);
