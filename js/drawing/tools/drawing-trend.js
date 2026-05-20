@@ -722,6 +722,106 @@ window.DrawingTrend = (() => {
       ctx.stroke();
       ctx.restore();
     }
+
+    // Text rendering logic for Parallel Channel
+    const trendText = s.text || '';
+    const hasText = !!trendText;
+    
+    if (hasText || selected) {
+      const lineAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      let drawAngle = lineAngle;
+      let isFlipped = false;
+      if (drawAngle > Math.PI / 2 || drawAngle < -Math.PI / 2) {
+        drawAngle += Math.PI;
+        isFlipped = true;
+      }
+
+      function _drawChannelText(ctx, text, alpha) {
+        const textAlignH = s.textAlignH || 'center';
+        const textAlignV = s.textAlignV || 'top';
+        
+        let anchorX, anchorY;
+        if (textAlignH === 'left') {
+          anchorX = a.x; anchorY = a.y;
+        } else if (textAlignH === 'right') {
+          anchorX = b.x; anchorY = b.y;
+        } else {
+          anchorX = (a.x + b.x) / 2;
+          anchorY = (a.y + b.y) / 2;
+        }
+
+        let levelV = 0;
+        if (textAlignV === 'middle') levelV = 0.5;
+        if (textAlignV === 'bottom') levelV = 1;
+        
+        anchorY += dy * levelV;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(anchorX, anchorY);
+        ctx.rotate(drawAngle);
+
+        let canvasAlign = 'center';
+        if (textAlignH === 'left')  canvasAlign = isFlipped ? 'right' : 'left';
+        if (textAlignH === 'right') canvasAlign = isFlipped ? 'left'  : 'right';
+        if (textAlignH === 'center') canvasAlign = 'center';
+        ctx.textAlign = canvasAlign;
+
+        const offsetDist = 6; 
+        let yOffset = 0;
+        if (textAlignV === 'top') {
+          yOffset = -offsetDist;
+          ctx.textBaseline = 'bottom';
+        } else if (textAlignV === 'bottom') {
+          yOffset = offsetDist;
+          ctx.textBaseline = 'top';
+        } else {
+          yOffset = 0;
+          ctx.textBaseline = 'middle';
+        }
+
+        const xShift = (canvasAlign === 'left') ? 4 : (canvasAlign === 'right') ? -4 : 0;
+        ctx.fillText(text, xShift, yOffset);
+        ctx.restore();
+      }
+
+      if (hasText) {
+        ctx.save();
+        ctx.font = `${s.italic ? 'italic ' : ''}${s.bold ? 'bold ' : ''}${s.fontSize || 13}px "JetBrains Mono", sans-serif`;
+        ctx.fillStyle = s.textColor || '#d1d4dc';
+        _drawChannelText(ctx, trendText, 1);
+        ctx.restore();
+      }
+
+      if (selected && !hasText) {
+        ctx.save();
+        ctx.font = '12px "JetBrains Mono", sans-serif';
+        ctx.fillStyle = '#d1d4dc';
+        _drawChannelText(ctx, 'Add Text', 0.35);
+        ctx.restore();
+      }
+
+      const textAlignH = s.textAlignH || 'center';
+      const textAlignV = s.textAlignV || 'top';
+      let hcx, hcy;
+      if (textAlignH === 'left')       { hcx = a.x; hcy = a.y; }
+      else if (textAlignH === 'right') { hcx = b.x; hcy = b.y; }
+      else                             { hcx = (a.x + b.x) / 2; hcy = (a.y + b.y) / 2; }
+      
+      let levelV = 0;
+      if (textAlignV === 'middle') levelV = 0.5;
+      if (textAlignV === 'bottom') levelV = 1;
+      hcy += dy * levelV;
+
+      if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+      ctx.save();
+      ctx.font = '12px "JetBrains Mono", sans-serif';
+      const hintTextW = ctx.measureText(hasText ? trendText : 'Add Text').width;
+      ctx.restore();
+      window._trendTextHintAreas[d.id] = { cx: hcx, cy: hcy, hw: hintTextW / 2 + 4, hh: 8, angle: lineAngle };
+    } else {
+      if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
+    }
   }
 
   function _drawInfoLine(ctx, d, pane, selected) {

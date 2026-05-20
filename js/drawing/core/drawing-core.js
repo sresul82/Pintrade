@@ -2124,7 +2124,7 @@ window.DrawingManager = (() => {
 
     const tolerance = 10;
 
-    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'channel', 'arrowdraw', 'trendangle', 'infoline', 'flattopbottom', 'regression', 'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral', 'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed', 'cyclic-lines', 'time-cycles', 'sine-line', 'disjointch', 'fib-ext', 'fib-channel', 'fib-timebased', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'triangle', 'arc', 'curve', 'doublecurve'].includes(d.tool)) {
+    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'flattopbottom', 'regression', 'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral', 'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed', 'cyclic-lines', 'time-cycles', 'sine-line', 'disjointch', 'fib-ext', 'fib-channel', 'fib-timebased', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'triangle', 'arc', 'curve', 'doublecurve'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && Math.hypot(x - a.x, y - a.y) <= tolerance) return 'p1';
@@ -2440,29 +2440,70 @@ window.DrawingManager = (() => {
       }
 
       if (d.tool === 'channel') {
+        const s = d.style || {};
+        const extLeft = !!s.extendLeft;
+        const extRight = !!s.extendRight;
+        const wCanvas = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const hCanvas = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+
         if (a && b) {
           if (Math.hypot(x - a.x, y - a.y) <= 8) return 'ch_p1';
           if (Math.hypot(x - b.x, y - b.y) <= 8) return 'ch_p2';
           const midTopX = (a.x + b.x) / 2, midTopY = (a.y + b.y) / 2;
           if (Math.hypot(x - midTopX, y - midTopY) <= 8) return 'ch_mid_top';
-          if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
         }
-        if (d.p3) {
+
+        if (a && b && d.p3) {
           const c = _pt2xy(d.p3, pane);
-          if (c && a && b) {
+          if (c) {
             let m = 0;
-            if (b.x !== a.x) {
-              m = (b.y - a.y) / (b.x - a.x);
-            }
+            if (b.x !== a.x) m = (b.y - a.y) / (b.x - a.x);
             const dy = c.y - a.y - m * (c.x - a.x);
+            
             const botAx = a.x, botAy = a.y + dy;
             const botBx = b.x, botBy = b.y + dy;
-            const midBotX = (botAx + botBx) / 2, midBotY = (botAy + botBy) / 2;
+            
             if (Math.hypot(x - botAx, y - botAy) <= 8) return 'ch_bot_p1';
             if (Math.hypot(x - botBx, y - botBy) <= 8) return 'ch_bot_p2';
+            const midBotX = (botAx + botBx) / 2, midBotY = (botAy + botBy) / 2;
             if (Math.hypot(x - midBotX, y - midBotY) <= 8) return 'ch_mid_bot';
-            if (_distToSegment(x, y, botAx, botAy, botBx, botBy) <= tolerance) return 'line';
+
+            // Check all active levels
+            let levels = s.channelLevels;
+            if (!levels || levels.length === 0) {
+              levels = [{v: 0, active: true}, {v: 1, active: true}];
+            }
+            
+            for (const lvl of levels) {
+              if (!lvl.active) continue;
+              let drawAx = a.x, drawAy = a.y + dy * lvl.v;
+              let drawBx = b.x, drawBy = b.y + dy * lvl.v;
+              
+              if (extLeft) {
+                const ext = _extendToEdge(drawBx, drawBy, drawAx, drawAy, wCanvas, hCanvas);
+                drawAx = ext.x; drawAy = ext.y;
+              }
+              if (extRight) {
+                const ext = _extendToEdge(drawAx, drawAy, drawBx, drawBy, wCanvas, hCanvas);
+                drawBx = ext.x; drawBy = ext.y;
+              }
+              
+              if (_distToSegment(x, y, drawAx, drawAy, drawBx, drawBy) <= tolerance) return 'line';
+            }
           }
+        } else if (a && b) {
+          // If no p3 yet (still drawing)
+          let drawAx = a.x, drawAy = a.y;
+          let drawBx = b.x, drawBy = b.y;
+          if (extLeft) {
+            const ext = _extendToEdge(drawBx, drawBy, drawAx, drawAy, wCanvas, hCanvas);
+            drawAx = ext.x; drawAy = ext.y;
+          }
+          if (extRight) {
+            const ext = _extendToEdge(drawAx, drawAy, drawBx, drawBy, wCanvas, hCanvas);
+            drawBx = ext.x; drawBy = ext.y;
+          }
+          if (_distToSegment(x, y, drawAx, drawAy, drawBx, drawBy) <= tolerance) return 'line';
         }
       }
 
