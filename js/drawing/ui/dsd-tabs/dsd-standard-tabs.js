@@ -61,15 +61,10 @@ window.DSDStandardTabs = (() => {
                        : lvl.style === 'dotted' ? 'stroke-dasharray="3,3"' : '';
         const dimStyle = (!lvl.active && !isEdge) ? 'opacity:0.4;' : '';
         return `
-        <div class="dsd-row dsd-row-check" style="${dimStyle}">
-          <label class="dsd-checkbox-label" style="width:104px; flex-shrink:0;">
-            ${isEdge
-              ? `<input type="checkbox" class="js-ch-level-active" data-idx="${i}" checked disabled>`
-              : `<input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>`
-            }
-            ${lvl.v}
-          </label>
-          <div class="dsd-row-controls">
+        <div class="dsd-row-inline" style="align-items:center; gap:8px; margin-bottom:8px; ${dimStyle}">
+          <input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${isEdge ? 'checked disabled' : (lvl.active ? 'checked' : '')}>
+          <input type="number" class="dsd-input js-ch-level-val" data-idx="${i}" value="${lvl.v}" step="0.001" ${isEdge ? 'readonly' : ''} style="width:70px; padding:2px 4px; border:1px solid #2a2e39;">
+          <div class="dsd-row-controls" style="margin-left:60px;">
             <div class="dsd-line-combo js-ch-level-combo" data-idx="${i}" title="Color, thickness, style" style="cursor:pointer;">
               <div class="dsd-color-swatch js-ch-level-color"
                 data-idx="${i}" data-color="${lvl.color}"

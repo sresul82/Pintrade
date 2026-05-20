@@ -617,12 +617,24 @@ window.DrawingTrend = (() => {
     if (!a || !b) return;
 
     const s = d.style || {};
+    
+    const extendLeft = !!s.extendLeft;
+    const extendRight = !!s.extendRight;
+    let drawA = { x: a.x, y: a.y };
+    let drawB = { x: b.x, y: b.y };
+
+    if (extendLeft || extendRight) {
+      const wCanvas = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+      const hCanvas = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+      if (extendLeft) drawA = _extendToEdge(b.x, b.y, a.x, a.y, wCanvas, hCanvas);
+      if (extendRight) drawB = _extendToEdge(a.x, a.y, b.x, b.y, wCanvas, hCanvas);
+    }
 
     // p3 sabitlenmemişse sadece üst çizgiyi çiz (çizim devam ediyor)
     if (!d.p3) {
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      ctx.moveTo(drawA.x, drawA.y);
+      ctx.lineTo(drawB.x, drawB.y);
       ctx.stroke();
       return;
     }
@@ -638,8 +650,8 @@ window.DrawingTrend = (() => {
     }
     const dy = c.y - a.y - m * (c.x - a.x);
 
-    const botAx = a.x, botAy = a.y + dy;
-    const botBx = b.x, botBy = b.y + dy;
+    const botAx = drawA.x, botAy = drawA.y + dy;
+    const botBx = drawB.x, botBy = drawB.y + dy;
 
     // Level tanımları — varsayılan (settings'ten gelen varsa kullan)
     const defaultLevels = [
@@ -667,8 +679,8 @@ window.DrawingTrend = (() => {
       ctx.fillStyle = s.fillColor || 'rgba(9, 105, 218, 0.2)';
       ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      ctx.moveTo(drawA.x, drawA.y);
+      ctx.lineTo(drawB.x, drawB.y);
       ctx.lineTo(botBx, botBy);
       ctx.lineTo(botAx, botAy);
       ctx.closePath();
@@ -680,8 +692,8 @@ window.DrawingTrend = (() => {
     for (const lvl of levels) {
       if (!lvl.active) continue;
 
-      const ly1 = a.y + dy * lvl.v;
-      const ly2 = b.y + dy * lvl.v;
+      const ly1 = drawA.y + dy * lvl.v;
+      const ly2 = drawB.y + dy * lvl.v;
 
       ctx.save();
       ctx.strokeStyle = lvl.color || s.color || '#2962ff';
@@ -693,8 +705,8 @@ window.DrawingTrend = (() => {
       ctx.setLineDash(dash);
 
       ctx.beginPath();
-      ctx.moveTo(a.x, ly1);
-      ctx.lineTo(b.x, ly2);
+      ctx.moveTo(drawA.x, ly1);
+      ctx.lineTo(drawB.x, ly2);
       ctx.stroke();
       ctx.restore();
     }

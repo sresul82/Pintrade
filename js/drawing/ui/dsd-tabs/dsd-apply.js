@@ -247,8 +247,9 @@ window.DSDApply = (() => {
       // Level active toggles (only non-edge levels have checkboxes)
       const levelCbs     = overlay.querySelectorAll('.js-ch-level-active');
       const levelSwatches = overlay.querySelectorAll('.js-ch-level-color');
+      const levelVals = overlay.querySelectorAll('.js-ch-level-val');
 
-      if ((levelCbs.length > 0 || levelSwatches.length > 0) && s.channelLevels && s.channelLevels.length > 0) {
+      if ((levelCbs.length > 0 || levelSwatches.length > 0 || levelVals.length > 0) && s.channelLevels && s.channelLevels.length > 0) {
         levelCbs.forEach(cb => {
           const idx = parseInt(cb.dataset.idx);
           if (!isNaN(idx) && s.channelLevels[idx]) s.channelLevels[idx].active = cb.checked;
@@ -256,6 +257,13 @@ window.DSDApply = (() => {
         levelSwatches.forEach(sw => {
           const idx = parseInt(sw.dataset.idx);
           if (!isNaN(idx) && s.channelLevels[idx] && sw.dataset.color) s.channelLevels[idx].color = sw.dataset.color;
+        });
+        levelVals.forEach(inp => {
+          const idx = parseInt(inp.dataset.idx);
+          if (!isNaN(idx) && s.channelLevels[idx]) {
+             const v = parseFloat(inp.value);
+             if (!isNaN(v)) s.channelLevels[idx].v = v;
+          }
         });
       }
 

@@ -1034,8 +1034,15 @@ const DrawingSettingsDialog = (() => {
 
       overlay.querySelectorAll('.js-ch-level-active').forEach(inp => {
         inp.addEventListener('change', () => {
-          const row = inp.closest('.dsd-row');
+          const row = inp.closest('.dsd-row-inline');
           if (row) row.style.opacity = inp.checked ? '1' : '0.45';
+          DSDApply.applyFromForm(overlay, drawing);
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+
+      overlay.querySelectorAll('.js-ch-level-val').forEach(inp => {
+        inp.addEventListener('input', () => {
           DSDApply.applyFromForm(overlay, drawing);
           EventBus.emit('drawing:settings:saved');
         });
