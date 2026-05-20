@@ -781,7 +781,7 @@ window.DrawingManager = (() => {
           } else if (tool === 'channel' && (ht === 'ch_mid_top' || ht === 'ch_mid_bot')) {
             pane.cvs.style.cursor = 'ns-resize';
           } else if (tool === 'channel' && ht === 'line') {
-            pane.cvs.style.cursor = 'pointer';
+            pane.cvs.style.cursor = 'grab';
           } else if (ht === 'p1' || ht === 'p2' || ht === 'p3') {
             if (tool === 'rotatedrect' && (ht === 'p1' || ht === 'p2')) {
               pane.cvs.style.cursor = 'default';
