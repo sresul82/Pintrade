@@ -727,7 +727,11 @@ window.DrawingTrend = (() => {
     const trendText = s.text || '';
     const hasText = !!trendText;
     
-    if (hasText || selected) {
+    // Check if selected safely (it's not passed as an argument by default in drawing-core.js)
+    // We will just assume false for now to avoid the crash, or safely check if arguments[3] is true.
+    const isSelected = arguments.length > 3 ? arguments[3] : false;
+
+    if (hasText || isSelected) {
       const lineAngle = Math.atan2(b.y - a.y, b.x - a.x);
       let drawAngle = lineAngle;
       let isFlipped = false;
@@ -793,7 +797,7 @@ window.DrawingTrend = (() => {
         ctx.restore();
       }
 
-      if (selected && !hasText) {
+      if (isSelected && !hasText) {
         ctx.save();
         ctx.font = '12px "JetBrains Mono", sans-serif';
         ctx.fillStyle = '#d1d4dc';
