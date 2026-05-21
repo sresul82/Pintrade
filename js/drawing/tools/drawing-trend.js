@@ -675,10 +675,12 @@ window.DrawingTrend = (() => {
     } else {
       // Merge missing default levels
       defaultLevels.forEach(dl => {
-        if (!levels.find(cl => cl != null && cl.v === dl.v)) levels.push(dl);
+        if (!levels.find(cl => cl != null && cl.v === dl.v)) levels.push({...dl});
       });
-      // Sort by value
-      levels = levels.filter(cl => cl != null);
+      // Sort by value (referansı koparmamak için in-place null silme)
+      for (let i = levels.length - 1; i >= 0; i--) {
+        if (levels[i] == null) levels.splice(i, 1);
+      }
       levels.sort((a,b) => a.v - b.v);
       // Remove duplicate levels (by v) and ignore undefined entries
       const uniqueLevels = [];
