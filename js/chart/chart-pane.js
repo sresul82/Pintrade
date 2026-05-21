@@ -415,8 +415,7 @@ class ChartPane {
       // Piksel buffer'ı sadece boyut değiştiyse güncelle (gereksiz yeniden çizimi önler)
       if (this.drawingCanvas.width !== canvasW || this.drawingCanvas.height !== canvasH) {
         this.drawingCanvas.width  = canvasW;
-        this.drawingCanvas.height = canvasH;
-        this._cachedPlotArea = this.getPlotArea();
+        this.drawingCanvas.height = canvasH;        
       }
     } catch (_) {}
   }
@@ -1358,32 +1357,7 @@ class ChartPane {
       // Use cached _lastPriceIsUp (from _loadData or realtime updates)
       this.countdownEl.style.background = this._lastPriceIsUp ? this.candleUpColor : this.candleDownColor;
     } catch (_) {}
-  }
-
-  getPlotArea() {
-    if (!this.chart) return null;
-    try {
-      const rect   = this.cvs.getBoundingClientRect();
-      const side   = this.priceSide === 'left' ? 'left' : 'right';
-      const pScale = this.chart.priceScale(side);
-      const scaleW = (pScale && typeof pScale.width === 'function') ? pScale.width() : 0;
-      const ts     = this.chart.timeScale();
-      const scaleH = (ts && typeof ts.height === 'function') ? ts.height() : 22;
-      const plotX  = this.priceSide === 'left' ? scaleW : 0;
-      return {
-        x:           plotX,
-        y:           0,
-        width:       Math.max(0, rect.width  - scaleW),
-        height:      Math.max(0, rect.height - scaleH),
-        rightEdge:   plotX + Math.max(0, rect.width  - scaleW),
-        bottomEdge:  Math.max(0, rect.height - scaleH),
-        scaleWidth:  scaleW,
-        scaleHeight: scaleH,
-        paneWidth:   rect.width,
-        paneHeight:  rect.height,
-      };
-    } catch (_) { return null; }
-  }
+  }  
 
   fitContent() { this.chart?.timeScale().fitContent(); }
   goToRealtime() { this.chart?.timeScale().scrollToRealTime(); }
