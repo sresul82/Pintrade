@@ -5,7 +5,8 @@
 window.DSDFiboTabs = (() => {
 
 function renderFibStyleTab(d) {
-    const s = d.style || {};
+    d.style = d.style || {};
+    const s = d.style;
     const color = s.color || '#58a6ff';
     const width = s.width || 1;
     const dash  = JSON.stringify(s.dash || []);
@@ -147,7 +148,7 @@ function renderFibStyleTab(d) {
       html += `
         <div class="dsd-row-inline" style="align-items:center; gap:8px; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
            <input type="checkbox" class="js-fib-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>
-           <input type="number" class="dsd-input js-fib-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:70px; padding:2px 4px; border:1px solid #2a2e39;">
+           <input type="number" class="dsd-input js-fib-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:80px; height:30px; box-sizing:border-box; padding:2px 6px; text-align:center;">
            <div class="dsd-color-swatch js-fib-color" data-idx="${i}" style="background:${lvl.color}; width:20px; height:20px; border-radius:3px; flex-shrink:0; cursor:pointer;" data-color="${lvl.color}"></div>
         </div>
       `;
@@ -256,7 +257,8 @@ function renderFibStyleTab(d) {
   }
 
   function renderFibSpeedfanTab(d) {
-    const s = d.style || {};
+    d.style = d.style || {};
+    const s = d.style;
     const defaultPrices = [
       { v: 0, color: '#787b86', active: true },
       { v: 0.25, color: '#f44336', active: true },
@@ -304,7 +306,7 @@ function renderFibStyleTab(d) {
        return `
         <div class="dsd-row-inline" style="align-items:center; gap:8px; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
            <input type="checkbox" class="js-fib-active js-sf-${prefix}" data-idx="${i}" ${lvl.active ? 'checked' : ''}>
-           <input type="number" class="dsd-input js-fib-val js-sf-${prefix}-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:70px; padding:2px 4px; border:1px solid #2a2e39;">
+           <input type="number" class="dsd-input js-fib-val js-sf-${prefix}-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:80px; height:30px; box-sizing:border-box; padding:2px 6px; text-align:center;">
            <div class="dsd-color-swatch js-fib-color js-sf-${prefix}-col" data-idx="${i}" style="background:${lvl.color}; width:20px; height:20px; border-radius:3px; flex-shrink:0; cursor:pointer;" data-color="${lvl.color}"></div>
         </div>`;
     };
