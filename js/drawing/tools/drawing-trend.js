@@ -694,16 +694,27 @@ window.DrawingTrend = (() => {
       levels.push(...uniqueLevels);
     }
 
-    // Background fill (level 0 ile 1 arasını doldur)
+    // Background fill (en dış aktif leveller arasını doldur)
     if (s.showBg !== false) {
+      let minV = 0, maxV = 1;
+      const activeLevels = levels.filter(l => l.active);
+      if (activeLevels.length > 0) {
+        minV = Math.min(...activeLevels.map(l => l.v));
+        maxV = Math.max(...activeLevels.map(l => l.v));
+      }
+      const bgTopAy = drawA.y + dy * minV;
+      const bgTopBy = drawB.y + dy * minV;
+      const bgBotAy = drawA.y + dy * maxV;
+      const bgBotBy = drawB.y + dy * maxV;
+
       ctx.save();
       ctx.fillStyle = s.fillColor || 'rgba(9, 105, 218, 0.2)';
       ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.moveTo(drawA.x, drawA.y);
-      ctx.lineTo(drawB.x, drawB.y);
-      ctx.lineTo(botBx, botBy);
-      ctx.lineTo(botAx, botAy);
+      ctx.moveTo(drawA.x, bgTopAy);
+      ctx.lineTo(drawB.x, bgTopBy);
+      ctx.lineTo(drawB.x, bgBotBy);
+      ctx.lineTo(drawA.x, bgBotAy);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
