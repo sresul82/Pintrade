@@ -2443,9 +2443,8 @@ window.DrawingManager = (() => {
         const s = d.style || {};
         const extLeft = !!s.extendLeft;
         const extRight = !!s.extendRight;
-        const _pa = pane._cachedPlotArea ?? pane.getPlotArea();
-        const wCanvas = _pa ? _pa.width  : pane.drawingCanvas.width  / (window.devicePixelRatio || 1);
-        const hCanvas = _pa ? _pa.height : pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+        const wCanvas = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const hCanvas = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
 
         if (a && b) {
           if (Math.hypot(x - a.x, y - a.y) <= 8) return 'ch_p1';

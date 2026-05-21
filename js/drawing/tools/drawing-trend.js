@@ -624,9 +624,8 @@ window.DrawingTrend = (() => {
     let drawB = { x: b.x, y: b.y };
 
     if (extendLeft || extendRight) {
-      const _pa = pane._cachedPlotArea ?? pane.getPlotArea();
-      const wCanvas = _pa ? _pa.width  : pane.drawingCanvas.width  / (window.devicePixelRatio || 1);
-      const hCanvas = _pa ? _pa.height : pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+      const wCanvas = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+      const hCanvas = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
       if (extendLeft) drawA = _extendToEdge(b.x, b.y, a.x, a.y, wCanvas, hCanvas);
       if (extendRight) drawB = _extendToEdge(a.x, a.y, b.x, b.y, wCanvas, hCanvas);
     }
