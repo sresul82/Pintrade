@@ -400,26 +400,26 @@ class ChartPane {
   _syncDrawingCanvasClip() {
     if (!this.drawingCanvas || !this.chart) return;
     try {
-      const pScale     = this.chart.priceScale(this.priceSide === 'left' ? 'left' : 'right');
-      const scaleW     = pScale.width() || 65;   // fallback 65px if not yet rendered
-      const timeScaleH = 22;                      // LW Charts time scale is always ~22px at default font
-
       const dpr  = window.devicePixelRatio || 1;
       const rect = this.cvs.getBoundingClientRect();
-      const canvasW = Math.max(1, Math.round((rect.width  - scaleW)  * dpr));
-      const canvasH = Math.max(1, Math.round((rect.height - timeScaleH) * dpr));
 
-      // Update CSS size for layout clipping (keeps canvas out of axis zones)
-      this.drawingCanvas.style.width  = `${rect.width  - scaleW}px`;
-      this.drawingCanvas.style.height = `${rect.height - timeScaleH}px`;
+      // Çizim canvas'ı tam pane boyutunda olmalı ki extend edilen çizgiler
+      // fiyat ekseni ve zaman ekseni alanlarında kesilmesin.
+      const canvasW = Math.max(1, Math.round(rect.width  * dpr));
+      const canvasH = Math.max(1, Math.round(rect.height * dpr));
 
-      // Update pixel buffer only if size actually changed (avoid unnecessary redraws)
+      // CSS boyutunu tam pane'e eşitle
+      this.drawingCanvas.style.width  = `${rect.width}px`;
+      this.drawingCanvas.style.height = `${rect.height}px`;
+
+      // Piksel buffer'ı sadece boyut değiştiyse güncelle (gereksiz yeniden çizimi önler)
       if (this.drawingCanvas.width !== canvasW || this.drawingCanvas.height !== canvasH) {
         this.drawingCanvas.width  = canvasW;
-        this.drawingCanvas.height = canvasH;
+        this.drawingCanvas.height = canvasH;        
       }
     } catch (_) {}
   }
+
 
   _buildSeries() {
     if (this.series)    try { this.chart.removeSeries(this.series);    } catch(_) {}
@@ -1357,7 +1357,7 @@ class ChartPane {
       // Use cached _lastPriceIsUp (from _loadData or realtime updates)
       this.countdownEl.style.background = this._lastPriceIsUp ? this.candleUpColor : this.candleDownColor;
     } catch (_) {}
-  }
+  }  
 
   fitContent() { this.chart?.timeScale().fitContent(); }
   goToRealtime() { this.chart?.timeScale().scrollToRealTime(); }
