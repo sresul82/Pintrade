@@ -630,25 +630,31 @@ window.DrawingTrend = (() => {
       if (extendRight) drawB = _extendToEdge(a.x, a.y, b.x, b.y, wCanvas, hCanvas);
     }
 
-    // p3 sabitlenmemişse sadece üst çizgiyi çiz (çizim devam ediyor)
+    // p3 yoksa eski channelOffset sistemiyle geriye dönük uyumluluk
+    let dy;
     if (!d.p3) {
-      ctx.beginPath();
-      ctx.moveTo(drawA.x, drawA.y);
-      ctx.lineTo(drawB.x, drawB.y);
-      ctx.stroke();
-      return;
-    }
+      if (d._placing) {
+        // Çizim devam ediyor, sadece üst çizgiyi göster
+        ctx.beginPath();
+        ctx.moveTo(drawA.x, drawA.y);
+        ctx.lineTo(drawB.x, drawB.y);
+        ctx.stroke();
+        return;
+      }
+      // Eski kayıtlı channel: channelOffset pikseli kullan
+      dy = d.channelOffset || 40;
+    } else {
+      const c = _pt2xy(d.p3, pane);
+      if (!c) return;
 
-    const c = _pt2xy(d.p3, pane);
-    if (!c) return;
-
-    // Kanal vektörü: p3'ün p1'e göre fiyat farkı kanal yüksekliğini belirler
-    // Alt çizgi: üst çizginin eğimi (m) dikkate alınarak c'den geçen paralel çizgi bulunur
-    let m = 0;
-    if (b.x !== a.x) {
-      m = (b.y - a.y) / (b.x - a.x);
+      // Kanal vektörü: p3'ün p1'e göre fiyat farkı kanal yüksekliğini belirler
+      // Alt çizgi: üst çizginin eğimi (m) dikkate alınarak c'den geçen paralel çizgi bulunur
+      let m = 0;
+      if (b.x !== a.x) {
+        m = (b.y - a.y) / (b.x - a.x);
+      }
+      dy = c.y - a.y - m * (c.x - a.x);
     }
-    const dy = c.y - a.y - m * (c.x - a.x);
 
     const botAx = drawA.x, botAy = drawA.y + dy;
     const botBx = drawB.x, botBy = drawB.y + dy;
