@@ -63,7 +63,7 @@ window.DSDStandardTabs = (() => {
         return `
         <div class="dsd-row-inline" style="align-items:center; gap:8px; margin-bottom:8px; ${dimStyle}">
           <input type="checkbox" class="js-ch-level-active" data-idx="${i}" ${isEdge ? 'checked disabled' : (lvl.active ? 'checked' : '')}>
-          <input type="number" class="dsd-input js-ch-level-val" data-idx="${i}" value="${lvl.v}" step="0.001" ${isEdge ? 'readonly' : ''} style="width:50px; flex:none; height:30px; box-sizing:border-box; padding:2px 6px; text-align:center;">
+          <input type="number" class="dsd-input js-ch-level-val" data-idx="${i}" value="${lvl.v}" step="0.001" ${isEdge ? 'readonly' : ''} style="width:100px; flex:none; height:30px; box-sizing:border-box; padding:2px 6px; text-align:center;">
           <div class="dsd-row-controls" style="margin-left:30px;">
             <div class="dsd-line-combo js-ch-level-combo" data-idx="${i}" title="Color, thickness, style" style="cursor:pointer;">
               <div class="dsd-color-swatch js-ch-level-color"
