@@ -1,0 +1,858 @@
+/* ── LEFT TOOLBAR ──────────────────────────────────── */
+.left-toolbar {
+  width: var(--panel-width-left);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.lt-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  position: relative;
+}
+.lt-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.lt-btn.active { 
+  background: var(--accent-blue-bg); 
+  color: var(--accent-blue); 
+  text-shadow: var(--accent-blue-glow);
+}
+.lt-btn[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+}
+.lt-sep {
+  width: 20px;
+  height: 1px;
+  background: var(--border-primary);
+  margin: 2px 0;
+}
+.lt-spacer { flex: 1; }
+
+/* Chart area — pane'lerin yan yana sıralandığı flex-row container */
+.chart-area {
+  flex: 1;
+  display: flex;
+  flex-direction: row;    /* pane'ler yatay sıralanır */
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Her pane kendi içinde dikey stack (chart + indicator panes) */
+.chart-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--bg-primary);
+}
+
+/* Pane'ler arası ince ayırıcı */
+.chart-pane-divider {
+  width: 1px;
+  background: var(--border-primary, #2a2e39);
+  flex-shrink: 0;
+  cursor: col-resize;
+}
+
+/* Aktif sekonder pane vurgusu */
+.chart-pane-secondary.pane-active {
+  outline: 1px solid var(--accent-blue, #2962ff);
+  outline-offset: -1px;
+}
+
+/* Sekonder pane’lerde grafik alanı — tüm alanı doldurur */
+.pane-chart-host {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* LW Charts kendi canvas'ını absolute ile koyar, host bunu sarmalar */
+.pane-chart-host > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Pane legend overlay (sekonder paneller icin ticker+TF+OHLCV) */
+.pane-legend {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 72px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.pane-leg-sym {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.pane-leg-tf {
+  background: var(--accent-blue, #2962ff);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.pane-leg-ohlcv {
+  color: var(--text-secondary);
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Favori araç çubuğu spacer (pane-0 içinde) */
+#favbar-spacer {
+  flex-shrink: 0;
+  height: 0;
+  transition: height 0.15s ease;
+  pointer-events: none;
+}
+
+#pane-0.favbar-open #favbar-spacer {
+  height: 40px;
+}
+
+/* Legend bar (top-left overlay) */
+.chart-legend {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 72px;   /* LW Charts price scale (~65px) + 7px boşluğu */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  z-index: 5;
+  pointer-events: none;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.chart-legend .ohlcv-val { color: var(--text-primary); }
+
+/* Coin strip inside chart legend */
+.chart-coin-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(13,17,23,0.82);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  padding: 3px 10px;
+  backdrop-filter: blur(6px);
+  pointer-events: all;
+  flex-shrink: 0;
+}
+.cs-sym {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.cs-price {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.cs-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-secondary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.cs-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 1px;
+}
+.cs-label {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.cs-value {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.legend-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-secondary);
+  flex-shrink: 0;
+}
+
+.chart-legend > span.muted {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+[data-theme="light"] .chart-coin-strip {
+  background: rgba(246,248,250,0.88);
+}
+
+/* Lightweight Charts container */
+#lw-chart-container {
+  position: relative;   /* Mutlak poziyondan flex item'a dönüştürüldü */
+  flex: 1;              /* Kalan tüm boşluğu doldurur */
+  width: 100%;
+}
+
+/* Canvas overlay (drawings) */
+#drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 72px;   /* LW Charts fiyat skalası kadar boşluk bırak */
+  bottom: 0;
+  width: auto;
+  height: auto;
+  pointer-events: none;
+  z-index: 10;
+}
+#drawing-canvas.drawing-active { pointer-events: all; cursor: crosshair; }
+
+/* Price scale countdown badge */
+.countdown-badge {
+  display: inline-block;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--accent-yellow);
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* Indicator panels (below candles) */
+.indicator-panels {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 58px;
+}
+.ind-panel {
+  border-top: 1px solid var(--border-secondary);
+  background: var(--bg-primary);
+  position: relative;
+  height: 80px;
+}
+.ind-panel-label {
+  position: absolute;
+  top: 3px;
+  left: 8px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  z-index: 2;
+  pointer-events: none;
+}
+.ind-panel-close {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  z-index: 2;
+}
+.ind-panel-close:hover { color: var(--text-secondary); }
+.ind-panel-resize {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+}
+.ind-panel-resize:hover { background: var(--border-primary); }
+
+/* ── RIGHT SIDEBAR (toggle bar) ───────────────────── */
+.right-sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rsb-btn {
+  width: 36px;
+  min-height: 80px;
+  height: auto;
+  padding: 10px 0;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  opacity: 0.95;
+  gap: 8px;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+.rsb-btn svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0; /* CRUCIAL: Prevent flexbox from squishing the icon */
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0.5px;
+}
+.rsb-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); opacity: 1; }
+.rsb-btn.active {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+  border-right: 2px solid var(--accent-blue);
+  border-radius: 0;
+  text-shadow: var(--accent-blue-glow);
+}
+.rsb-label {
+  font-size: 10px;
+  font-weight: 500;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.4px;
+}
+.rsb-sep {
+  width: 18px;
+  height: 1px;
+  background: var(--border-primary);
+}
+
+/* ── BODY LAYOUT ───────────────────────────────────── */
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#drawing-canvas {
+  pointer-events: none;  /* ← BU SATIRI EKLE */
+}
+
+/* ── RIGHT SIDEBAR CLOCK ───────────────────────────── */
+.rsb-clock-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  cursor: pointer;
+  transition: color 0.1s;
+  letter-spacing: 0.5px;
+}
+.rsb-clock-btn:hover {
+  color: var(--text-primary);
+}
+
+.rsb-tz-menu {
+  position: absolute;
+  right: 60px; /* To the left of right sidebar */
+  bottom: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md, 6px);
+  display: none;
+  flex-direction: column;
+  max-height: 400px;
+  overflow-y: auto;
+  min-width: 180px;
+  z-index: 1000;
+  font-size: 12px;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.rsb-tz-menu.open {
+  display: flex;
+}
+.rsb-tz-item {
+  padding: 8px 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.rsb-tz-item:hover { background: var(--bg-hover); }
+.rsb-tz-item.active { color: var(--accent-blue); background: var(--accent-blue-bg); }
+
+#chart-area {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: var(--border-primary, #2a2e39); /* Grid aralıklarında ayrım çizgisi oluşturur */
+}
+#pane-0 {
+  grid-area: p0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+/* Ana grafik kok dizini */
+#chart-root {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  overflow: hidden;
+  background: var(--grid-gap-color, rgba(255, 255, 255, 0.25)); /* Grid gap çizgi rengi — hem yatay hem dikey */
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════
+   PANE LAYOUT CSS – chart-core.js tarafından dinamik oluşturulan
+   DOM elementleri için zorunlu stiller
+   ══════════════════════════════════════════════════════════════ */
+
+/* main-area: sol sidebar ile sağ watchlist arasında kalan alan */
+.main-area {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Her pane sarmalayıcısı – chart-root grid hücresi */
+.pane-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary, #131722);
+}
+
+/* Aktif pane – mavi kenarlık */
+.pane-wrap.pane-active {
+  outline: 1px solid var(--accent-blue, #2962ff);
+  outline-offset: -1px;
+}
+
+/* Pane başlık çubuğu */
+.pane-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  height: 28px;
+  flex-shrink: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary, #787b86);
+}
+
+/* Canvas kapsayıcı – kalan tüm yüksekliği alır */
+.pane-cvs {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+
+
+
+/* Sembol butonu */
+.pane-sym {
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #d1d4dc);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.pane-sym:hover { background: rgba(255,255,255,.06); }
+
+.pane-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-primary, #2a2e39);
+  flex-shrink: 0;
+}
+
+/* OHLCV */
+.ohlcv-row { display: flex; gap: 6px; align-items: center; }
+.ohlcv-g   { display: flex; gap: 2px; align-items: center; }
+.ohlcv-l   { color: var(--text-muted, #555f70); font-size: 10px; }
+.ohlcv-v   { color: var(--text-secondary, #787b86); font-size: 10px; }
+
+/* Gear butonu */
+.pane-gear {
+  position: absolute;
+  right: 16px;    /* Price scale genişliği ile hizala */
+  bottom: 10px;   /* Time scale üzerine tam oturt */
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #787b86);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 5;
+}
+.pane-cvs:hover .pane-gear { opacity: 1; }
+
+/* Realtime git butonu */
+.pane-rt-btn {
+  position: absolute;
+  right: 72px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--accent-blue, #2962ff);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+}
+.pane-rt-btn.visible { display: flex; }
+
+/* Geri sayım */
+.pane-countdown {
+  position: absolute;
+  top: 30px;
+  right: 75px;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary, #787b86);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Filigran */
+.pane-wm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 52px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.03);
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+  letter-spacing: 4px;
+}
+
+/* Pane ayırıcı tutamaç */
+.resize-handle {
+  background: transparent; /* Alt zemin zaten renkli olduğu için saydam yapıyoruz */
+  flex-shrink: 0;
+  cursor: col-resize;
+  width: 3px;
+  transition: background 0.15s;
+  z-index: 10;
+}
+.resize-handle:hover, .resize-handle.dragging {
+  background: var(--accent-blue, #2962ff);
+}
+
+/* ── Pane dropdown (TF / type in pane header) ───────────────── */
+.pane-dd {
+  position: fixed; background: var(--bg-elevated, #1a1e2d);
+  border: 1px solid var(--border-default, #2a2e39);
+  border-radius: 6px; z-index: 9995; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5); display: none; min-width: 70px;
+}
+.pane-dd.open { display: block; }
+.dd-item {
+  padding: 7px 18px; font-size: 11px; color: var(--text-primary, #d1d4dc);
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.dd-item:hover { background: var(--bg-hover, #252a3a); color: var(--accent-teal, #00b8c4); }
+.dd-item.sel { color: var(--accent-teal, #00b8c4); font-weight: 600; }
+.dd-item svg { width: 12px; height: 12px; opacity: 0.8; }
+.pane-tf-btn {
+  font-size: 10px; font-weight: 600; color: var(--accent-teal, #00b8c4);
+  background: rgba(0,184,196,.1); border: 1px solid rgba(0,184,196,.25);
+  border-radius: 3px; padding: 1px 6px; cursor: pointer; white-space: nowrap;
+}
+.pane-tf-btn:hover { background: rgba(0,184,196,.2); }
+.pane-type-btn {
+  width: 22px; height: 22px; background: transparent; border: none;
+  border-radius: 3px; color: var(--text-secondary, #787b86);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.pane-type-btn:hover { background: var(--bg-hover, #252a3a); color: var(--text-primary, #d1d4dc); }
+.pane-type-btn svg { width: 14px; height: 14px; }
+
+/* ── Context Menu ───────────────────────────────────────────── */
+.ctx-menu {
+  position: fixed; z-index: 9999;
+  background: var(--bg-elevated, #1a1e2d);
+  border: 1px solid var(--border-default, #2a2e39);
+  border-radius: 7px; box-shadow: 0 6px 24px rgba(0,0,0,.7);
+  padding: 4px 0; min-width: 220px; display: none;
+  font-size: 13px; color: var(--text-primary, #d1d4dc);
+}
+.ctx-menu.open { display: block; }
+.ctx-row {
+  padding: 7px 14px 7px 32px; display: flex; align-items: center;
+  cursor: pointer; position: relative;
+}
+.ctx-row:hover { background: var(--bg-hover, #252a3a); color: var(--accent-teal, #00b8c4); }
+.ctx-row.disabled { opacity: 0.5; pointer-events: none; }
+.ctx-check { position: absolute; left: 10px; width: 12px; height: 12px; color: var(--accent-teal, #00b8c4); }
+.ctx-check svg { width: 12px; height: 12px; }
+.ctx-label { flex: 1; white-space: nowrap; }
+.ctx-key { font-size: 11px; color: var(--text-muted, #4a4f5e); margin-left: 12px; font-family: monospace; }
+.ctx-arrow { margin-left: 8px; color: var(--text-muted, #4a4f5e); display: flex; align-items: center; }
+.ctx-arrow svg { width: 10px; height: 10px; }
+.ctx-sep { height: 1px; background: var(--border-dim, #252a3a); margin: 4px 0; }
+.ctx-submenu { position: fixed; display: none; }
+.ctx-submenu.open { display: block; }
+
+/* ── Sync floating panel ────────────────────────────────────── */
+.floating-panel {
+  position: fixed; z-index: 9990;
+  background: var(--bg-elevated, #1a1e2d);
+  border: 1px solid var(--border-default, #2a2e39);
+  border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  display: none; overflow: hidden; width: 150px;
+}
+.floating-panel.open { display: block; }
+.fp-title {
+  padding: 10px 14px 8px; font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  color: var(--text-muted, #4a4f5e); text-transform: uppercase;
+  border-bottom: 1px solid var(--border-dim, #252a3a);
+}
+.fp-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 14px; border-bottom: 1px solid var(--border-subtle, #1e2130);
+}
+.fp-row:last-child { border-bottom: none; }
+.fp-row:hover { background: var(--bg-hover, #252a3a); }
+.fp-label { font-size: 12px; color: var(--text-primary, #d1d4dc); display: flex; align-items: center; gap: 6px; }
+.fp-info {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1px solid var(--text-muted, #4a4f5e);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--text-muted, #4a4f5e); cursor: help;
+}
+
+/* ── Toggle switch (sync panel iç toggle) ───────────────────── */
+.tog { position: relative; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; display: inline-block; }
+.tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+.tog-t { position: absolute; inset: 0; background: var(--bg-control, #2a2e39); border-radius: 10px; transition: background .2s; }
+.tog input:checked ~ .tog-t { background: var(--accent-teal, #00b8c4); }
+.tog-h {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
+  background: var(--text-primary, #d1d4dc); border-radius: 50%;
+  transition: transform .2s; pointer-events: none;
+}
+.tog input:checked ~ .tog-t .tog-h { transform: translateX(16px); }
+
+/* ── TV Settings Modal ──────────────────────────────────────── */
+.tv-settings-overlay { position: fixed; inset: 0; z-index: 10000; pointer-events: none; }
+.tv-settings-modal {
+  background: var(--bg-surface, #1e222d); border-radius: 8px;
+  width: 680px; height: 520px; max-width: 95vw; max-height: 95vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  color: var(--text-primary, #d1d4dc); font-size: 13px;
+  border: 1px solid var(--border-strong, #363c4e); pointer-events: auto;
+  position: absolute; top: calc(50vh - 260px); left: calc(50vw - 340px);
+}
+.tv-header {
+  height: 54px; padding: 0 24px; display: flex; align-items: center;
+  justify-content: space-between; border-bottom: 1px solid var(--border-default, #2a2e39);
+  flex-shrink: 0; cursor: move;
+}
+.tv-title { font-size: 16px; font-weight: 600; }
+.tv-close {
+  background: transparent; border: none; color: var(--text-secondary, #787b86);
+  cursor: pointer; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center; border-radius: 4px;
+}
+.tv-close:hover { color: var(--text-primary, #d1d4dc); background: var(--bg-hover, #252a3a); }
+.tv-body { flex: 1; display: flex; overflow: hidden; }
+.tv-sidebar { width: 200px; border-right: 1px solid var(--border-default, #2a2e39); padding: 12px 0; overflow-y: auto; flex-shrink: 0; }
+.tv-tab-item {
+  padding: 10px 24px; display: flex; align-items: center; gap: 12px;
+  color: var(--text-primary, #d1d4dc); font-size: 13px; cursor: pointer; user-select: none;
+}
+.tv-tab-item:hover { background: var(--bg-hover, #252a3a); }
+.tv-tab-item.active { background: var(--bg-control, #2a2e39); font-weight: 500; }
+.tv-tab-icon { display: flex; width: 18px; justify-content: center; color: var(--text-secondary, #787b86); }
+.tv-tab-item.active .tv-tab-icon { color: var(--text-primary, #d1d4dc); }
+.tv-content { flex: 1; padding: 24px; overflow-y: auto; background: var(--bg-inset, #181b24); }
+.tv-tab-pane { display: none; }
+.tv-tab-pane.active { display: block; }
+.tv-setting-section {
+  font-size: 11px; color: var(--text-secondary, #787b86); font-weight: 600;
+  letter-spacing: 0.05em; margin-bottom: 16px; margin-top: 24px; text-transform: uppercase;
+}
+.tv-setting-section:first-child { margin-top: 0; }
+.tv-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding: 0 4px; }
+.tv-row.nested { padding-left: 28px; margin-top: -8px; margin-bottom: 16px; }
+.tv-row-left { flex: 1; color: var(--text-primary, #d1d4dc); font-size: 13px; }
+.tv-row-right { display: flex; align-items: center; justify-content: flex-start; gap: 10px; flex: 1; }
+.tv-row-right.tv-align-left { justify-content: flex-start; }
+.tv-row-right-only { display: flex; justify-content: flex-end; width: 100%; margin-bottom: 16px; padding: 0 4px; }
+.tv-check-label { display: flex; align-items: center; cursor: pointer; user-select: none; gap: 8px; }
+.tv-check-label.nested { padding-left: 28px; }
+.tv-checkbox { display: none; }
+.tv-check-box {
+  width: 14px; height: 14px; border: 1px solid var(--text-secondary, #787b86);
+  border-radius: 3px; display: flex; align-items: center; justify-content: center;
+}
+.tv-checkbox:checked + .tv-check-box { background: var(--accent-blue, #2962ff); border-color: var(--accent-blue, #2962ff); }
+.tv-checkbox:checked + .tv-check-box::after {
+  content: ''; width: 3px; height: 7px; border: solid white;
+  border-width: 0 2px 2px 0; transform: rotate(45deg); margin-bottom: 2px;
+}
+.tv-check-text { font-size: 13px; color: var(--text-primary, #d1d4dc); }
+.tv-check-desc { font-size: 11px; color: var(--text-secondary, #787b86); margin-left: 22px; margin-top: 4px; margin-bottom: 12px; }
+.tv-info-icon {
+  font-size: 10px; display: inline-flex; width: 14px; height: 14px;
+  align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--bg-control, #2a2e39); color: var(--text-secondary, #787b86); cursor: help; margin-left: 4px;
+}
+.tv-cselect {
+  position: relative; border: 1px solid var(--border-strong, #363c4e);
+  border-radius: 4px; padding: 5px 8px; font-size: 13px; min-width: 140px;
+  cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  outline: none; background: transparent; user-select: none;
+}
+.tv-cselect:focus, .tv-cselect.open { border-color: var(--accent-teal, #00b8c4); }
+.tv-cselect-val { color: var(--text-primary, #d1d4dc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+.tv-cselect-arr { flex-shrink: 0; color: var(--text-secondary, #787b86); transition: transform 0.2s; }
+.tv-cselect.open .tv-cselect-arr { transform: rotate(180deg); }
+.tv-cselect-drop {
+  position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%;
+  background: var(--bg-surface, #1e222d); border: 1px solid var(--border-strong, #363c4e);
+  border-radius: 4px; z-index: 10005; box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  display: none; padding: 4px 0; max-height: 200px; overflow-y: auto;
+}
+.tv-cselect.open .tv-cselect-drop { display: block; }
+.tv-cselect-option { padding: 6px 12px; color: var(--text-primary, #d1d4dc); white-space: nowrap; }
+.tv-cselect-option:hover { background: var(--bg-hover, #252a3a); }
+.tv-cselect-option.selected { background: var(--accent-teal, #00b8c4); color: #131722; font-weight: 500; }
+.tv-color-box { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--border-strong, #363c4e); cursor: pointer; }
+.tv-slider-wrap { display: flex; align-items: center; width: 100px; }
+.tv-slider { width: 100%; -webkit-appearance: none; appearance: none; background: var(--border-strong, #363c4e); height: 2px; outline: none; }
+.tv-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--text-primary, #d1d4dc); border: 2px solid #131722; cursor: pointer; }
+.tv-input { background: #131722; border: 1px solid var(--border-strong, #363c4e); color: var(--text-secondary, #787b86); padding: 4px 8px; border-radius: 4px; width: 90px; }
+.tv-input-num { background: #131722; border: 1px solid var(--border-strong, #363c4e); color: var(--text-primary, #d1d4dc); padding: 4px 8px; border-radius: 4px; width: 60px; text-align: left; -moz-appearance: textfield; appearance: textfield; }
+.tv-input-num::-webkit-outer-spin-button, .tv-input-num::-webkit-inner-spin-button { -webkit-appearance: none; }
+.tv-unit { color: var(--text-secondary, #787b86); font-size: 13px; margin-left: 8px; }
+.tv-footer { height: 60px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-default, #2a2e39); flex-shrink: 0; }
+.tv-actions { display: flex; gap: 12px; }
+.tv-btn { padding: 8px 24px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; outline: none; border: 1px solid transparent; }
+.tv-btn-cancel { background: transparent; color: var(--text-primary, #d1d4dc); border-color: var(--border-strong, #363c4e); }
+.tv-btn-cancel:hover { border-color: var(--text-secondary, #787b86); }
+.tv-btn-ok { background: var(--text-primary, #d1d4dc); color: #131722; }
+.tv-btn-ok:hover { opacity: 0.9; }
+.tv-color-cell.active { box-shadow: 0 0 0 1px #1e222d, 0 0 0 3px var(--accent-blue, #2962ff); z-index: 1; position: relative; }
+
+/* ── Line Picker ─────────────────────────────────────────────── */
+.lp-wrap {
+  position: fixed; z-index: 10010; background: var(--lp-bg, #1e222d);
+  border: 1px solid var(--lp-border, #363c4e); border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.6); padding: 10px; min-width: 220px; display: none;
+}
+.lp-wrap.open { display: block; }
+.lp-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.lp-label { font-size: 11px; color: var(--text-secondary, #787b86); width: 50px; flex-shrink: 0; }
+.lp-style-btns { display: flex; gap: 4px; }
+.lp-style-btn {
+  width: 32px; height: 22px; border: 1px solid var(--lp-border, #363c4e);
+  border-radius: 3px; background: transparent; color: var(--text-secondary, #787b86);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.lp-style-btn:hover, .lp-style-btn.active { background: var(--lp-active, #434651); color: var(--text-primary, #d1d4dc); border-color: var(--text-secondary, #787b86); }
+.lp-style-btn svg { width: 22px; height: 14px; }
+.lp-width-btns { display: flex; gap: 3px; align-items: center; }
+.lp-w-btn {
+  width: 26px; height: 22px; border: 1px solid var(--lp-border, #363c4e);
+  border-radius: 3px; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.lp-w-btn:hover, .lp-w-btn.active { background: var(--lp-active, #434651); border-color: var(--text-secondary, #787b86); }
+.lp-w-line { background: var(--text-primary, #d1d4dc); width: 16px; border-radius: 1px; }
+
+/* ── Cursor Modları (Drawing Manager) ── */
+.pane-wrap.cursor-arrow canvas, .pane-wrap.cursor-arrow .pane-cvs { cursor: default !important; }
+.pane-wrap.cursor-dot canvas, .pane-wrap.cursor-dot .pane-cvs { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="3" fill="black" stroke="white" stroke-width="1.5"/></svg>') 6 6, crosshair !important; }
+.pane-wrap.cursor-cross canvas, .pane-wrap.cursor-cross .pane-cvs { cursor: crosshair !important; }
+.pane-wrap.cursor-drawing canvas, .pane-wrap.cursor-drawing .pane-cvs { cursor: crosshair !important; }
+

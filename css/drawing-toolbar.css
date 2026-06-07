@@ -1,0 +1,644 @@
+/* =========================================================================
+   Drawing Property Toolbar — TradingView style
+   ========================================================================= */
+
+/* ── Toolbar Container ── */
+#pt-toolbar {
+  position: fixed;
+  z-index: 19000;   /* above price ruler (typically ~5000) but below dialog */
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: #1e222d;
+  border: 1px solid #7d808b;
+  border-radius: 6px;
+  padding: 3px 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  user-select: none;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+/* ── Toolbar Buttons ── */
+.pt-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #a3a6af;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px;
+  box-sizing: border-box;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.pt-btn:hover {
+  background: #2a2e39;
+  color: #d1d4dc;
+}
+.pt-btn-color {
+  gap: 1px;
+}
+.pt-btn-danger:hover {
+  background: rgba(242,54,69,0.12);
+  color: #f23645;
+}
+
+/* ── Color picker dropdowns ── */
+.ptc-cell {
+  cursor: pointer;
+  border-radius: 2px;
+  box-sizing: border-box;
+  transition: transform 0.08s;
+  flex-shrink: 0;
+}
+.ptc-cell:hover {
+  transform: scale(1.25);
+  z-index: 1;
+  position: relative;
+}
+.ptc-active {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+/* ── Width / Style dropdown items ── */
+.pt-w-item:hover,
+.pt-s-item:hover {
+  background: #2a2e39;
+}
+.pt-w-active,
+.pt-s-active {
+  color: #f0b90b !important;
+}
+
+/* =========================================================================
+   Drawing Settings Dialog — TradingView style
+   ========================================================================= */
+
+.dsd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25000;  /* above everything: price rulers, toolbar, etc. */
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+}
+.dsd-dialog {
+  pointer-events: auto;
+  background: #1e222d;
+  border: 1px solid #7d808b;
+  border-radius: 8px;
+  width: 320px;
+  max-width: 96vw;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+  font-size: 13px;
+  color: #d1d4dc;
+}
+
+/* Header */
+.dsd-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2e39;
+  cursor: move;
+  flex-shrink: 0;
+}
+.dsd-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #d1d4dc;
+}
+.dsd-header-icon, .dsd-close-btn {
+  background: transparent;
+  border: none;
+  color: #5d606b;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+}
+.dsd-header-icon:hover, .dsd-close-btn:hover {
+  background: #2a2e39;
+  color: #d1d4dc;
+}
+
+/* Tabs */
+.dsd-tabs {
+  display: flex;
+  border-bottom: 1px solid #2a2e39;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+.dsd-tab {
+  background: transparent;
+  border: none;
+  color: #787b86;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.dsd-tab:hover { color: #d1d4dc; }
+.dsd-tab.active {
+  color: #d1d4dc;
+  border-bottom-color: #2962ff;
+}
+
+/* Body */
+.dsd-body {
+  padding: 16px;
+  overflow: visible;
+  flex: 1;
+}
+
+/* Rows */
+.dsd-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+.dsd-row-check {
+  margin-bottom: 10px;
+}
+.dsd-label {
+  width: 104px;
+  flex-shrink: 0;
+  color: #787b86;
+  font-size: 13px;
+}
+
+.dsd-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid #7d808b;
+  padding: 3px;
+  background-clip: content-box;
+  box-sizing: border-box;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dsd-color-swatch:hover { border-color: #d1d4dc; }
+
+/* Width Group */
+.dsd-width-group, .dsd-dash-group {
+  display: flex;
+  background: #131722;
+  border: 1px solid #7d808b;
+  border-radius: 4px;
+  padding: 2px;
+  gap: 1px;
+}
+.dsd-width-opt, .dsd-dash-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #5d606b;
+  transition: background 0.12s, color 0.12s;
+}
+.dsd-width-opt:hover, .dsd-dash-opt:hover {
+  background: #2a2e39;
+  color: #d1d4dc;
+}
+.dsd-width-opt.active, .dsd-dash-opt.active {
+  background: #2a2e39;
+  color: #d1d4dc;
+}
+
+/* Line Combo Group */
+.dsd-row-controls { display: flex; align-items: center; gap: 8px; flex: 1; }
+.dsd-line-combo {
+  display: flex;
+  align-items: center;
+  background: #131722;
+  border: 1px solid #7d808b;
+  border-radius: 4px;
+  padding: 2px;
+  cursor: pointer;
+  height: 30px;
+  box-sizing: border-box;
+}
+.dsd-line-combo:hover { border-color: #d1d4dc; }
+.dsd-combo-divider { width: 1px; height: 16px; background: #2a2e39; margin: 0 4px; }
+.dsd-combo-preview { display: flex; align-items: center; padding: 0 6px; }
+
+/* Cap Options (standalone now) */
+.dsd-cap-opt {
+  display: flex; align-items: center; justify-content: center;
+  background: #131722;
+  border: 1px solid #7d808b;
+  border-radius: 4px;
+  height: 30px;
+  width: 34px;
+  color: #5d606b;
+  cursor: pointer;
+}
+.dsd-cap-opt:hover { border-color:#d1d4dc; color:#d1d4dc; }
+.dsd-cap-opt.active { border-color:#d1d4dc; color:#d1d4dc; background:#2a2e39; }
+
+/* Custom Select */
+.dsd-custom-select { flex: 1; position: relative; }
+.dsd-custom-select-header {
+  border: 1px solid #7d808b;
+  background: #131722;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #d1d4dc;
+  font-size: 13px;
+}
+.dsd-custom-select-header:hover { border-color: #d1d4dc; }
+.dsd-custom-select-body {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0; right: 0;
+  background: #1e222d;
+  border: 1px solid #7d808b;
+  border-radius: 4px;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.dsd-custom-select-body.hidden { display: none; }
+
+/* Checkbox */
+.dsd-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #d1d4dc;
+  padding: 3px 0;
+}
+.dsd-checkbox-label input[type=checkbox] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #2962ff;
+}
+
+/* Section label */
+.dsd-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #4a4e5a;
+  text-transform: uppercase;
+  margin: 16px 0 10px;
+}
+
+/* Select / Input */
+.dsd-select, .dsd-input {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #d1d4dc;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  flex: 1;
+  height: 28px;
+  box-sizing: border-box;
+}
+.dsd-select:hover, .dsd-input:hover { border-color: #d1d4dc; }
+.dsd-select:focus, .dsd-input:focus { border-color: #2962ff; }
+
+/* Textarea */
+.dsd-textarea {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #d1d4dc;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+.dsd-textarea:focus { border-color: #2962ff; }
+
+/* Text tab row inline */
+.dsd-row-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.dsd-fmt-btn {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #787b86;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.dsd-fmt-btn:hover { border-color: #d1d4dc; color: #d1d4dc; }
+.dsd-fmt-btn.active { background: #2962ff; color:#fff; border-color:#2962ff; }
+
+/* Coords */
+.dsd-coords-grid { display:flex; flex-direction:column; gap:12px; }
+.dsd-coords-row { display:flex; align-items:center; gap:8px; }
+.dsd-coords-label { width:100px; color:#787b86; flex-shrink:0; }
+
+/* Visibility */
+.dsd-vis-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+
+/* Footer */
+.dsd-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid #2a2e39;
+  flex-shrink: 0;
+}
+.dsd-footer-right {
+  display: flex;
+  gap: 5px;
+}
+.dsd-tmpl-btn {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #d1d4dc;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dsd-tmpl-btn:hover { border-color: #d1d4dc; }
+.dsd-btn-cancel, .dsd-btn-ok {
+  padding: 6px 17px;
+  border-radius: 4px;
+  border: 1px solid #7d808b;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dsd-btn-cancel {
+  background: transparent;
+  color: #d1d4dc;
+}
+.dsd-btn-cancel:hover { background: #2a2e39; }
+.dsd-btn-ok {
+  background: transparent;
+  color: #d1d4dc;
+  margin-left: 8px;
+}
+.dsd-btn-ok:hover { background: #2a2e39; }
+
+/* Template menu */
+.dsd-template-menu {
+  position: fixed;
+  background: #1e222d;
+  border: 1px solid #7d808b;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  z-index: 30000;
+  padding: 4px 0;
+  min-width: 180px;
+}
+.dsd-tmpl-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #d1d4dc;
+  cursor: pointer;
+}
+.dsd-tmpl-item:hover { background: #2a2e39; }
+
+/* Toast */
+.dsd-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #d1d4dc;
+  color: #131722;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 13px;
+  z-index: 99999;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* =========================================================================
+   Position Inputs Tab  (dsd-pi-*)  — TradingView style two-column layout
+   ========================================================================= */
+
+.dsd-pi-wrap {
+  padding: 4px 0;
+}
+
+/* Each row: label | control(s) */
+.dsd-pi-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.dsd-pi-label {
+  width: 96px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #787b86;
+}
+
+.dsd-pi-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+/* Inputs inside inputs tab */
+.dsd-pi-input {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #d1d4dc;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+}
+.dsd-pi-input::-webkit-inner-spin-button,
+.dsd-pi-input::-webkit-outer-spin-button { opacity: 0.4; }
+.dsd-pi-input:hover  { border-color: #787b86; }
+.dsd-pi-input:focus  { border-color: #2962ff; }
+
+/* Selects inside inputs tab */
+.dsd-pi-select {
+  background: #131722;
+  border: 1px solid #7d808b;
+  color: #d1d4dc;
+  border-radius: 4px;
+  padding: 5px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.dsd-pi-select:hover { border-color: #787b86; }
+.dsd-pi-select:focus { border-color: #2962ff; }
+
+/* Section headers  (PROFIT LEVEL / STOP LEVEL) */
+.dsd-pi-section {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  color: #4a4e5a;
+  text-transform: uppercase;
+  padding: 12px 0 4px;
+  border-top: 1px solid #2a2e39;
+  margin-top: 4px;
+}
+
+/* Thin divider line between groups */
+.dsd-pi-divider {
+  height: 1px;
+  background: #2a2e39;
+  margin: 8px 0;
+}
+
+/* =========================================================================
+   Stats multi-select dropdown — TradingView style
+   ========================================================================= */
+
+.dsd-stats-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #7d808b;
+  background: #131722;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #d1d4dc;
+  font-size: 13px;
+  user-select: none;
+}
+.dsd-stats-header:hover { border-color: #787b86; }
+
+.dsd-stats-body {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  background: #1e222d;
+  border: 1px solid #7d808b;
+  border-radius: 6px;
+  z-index: 200;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.55);
+  padding: 4px 0;
+}
+.dsd-stats-body.hidden { display: none; }
+
+.dsd-stats-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #d1d4dc;
+  user-select: none;
+}
+.dsd-stats-item:hover { background: #2a2e39; }
+.dsd-stats-item input[type=checkbox] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #2962ff;
+  flex-shrink: 0;
+}
+
+/* =========================================================================
+   Parallel Channel — Level Rows
+   ========================================================================= */
+
+/* Outer bordered container wrapping all level rows */
+.dsd-ch-levels-group {
+  border: 1px solid #7d808b;
+  border-radius: 4px;
+  background: #131722;
+  padding: 2px 0;
+  margin-bottom: 4px;
+}
+
+/* Separating line between level rows */
+.dsd-ch-levels-group .dsd-row-check + .dsd-row-check {
+  border-top: 1px solid #2a2e39;
+}
+
+/* Each row inside the group gets horizontal padding */
+.dsd-ch-levels-group .dsd-row-check {
+  padding: 4px 10px;
+  margin-bottom: 0;
+}
+
+/* Value badge — looks like a small input box */
+.dsd-ch-level-val-box {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: 1px solid #7d808b;
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 12px;
+  color: #d1d4dc;
+  min-width: 38px;
+  height: 22px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/* Ensure the label+checkbox area has enough width so combo is pushed 40px further right */
+.dsd-ch-levels-group .dsd-checkbox-label {
+  min-width: 120px;
+  flex-shrink: 0;
+}

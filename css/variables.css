@@ -1,0 +1,97 @@
+:root {
+  /* TradingView Dark Theme Backgrounds */
+  --bg-primary:    #131722;  /* Ana grafik arka planı */
+  --bg-secondary:  #000000;  /* Navbar ve Sidebar (TradingView'daki zifiri siyah üst bar) */
+  --bg-tertiary:   #1e222d;  /* Dropdown menü zeminleri, buton arkaplanları */
+  --bg-panel:      #1e222d;  /* Modallar, popuplar */
+  --bg-hover:      #2a2e39;  /* Hover efektleri */
+  --bg-selected:   #2a2e39;  /* Seçili eleman arka planı */
+
+  /* TradingView Dark Theme Borders */
+  --border-primary:   #2a2e39;  /* Ana ayrım çizgileri */
+  --border-secondary: #363a45;  /* İkincil daha açık kenarlıklar */
+  --border-accent:    #00f3ff;  /* Neon mavi kenarlık */
+  --grid-gap-color:   rgba(255, 255, 255, 0.15); /* Çoklu Pane Arayüzü Çizgisi */
+
+  /* TradingView Dark Theme Texts */
+  --text-primary:   #d1d4dc;  /* Ana metin ve parlak ikonlar */
+  --text-secondary: #787b86;  /* Sönük metin ve pasif ikonlar */
+  --text-muted:     #50535e;  /* Çok sönük veya açıklama metinleri */
+  --text-active:    #ffffff;  /* Tam beyaz metin */
+
+  /* TradingView Dark Theme Accents - Neon Mod */
+  --accent-blue:      #00f3ff;
+  --accent-blue-bg:   rgba(0, 243, 255, 0.1);
+  --accent-blue-glow: 0 0 8px rgba(0, 243, 255, 0.6);
+  --accent-green:  #089981;
+  --accent-red:    #f23645;
+  --accent-yellow: #f5a623;
+  --accent-orange: #ff9800;
+  --accent-purple: #b388ff;
+
+  /* TradingView Candles */
+  --candle-up:   #089981;
+  --candle-down: #f23645;
+
+  --panel-width-right: 480px;
+  --coin-detail-width: 560px;
+  --panel-width-left:  40px;
+  --navbar-height:     38px;
+  --sidebar-width:     40px;
+
+  --font-mono: 'Courier New', monospace;
+
+  --transition-panel: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast:  0.1s ease;
+  --transition-med:   0.2s ease;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+
+  --scrollbar-width: 3px;
+  --scrollbar-thumb: #30363d;
+
+  --signal-color-green: #2dd4bf;
+  --signal-color-red:   #f87171;
+  --signal-bg-green:    rgba(45, 212, 191, 0.08);
+  --signal-bg-red:      rgba(248, 113, 113, 0.08);
+}
+
+[data-theme="light"] {
+  --bg-primary:    #ffffff;
+  --bg-secondary:  #f6f8fa;
+  --bg-tertiary:   #eaeef2;
+  --bg-panel:      #ffffff;
+  --bg-hover:      #f3f4f6;
+  --bg-selected:   #edf5ff;
+
+  --border-primary:   #d0d7de;
+  --border-secondary: #e5e7eb;
+  --border-accent:    #0969da;
+  --grid-gap-color:   rgba(0, 0, 0, 0.35); /* Açık temada Siyaha Yakın pane aralığı */
+
+  --text-primary:   #1f2328;
+  --text-secondary: #656d76;
+  --text-muted:     #9ca3af;
+  --text-active:    #000000;  /* Tam siyah metin */
+
+  --accent-blue:      #0969da;
+  --accent-blue-bg:   rgba(9, 105, 218, 0.1);
+  --accent-blue-glow: none;
+  --accent-green:     #1a7f37;
+  --accent-red:       #cf222e;
+  --accent-yellow:    #9a6700;
+  --accent-orange:    #bc4c00;
+  --accent-purple:    #8250df;
+
+  --candle-up:   #26a641;
+  --candle-down: #cf222e;
+
+  --scrollbar-thumb: #d0d7de;
+
+  --signal-color-green: #0d9488;
+  --signal-color-red:   #dc2626;
+  --signal-bg-green:    rgba(13, 148, 136, 0.06);
+  --signal-bg-red:      rgba(220, 38,  38,  0.06);
+}
