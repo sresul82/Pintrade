@@ -453,7 +453,9 @@ const ScreenerCore = (() => {
       return _symCache.binance;
     }
     const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/exchangeInfo?_t=${Date.now()}`);
+    if (!resp.ok) throw new Error(`exchangeInfo HTTP ${resp.status}`);
     const data = await resp.json();
+    if (!data || !Array.isArray(data.symbols)) throw new Error('exchangeInfo: symbols dizisi yok');
     const syms = data.symbols
       .filter(s => s.status === 'TRADING' && s.symbol.endsWith('USDT'))
       .map(s => s.symbol);
@@ -513,6 +515,7 @@ const ScreenerCore = (() => {
       const res = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?_t=${Date.now()}`);
       if (!res.ok) return;
       const arr = await res.json();
+      if (!Array.isArray(arr)) return;
 
       let changed = false;
       arr.forEach(d => {
