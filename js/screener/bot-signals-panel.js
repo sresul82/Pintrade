@@ -49,6 +49,17 @@ const BotSignalsPanel = (() => {
           return;
         }
 
+        // 2) Chart titlebar toggle
+        if (e.target.closest('#bsp-chart-titlebar')) {
+          _chartOpen = !_chartOpen;
+          const section = document.getElementById('bsp-chart-section');
+          const arrow   = document.getElementById('bsp-chart-arrow');
+          if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
+          if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+          return; // render() cagirma - sadece DOM guncelle
+        }
+
+        // 3) Button clickleri
         const btn = e.target.closest('button');
         if (!btn) return;
 
@@ -64,16 +75,6 @@ const BotSignalsPanel = (() => {
         } else if (btn.classList.contains('bsp-sort-btn')) {
           _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc';
           render();
-        }
-
-        // Chart titlebar toggle
-        if (e.target.closest('#bsp-chart-titlebar')) {
-          _chartOpen = !_chartOpen;
-          const section = document.getElementById('bsp-chart-section');
-          const arrow   = document.getElementById('bsp-chart-arrow');
-          if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
-          if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
-          return; // render() cagirma - sadece DOM guncelle
         }
       });
     }
@@ -454,21 +455,24 @@ const BotSignalsPanel = (() => {
         );
         const frValues = chartSignals.map(s => s.currentFR); // zaten % değeri, *100 YOK
 
+        // Determine theme variables for chart
+        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-primary').trim() || '#2a2e39';
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#787b86';
+        
+        const signalGreen = getComputedStyle(document.documentElement).getPropertyValue('--signal-color-green').trim() || '#0d9488';
+        const signalRed = getComputedStyle(document.documentElement).getPropertyValue('--signal-color-red').trim() || '#dc2626';
+
         // Her veri noktası için nokta tipi ve renk
         const ptRadius = chartSignals.map(() => 3);
         const ptStyle  = chartSignals.map(() => 'triangle');  // hepsi üçgen — sinyal noktaları
         const ptColor  = chartSignals.map(s => {
           const delta = s.startFR - s.currentFR;
-          return delta > 0 ? 'var(--signal-color-green)' : 'var(--signal-color-red)';
+          return delta > 0 ? signalGreen : signalRed;
         });
         const ptRotation = chartSignals.map(s => {
           const delta = s.startFR - s.currentFR;
           return delta > 0 ? 0 : 180;   // yeşil yukarı, kırmızı aşağı
         });
-
-        // Determine theme variables for chart
-        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-primary').trim() || '#2a2e39';
-        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#787b86';
 
         _chartInstance = new Chart(ctx, {
           type: 'line',
@@ -529,6 +533,9 @@ const BotSignalsPanel = (() => {
         listEl.scrollTop = listEl.scrollHeight; // Yeni sinyaller altta, en alta git
       }
     }
+
+    // Floating panel açıksa sync et
+    if (window.FloatingPanel) FloatingPanel.onPanelRender();
   }
 
   return { init, render };
