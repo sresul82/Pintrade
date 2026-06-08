@@ -270,6 +270,10 @@ const ScreenerCore = (() => {
       // 2) Funding rates
       const frResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?limit=500&_t=${Date.now()}`);
       const frData = await frResp.json();
+      if (!Array.isArray(frData)) {
+        console.warn('[ScreenerCore] Binance premiumIndex API hatasi:', frData);
+        return;
+      }
 
       // 3) 24h ticker (toplu)
       const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?_t=${Date.now()}`);
