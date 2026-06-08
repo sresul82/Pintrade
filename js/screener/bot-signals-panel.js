@@ -449,7 +449,6 @@ const BotSignalsPanel = (() => {
       const canvas = document.getElementById('bsp-mini-chart');
       const ctx = canvas?.getContext('2d');
       if (ctx) {
-      if (ctx) {
         const labels   = chartSignals.map(s =>
           new Date(s.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
         );
