@@ -68,6 +68,54 @@ const DetailPanel = (() => {
 
   // ── FR countdown timer ────────────────────────────
   let _frInterval = null;
+  let _pollTimer = null;
+  let _currentSym = null;
+  let _currentExchange = 'binance';
+  let _pollCount = 0; // Her 10sn artir, RSI kadansini kontrol etmek icin
+
+  // ── Paylasilan RSI hesaplayici ─────────────────────
+  function _calcRsi(closes, period = 14) {
+    if (closes.length <= period) return null;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff >= 0) gains += diff; else losses -= diff;
+    }
+    let avgGain = gains / period, avgLoss = losses / period;
+    for (let i = period + 1; i < closes.length; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff >= 0) { avgGain = (avgGain * (period - 1) + diff) / period; avgLoss = (avgLoss * (period - 1)) / period; }
+      else { avgGain = (avgGain * (period - 1)) / period; avgLoss = (avgLoss * (period - 1) - diff) / period; }
+    }
+    if (avgLoss === 0) return 100;
+    return 100 - (100 / (1 + avgGain / avgLoss));
+  }
+
+  // tf: '1m' | '5m' | '1h'
+  async function _fetchRsiForTf(tf) {
+    if (!_currentSym) return;
+    const pairSym = _currentSym + 'USDT';
+    const exchange = _currentExchange;
+    try {
+      if (exchange === 'bybit') {
+        const tfMap = { '1m': '1', '5m': '5', '1h': '60' };
+        const interval = tfMap[tf];
+        if (!interval) return;
+        const resp = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${pairSym}&interval=${interval}&limit=100`);
+        if (resp.ok) {
+          const data = (await resp.json())?.result?.list || [];
+          const closes = data.map(k => parseFloat(k[4])).reverse();
+          _setRsi(tf, _calcRsi(closes));
+        }
+      } else {
+        const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/klines?symbol=${pairSym}&interval=${tf}&limit=100`);
+        if (resp.ok) {
+          const data = await resp.json();
+          _setRsi(tf, _calcRsi(data.map(k => parseFloat(k[4]))));
+        }
+      }
+    } catch {}
+  }
   function _startFrTimer(nextTimeMs) {
     if (_frInterval) clearInterval(_frInterval);
     const el = document.getElementById('dp-fr-timer');
@@ -255,10 +303,196 @@ const DetailPanel = (() => {
        const pctEl = document.getElementById('dp-mcap-pct');
        if(pctEl) pctEl.textContent = '';
     }
+
+    if (window.FloatingPanel) FloatingPanel.syncAll();
   }
 
   // ── Load data for a symbol ────────────────────────
+  async function _pollDetailData() {
+    if (!_currentSym) return;
+    const sym = _currentSym;
+    const exchange = _currentExchange;
+    const pairSym = sym + 'USDT';
+
+    try {
+      if (exchange === 'bybit') {
+        const tk = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${pairSym}`);
+        if (tk.ok) {
+          const d = (await tk.json())?.result?.list?.[0];
+          if (d) {
+            const price     = parseFloat(d.lastPrice);
+            const changePct = parseFloat(d.price24hPcnt) * 100;
+            const vol24h    = parseFloat(d.turnover24h);
+            const frPct     = parseFloat(d.fundingRate) * 100;
+
+            const pfEl = document.getElementById('dp-price-futures');
+            if (pfEl) pfEl.textContent = _fmt(price);
+
+            const pcEl = document.getElementById('dp-price-change');
+            if (pcEl) {
+              pcEl.textContent = (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%';
+              pcEl.className = 'dp-price-change ' + (changePct >= 0 ? 'pos-chg' : 'neg-chg');
+            }
+
+            const volEl = document.getElementById('dp-vol-val');
+            if (volEl) {
+              const isVolUp = changePct >= 0;
+              const arrow = isVolUp ? '↗' : '↘';
+              volEl.style.color = isVolUp ? 'var(--dp-green)' : 'var(--dp-red)';
+              volEl.innerHTML = `${Math.floor(vol24h).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${arrow}</span>`;
+            }
+
+            const frEl = document.getElementById('dp-funding');
+            if (frEl) {
+              frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
+              frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
+            }
+
+            const nextFT = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
+            if (nextFT) _startFrTimer(nextFT);
+          }
+        }
+
+        const oiResp = await fetch(`https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${pairSym}&intervalTime=5min&limit=8`);
+        if (oiResp.ok) {
+          const arr = (await oiResp.json())?.result?.list || [];
+          const tkPrice = parseFloat((await (await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${pairSym}`)).json())?.result?.list?.[0]?.lastPrice || 0);
+          const oiHistory = arr.map(x => parseFloat(x.openInterest) * (tkPrice || 1)).reverse();
+          if (oiHistory.length) {
+            const oi = oiHistory[oiHistory.length - 1];
+            const isOiUp = oiHistory.length > 1 ? oiHistory[oiHistory.length - 1] >= oiHistory[oiHistory.length - 2] : true;
+            const oiEl = document.getElementById('dp-oi-val');
+            if (oiEl) {
+              oiEl.style.color = isOiUp ? 'var(--dp-green)' : 'var(--dp-red)';
+              oiEl.innerHTML = `${Math.floor(oi).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${isOiUp ? '↗' : '↘'}</span>`;
+            }
+            _buildOiBars(oiHistory);
+          }
+        }
+
+        const lsResp = await fetch(`https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${pairSym}&period=5min&limit=1`);
+        if (lsResp.ok) {
+          const d = (await lsResp.json())?.result?.list?.[0];
+          if (d) {
+            const lsRatio = parseFloat(d.buyRatio) / parseFloat(d.sellRatio);
+            const lsPct = (lsRatio / (1 + lsRatio)) * 100;
+            const lsBuyEl  = document.getElementById('dp-ls-buy');
+            const lsSellEl = document.getElementById('dp-ls-sell');
+            if (lsBuyEl && lsSellEl) {
+              lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
+              lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
+              document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
+              document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
+            }
+            const lsRatioEl = document.getElementById('dp-ls-ratio');
+            if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
+          }
+        }
+
+      } else {
+        // ── BINANCE ──
+        const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
+        if (tk.ok) {
+          const d = await tk.json();
+          const price     = parseFloat(d.lastPrice);
+          const changePct = parseFloat(d.priceChangePercent);
+          const vol24h    = parseFloat(d.quoteVolume);
+
+          const pfEl = document.getElementById('dp-price-futures');
+          if (pfEl) pfEl.textContent = _fmt(price);
+
+          const pcEl = document.getElementById('dp-price-change');
+          if (pcEl) {
+            pcEl.textContent = (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%';
+            pcEl.className = 'dp-price-change ' + (changePct >= 0 ? 'pos-chg' : 'neg-chg');
+          }
+
+          const volEl = document.getElementById('dp-vol-val');
+          if (volEl) {
+            const isVolUp = changePct >= 0;
+            const arrow = isVolUp ? '↗' : '↘';
+            volEl.style.color = isVolUp ? 'var(--dp-green)' : 'var(--dp-red)';
+            volEl.innerHTML = `${Math.floor(vol24h).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${arrow}</span>`;
+          }
+        }
+
+        const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
+        if (fr.ok) {
+          const d = await fr.json();
+          const frPct = parseFloat(d.lastFundingRate || 0) * 100;
+          const frEl = document.getElementById('dp-funding');
+          if (frEl) {
+            frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
+            frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
+          }
+          const nextFT = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+          if (nextFT) _startFrTimer(nextFT);
+        }
+
+        const oiResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/openInterestHist?symbol=${pairSym}&period=5m&limit=8`);
+        if (oiResp.ok) {
+          const arr = await oiResp.json();
+          const oiHistory = arr.map(x => parseFloat(x.sumOpenInterestValue || x.openInterest || 0));
+          if (oiHistory.length) {
+            const oi = oiHistory[oiHistory.length - 1];
+            const isOiUp = oiHistory.length > 1 ? oiHistory[oiHistory.length - 1] >= oiHistory[oiHistory.length - 2] : true;
+            const oiEl = document.getElementById('dp-oi-val');
+            if (oiEl) {
+              oiEl.style.color = isOiUp ? 'var(--dp-green)' : 'var(--dp-red)';
+              oiEl.innerHTML = `${Math.floor(oi).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${isOiUp ? '↗' : '↘'}</span>`;
+            }
+            _buildOiBars(oiHistory);
+          }
+        }
+
+        const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
+        if (lsResp.ok) {
+          const arr = await lsResp.json();
+          const lsRatio = parseFloat(arr[0]?.longShortRatio || 1);
+          const lsPct = (lsRatio / (1 + lsRatio)) * 100;
+          const lsBuyEl  = document.getElementById('dp-ls-buy');
+          const lsSellEl = document.getElementById('dp-ls-sell');
+          if (lsBuyEl && lsSellEl) {
+            lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
+            lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
+            document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
+            document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
+          }
+          const lsRatioEl = document.getElementById('dp-ls-ratio');
+          if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
+        }
+      }
+    } catch (e) {
+      console.warn('[DetailPanel] Poll error:', e);
+    }
+
+    // ── RSI Kadansi ─────────────────────────────────
+    // _pollCount her 10sn artiyor:
+    // 1m  → her 60sn  → _pollCount % 6 === 0
+    // 5m  → her 300sn → _pollCount % 30 === 0
+    // 1h  → her 900sn → _pollCount % 90 === 0
+    // 4h ve 1d sadece coin seciminde (loadSymbol) guncellenir
+    if (_pollCount % 6 === 0)  _fetchRsiForTf('1m');
+    if (_pollCount % 30 === 0) _fetchRsiForTf('5m');
+    if (_pollCount % 90 === 0) _fetchRsiForTf('1h');
+
+    _pollCount++;
+  }
+
+  function _startPolling() {
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollCount = 0; // Sayaci sifirla, yeni coin icin
+    _pollDetailData(); // Aninda bir kere calistir
+    _pollTimer = setInterval(_pollDetailData, 10000); // Her 10 saniyede guncelle
+  }
+
+  function _stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
   async function loadSymbol(sym, exchange = 'binance') {
+    _currentSym = sym.replace(/USDT$/, '');
+    _currentExchange = exchange;
     sym = sym.replace(/USDT$/, '');
     const nameEl = document.getElementById('dp-coin-name');
     if (nameEl) nameEl.textContent = sym + 'USDT.P';
@@ -283,9 +517,8 @@ const DetailPanel = (() => {
               changePct  = parseFloat(d.price24hPcnt) * 100;
               vol24h     = parseFloat(d.turnover24h);
               frPct      = parseFloat(d.fundingRate) * 100;
-              nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym) || parseInt(d.nextFundingTime) || 0;
-              await new Promise(r => setTimeout(r, 500));
-              frIntervalText = window.fundingIntervalManager?.get(pairSym) || '8h';
+              nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
+              frIntervalText = window.fundingIntervalManager?.get(pairSym, 'bybit') || '8h';
             }
           }
         } catch {}
@@ -372,7 +605,7 @@ const DetailPanel = (() => {
           if (fr.ok) {
             const d = await fr.json();
             frPct = parseFloat(d.lastFundingRate || 0) * 100;
-            nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym) || parseInt(d.nextFundingTime || 0);
+            nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
           }
         } catch {}
 
@@ -446,6 +679,7 @@ const DetailPanel = (() => {
       } catch {}
       console.log('frIntervalText:', frIntervalText);
       update({ sym, price, changePct, spotPrice, frPct, nextFundingTime, frIntervalText, oi, oiHistory, vol24h, lsRatio, rsi: rsiData, cgData, exchange });
+      _startPolling();
     } catch (e) {
       console.error('[DetailPanel] Load error:', e);
     }
@@ -471,14 +705,17 @@ const DetailPanel = (() => {
       });
     });
 
-    // Popout button
+    // Popout button (floating panel toggle)
     document.getElementById('detail-popout')?.addEventListener('click', () => {
-      window.open('index.html#popout', 'DetailPanel', 'width=350,height=750,toolbar=no,menubar=no,scrollbars=yes');
+      if (window.FloatingPanel) FloatingPanel.toggle();
     });
 
     // Listen for symbol change
     EventBus.on('symbol:change', ({ symbol, exchange }) => {
-      if (symbol) loadSymbol(symbol.replace(/USDT$/, ''), exchange || 'binance');
+      if (symbol) {
+        _stopPolling(); // Eski coin icin polling durdur
+        loadSymbol(symbol.replace(/USDT$/, ''), exchange || 'binance');
+      }
     });
 
     // Listen to live price updates to sync perfectly with Top Strip

@@ -496,26 +496,10 @@
           <div class="detail-resize" id="detail-resize"></div>
 
           <div class="detail-tabs">
-            <button class="detail-tab active" data-tab="detail">Detay</button>
-            <button class="detail-tab" data-tab="signals">Bot Sinyalleri</button>
-            <button class="detail-tab" data-tab="news">Haberler</button>
-            <button
-              id="btn-floating-panel"
-              title="Paneli ayrı pencerede aç"
-              onclick="FloatingPanel.toggle()"
-              style="
-                background: transparent;
-                border: 0.5px solid var(--border-primary);
-                border-radius: 4px;
-                color: var(--text-secondary);
-                font-size: 13px;
-                padding: 3px 7px;
-                cursor: pointer;
-                margin-left: auto;
-                margin-right: 8px;
-              "
-              aria-label="Paneli kayan pencerede aç/kapat"
-            >⧉</button>
+            <button class="detail-tab active" data-tab="detail">Coin Detail</button>
+            <button class="detail-tab" data-tab="signals">Bot Signals</button>
+            <button class="detail-tab" data-tab="news">News</button>
+            <button id="detail-popout" title="Ayrı pencerede aç" aria-label="Paneli kaydırılabilir pencerede aç">⧉</button>
           </div>
 
           <div class="detail-body" id="detail-body">

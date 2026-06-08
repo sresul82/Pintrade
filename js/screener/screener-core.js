@@ -130,13 +130,14 @@ const ScreenerCore = (() => {
     // FR countdown warning: < 15 minutes remaining
     const secsLeft = d.nextFundingTime ? Math.max(0, (d.nextFundingTime - Date.now()) / 1000) : Infinity;
     const frhCls = secsLeft < 15 * 60 ? 'frh-ending' : '';
+    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
 
     row.innerHTML = `
       <span class="wl-sym">${d.sym}USDT</span>
       <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
       <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
       <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
-      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT') ?? '—'}</span>
+      <span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>
       <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
       <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
     `;
@@ -155,12 +156,14 @@ const ScreenerCore = (() => {
 
     const frCls = d.fr !== null ? (d.fr < 0 ? 'neg' : 'pos') : '';
     const trendCls = _frTracker ? _frTracker.getFRTrendType(d.sym + 'USDT') : 'neutral';
+    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
+    
     row.innerHTML = `
       <span class="wl-sym">${d.sym}USDT</span>
       <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
       <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
       <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
-      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT') ?? '—'}</span>
+      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>
       <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
       <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
     `;
@@ -186,12 +189,13 @@ const ScreenerCore = (() => {
     const isAll = _activeTab.endsWith('-all');
     const frag = document.createDocumentFragment();
     let separatorAdded = false;
+    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
 
     _filtered.forEach((d, i) => {
-      const is1h = window.fundingIntervalManager?.get(d.sym + 'USDT') === '1h';
+      const is1h = window.fundingIntervalManager?.get(d.sym + 'USDT', exc) === '1h';
       if (!isAll && !separatorAdded && !is1h && i > 0) {
         const prev = _filtered[i - 1];
-        if (window.fundingIntervalManager?.get(prev.sym + 'USDT') === '1h') {
+        if (window.fundingIntervalManager?.get(prev.sym + 'USDT', exc) === '1h') {
           const sep = document.createElement('div');
           sep.className = 'wl-interval-separator';
           frag.appendChild(sep);
@@ -234,8 +238,9 @@ const ScreenerCore = (() => {
 
     // 1h interval coinleri üste taşı
     if (window.fundingIntervalManager) {
-      const coins1h = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT') === '1h');
-      const coinsOther = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT') !== '1h');
+      const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
+      const coins1h = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) === '1h');
+      const coinsOther = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) !== '1h');
       arr = [...coins1h, ...coinsOther];
     }
 
@@ -283,8 +288,8 @@ const ScreenerCore = (() => {
             price: parseFloat(f.markPrice) || null,
             pct:   tk.priceChangePercent ? parseFloat(tk.priceChangePercent) : null,
             fr:    parseFloat(f.lastFundingRate) || null,
-            frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(f.symbol) || f.nextFundingTime),
-            nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(f.symbol) || parseInt(f.nextFundingTime) || 0,
+            frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || f.nextFundingTime),
+            nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || parseInt(f.nextFundingTime) || 0,
             vol:   tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
             oi:    null,  // OI ayrı endpoint — ileride eklenecek
           };
@@ -376,8 +381,8 @@ const ScreenerCore = (() => {
           price: parseFloat(t.lastPrice) || null,
           pct:   parseFloat(t.price24hPcnt) * 100 || null,
           fr:    parseFloat(t.fundingRate) || null,
-          frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol) || parseInt(t.nextFundingTime) || 0),
-          nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol) || parseInt(t.nextFundingTime) || 0,
+          frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0),
+          nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0,
           vol:   parseFloat(t.turnover24h) || null,
           oi:    parseFloat(t.openInterestValue) || null,
           oiDir: null,

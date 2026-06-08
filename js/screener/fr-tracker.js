@@ -315,6 +315,7 @@ class ScalpFRMonitor {
 
         const signal = {
             symbol,
+            exchange: (typeof ScreenerCore !== 'undefined' && ScreenerCore.getActiveTab && ScreenerCore.getActiveTab().startsWith('by')) ? 'bybit' : 'binance',
             startFR,           // pencere başlangıç FR (borsadaki % değeri)
             currentFR,         // tetiklenme anındaki FR
             delta: d,          // currentFR - startFR

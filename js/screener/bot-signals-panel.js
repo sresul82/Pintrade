@@ -11,6 +11,7 @@ const BotSignalsPanel = (() => {
   let _chartInstance = null;      // Chart.js instance for the mini graph
   let _sortOrder = 'desc';        // 'desc' = yeni yukari | 'asc' = yeni asagi
   let _chartOpen = true;          // grafik baslangicta acik
+  let _extraContainers = [];      // Floating panel gibi ek render hedefleri
 
   const BOT_TABS = [
     { id: 'fr',        label: 'FR' },
@@ -231,8 +232,13 @@ const BotSignalsPanel = (() => {
   }
 
   function render() {
-    const container = document.getElementById('dp-signals-tab');
-    if (!container) return;
+    // Tum hedef container'lari topla
+    const _allContainers = [
+      document.getElementById('dp-signals-tab'),
+      ..._extraContainers
+    ].filter(Boolean);
+
+    if (_allContainers.length === 0) return;
 
     // Clean up previous chart instance
     if (_chartInstance) {
@@ -241,14 +247,18 @@ const BotSignalsPanel = (() => {
     }
 
     // Reset container style for custom layout
-    container.style.padding = '0';
-    container.style.textAlign = 'left';
+    _allContainers.forEach(container => {
+      container.style.padding = '0';
+      container.style.textAlign = 'left';
+    });
 
     if (typeof scalpFRMonitor === 'undefined') {
-      container.innerHTML = `
-        <div style="padding:16px; text-align:center; color:var(--text-secondary); font-size:12px;">
-          ScalpFR monitor çalışmıyor.
-        </div>`;
+      _allContainers.forEach(container => {
+        container.innerHTML = `
+          <div style="padding:16px; text-align:center; color:var(--text-secondary); font-size:12px;">
+            ScalpFR monitor çalışmıyor.
+          </div>`;
+      });
       return;
     }
 
@@ -287,7 +297,7 @@ const BotSignalsPanel = (() => {
     if (_activeBot !== 'fr') {
       html += `<div class="bsp-empty">Bu bot tipi henüz aktif değil.</div>`;
       html += `</div>`;
-      container.innerHTML = html;
+      _allContainers.forEach(c => { c.innerHTML = html; });
       return;
     }
 
@@ -394,9 +404,9 @@ const BotSignalsPanel = (() => {
 
         // Remaining = bu coin icin bir sonraki FR odeme saatine kalan sure
         // Screener'dan o coine ait nextFundingTime'i al
-        let remainingText = '—';
-        const screenerRow = (typeof ScreenerCore !== 'undefined') ? ScreenerCore.getRow(sig.symbol) : null;
-        const nextFT = screenerRow?.nextFundingTime;
+        let remainingText = '-';
+        const sigExchange = sig.exchange || 'binance';
+        const nextFT = window.fundingIntervalManager?.getNextFundingTime(sig.symbol, sigExchange);
         if (nextFT && nextFT > Date.now()) {
           const msLeft = nextFT - Date.now();
           const remH = Math.floor(msLeft / 3600000);
@@ -443,11 +453,16 @@ const BotSignalsPanel = (() => {
       </div>`;
 
     html += `</div>`; // bsp-container close
-    container.innerHTML = html;
+    
+    // Her hedef container'a ayni HTML'i yaz
+    _allContainers.forEach(c => { c.innerHTML = html; });
+
+    // Chart sadece birinciye render edilir (ana panel)
+    const container = _allContainers[0];
 
     // ── 7. Render Mini Chart ─────────────────────────
     if (hasChart) {
-      const canvas = document.getElementById('bsp-mini-chart');
+      const canvas = container.querySelector('#bsp-mini-chart');
       const ctx = canvas?.getContext('2d');
       if (ctx) {
         const labels   = chartSignals.map(s =>
@@ -525,20 +540,33 @@ const BotSignalsPanel = (() => {
     }
 
     // Auto-scroll logic based on _sortOrder
-    const listEl = document.getElementById('bsp-signals-list');
-    if (listEl) {
-      if (_sortOrder === 'desc') {
-        listEl.scrollTop = 0; // Yeni sinyaller ustte, en uste git
-      } else {
-        listEl.scrollTop = listEl.scrollHeight; // Yeni sinyaller altta, en alta git
-      }
-    }
+    _allContainers.forEach(c => {
+        const listEl = c.querySelector('#bsp-signals-list');
+        if (listEl) {
+          if (_sortOrder === 'desc') {
+            listEl.scrollTop = 0; // Yeni sinyaller ustte, en uste git
+          } else {
+            listEl.scrollTop = listEl.scrollHeight; // Yeni sinyaller altta, en alta git
+          }
+        }
+    });
 
     // Floating panel açıksa sync et
     if (window.FloatingPanel) FloatingPanel.onPanelRender();
   }
 
-  return { init, render };
+  function addContainer(el) {
+    if (el && !_extraContainers.includes(el)) {
+      _extraContainers.push(el);
+      render(); // Hemen guncelle
+    }
+  }
+
+  function removeContainer(el) {
+    _extraContainers = _extraContainers.filter(c => c !== el);
+  }
+
+  return { init, render, addContainer, removeContainer };
 })();
 
 window.BotSignalsPanel = BotSignalsPanel;

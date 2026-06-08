@@ -2,40 +2,53 @@
 // Fetches and caches funding interval info from Binance API
 class FundingIntervalManager {
     constructor() {
-        this.cache = new Map();
+        this.cache = {
+            binance: new Map(),
+            bybit:   new Map(),
+        };
         this.loaded = false;
     }
+
     async fetch() {
-    try {
-        const response = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/fundingInfo`);
-        const data = await response.json();
-        data.forEach(item => {
-            const hours = item.fundingIntervalHours || 8;
-            this.cache.set(item.symbol, hours + 'h');
-        });
-    } catch (e) {}
+        // Binance
+        try {
+            const response = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/fundingInfo`);
+            const data = await response.json();
+            data.forEach(item => {
+                const hours = item.fundingIntervalHours || 8;
+                this.cache.binance.set(item.symbol, hours + 'h');
+            });
+        } catch (e) {}
 
-    try {
-        const response = await fetch('https://api.bybit.com/v5/market/instruments-info?category=linear&limit=1000');
-        const data = await response.json();
-        (data?.result?.list || []).forEach(item => {
-            const hours = parseInt(item.fundingInterval) / 60 || 8;
-            this.cache.set(item.symbol, hours + 'h');
-        });
-    } catch (e) {}
+        // Bybit
+        try {
+            const response = await fetch('https://api.bybit.com/v5/market/instruments-info?category=linear&limit=1000');
+            const data = await response.json();
+            (data?.result?.list || []).forEach(item => {
+                const hours = parseInt(item.fundingInterval) / 60 || 8;
+                this.cache.bybit.set(item.symbol, hours + 'h');
+            });
+        } catch (e) {}
 
-    this.loaded = true;
-    console.log('✅ Funding intervals loaded:', this.cache.size, 'coins');
-    EventBus.emit('funding:loaded');
-}
-    get(symbol) {
-        return this.cache.get(symbol) || '8h';
+        this.loaded = true;
+        console.log('✅ Funding intervals loaded:',
+            'Binance:', this.cache.binance.size,
+            'Bybit:', this.cache.bybit.size
+        );
+        EventBus.emit('funding:loaded');
     }
-    is1hInterval(symbol) {
-        return this.get(symbol) === '1h';
+
+    // exchange parametresi zorunlu, default 'binance' (geriye dönük uyumluluk için)
+    get(symbol, exchange = 'binance') {
+        return this.cache[exchange]?.get(symbol) || '8h';
     }
-    getNextFundingTime(symbol) {
-        const intervalText = this.get(symbol);
+
+    is1hInterval(symbol, exchange = 'binance') {
+        return this.get(symbol, exchange) === '1h';
+    }
+
+    getNextFundingTime(symbol, exchange = 'binance') {
+        const intervalText = this.get(symbol, exchange);
         const hours = parseInt(intervalText) || 8;
         const now = Date.now();
         const date = new Date(now);
