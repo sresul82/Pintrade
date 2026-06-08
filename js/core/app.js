@@ -31,6 +31,8 @@ const App = {
     State.init();
     if (window.DrawingManager) window.DrawingManager.init();
     if (window.Sidebar) window.Sidebar.init();
+    if (window.bybitFRPoller) window.bybitFRPoller.start();          // ← add here
+    // if (window.binanceFRPoller) window.binanceFRPoller.start();   // Binance ready, disabled for now
 
     // Initialize chart if present
     if (window.initChartCore) {
@@ -469,10 +471,7 @@ const App = {
       EventBus.emit('chart:snapshot');
     });
 
-    // Replay
-    document.getElementById('btn-replay')?.addEventListener('click', () => {
-      EventBus.emit('chart:replay:toggle');
-    });
+
 
     // Settings
     document.getElementById('btn-settings')?.addEventListener('click', () => {

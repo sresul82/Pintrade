@@ -25,7 +25,10 @@ const ScreenerCore = (() => {
     { key: 'sym',   label: 'Symbol',  cls: 'wl-col-sym',   sort: 'sym'   },
     { key: 'price', label: 'Price',   cls: 'wl-col-right',  sort: 'price' },
     { key: 'pct',   label: 'Chg%',   cls: 'wl-col-right',  sort: 'pct'   },
+    { key: 'fr',    label: 'FR%',     cls: 'wl-col-right',  sort: 'fr'    },
+    { key: 'frh',   label: 'FR(h)',   cls: 'wl-col-right',  sort: 'frh'   },
     { key: 'vol',   label: 'Vol(USD)',cls: 'wl-col-right',  sort: 'vol'   },
+    { key: 'oi',    label: 'OI',      cls: 'wl-col-right',  sort: 'oi'    },
   ];
 
   /* ── State ────────────────────────────────────────── */
@@ -129,11 +132,11 @@ const ScreenerCore = (() => {
     const frhCls = secsLeft < 15 * 60 ? 'frh-ending' : '';
 
     row.innerHTML = `
-      <span class="wl-sym">${d.sym}USDT.P</span>
+      <span class="wl-sym">${d.sym}USDT</span>
       <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
       <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
       <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
-      <span class="wl-frh wl-col-right ${frhCls}">${d.frh ?? '—'}</span>
+      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT') ?? '—'}</span>
       <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
       <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
     `;
@@ -150,11 +153,16 @@ const ScreenerCore = (() => {
     row.dataset.sym = d.sym;
     if (d.sym === _selected) row.classList.add('selected');
 
+    const frCls = d.fr !== null ? (d.fr < 0 ? 'neg' : 'pos') : '';
+    const trendCls = _frTracker ? _frTracker.getFRTrendType(d.sym + 'USDT') : 'neutral';
     row.innerHTML = `
-      <span class="wl-sym">${d.sym}USDT.P</span>
+      <span class="wl-sym">${d.sym}USDT</span>
       <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
       <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
+      <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
+      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT') ?? '—'}</span>
       <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
+      <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
     `;
     const symSpan = row.querySelector('.wl-sym');
     if (symSpan) {
@@ -275,8 +283,8 @@ const ScreenerCore = (() => {
             price: parseFloat(f.markPrice) || null,
             pct:   tk.priceChangePercent ? parseFloat(tk.priceChangePercent) : null,
             fr:    parseFloat(f.lastFundingRate) || null,
-            frh:   _frInterval(f.nextFundingTime),
-            nextFundingTime: parseInt(f.nextFundingTime) || 0,
+            frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(f.symbol) || f.nextFundingTime),
+            nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(f.symbol) || parseInt(f.nextFundingTime) || 0,
             vol:   tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
             oi:    null,  // OI ayrı endpoint — ileride eklenecek
           };
@@ -368,8 +376,8 @@ const ScreenerCore = (() => {
           price: parseFloat(t.lastPrice) || null,
           pct:   parseFloat(t.price24hPcnt) * 100 || null,
           fr:    parseFloat(t.fundingRate) || null,
-          frh:   t.nextFundingTime ? _frInterval(parseInt(t.nextFundingTime)) : '—',
-          nextFundingTime: parseInt(t.nextFundingTime) || 0,
+          frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol) || parseInt(t.nextFundingTime) || 0),
+          nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol) || parseInt(t.nextFundingTime) || 0,
           vol:   parseFloat(t.turnover24h) || null,
           oi:    parseFloat(t.openInterestValue) || null,
           oiDir: null,
@@ -445,7 +453,9 @@ const ScreenerCore = (() => {
       return _symCache.binance;
     }
     const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/exchangeInfo?_t=${Date.now()}`);
+    if (!resp.ok) throw new Error(`exchangeInfo HTTP ${resp.status}`);
     const data = await resp.json();
+    if (!data || !Array.isArray(data.symbols)) throw new Error('exchangeInfo: symbols dizisi yok');
     const syms = data.symbols
       .filter(s => s.status === 'TRADING' && s.symbol.endsWith('USDT'))
       .map(s => s.symbol);
@@ -505,6 +515,7 @@ const ScreenerCore = (() => {
       const res = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?_t=${Date.now()}`);
       if (!res.ok) return;
       const arr = await res.json();
+      if (!Array.isArray(arr)) return;
 
       let changed = false;
       arr.forEach(d => {
@@ -627,7 +638,10 @@ const ScreenerCore = (() => {
       if (el) el.textContent = _fmtPrice(price);
     });
 
-    if (window.FRTracker) _frTracker = new FRTracker();
+    if (window.FRTracker) {
+      _frTracker = new FRTracker();
+      window.frTrackerInstance = _frTracker;
+    }
     if (window.OIManager) _oiManager = new OIManager();
     _startBinancePolling();
     _startBybitPolling();

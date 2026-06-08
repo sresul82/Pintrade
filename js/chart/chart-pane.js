@@ -393,33 +393,37 @@ class ChartPane {
     if (window.DrawingManager) window.DrawingManager.renderPane(this);
   }
 
-  // ── Fix Issue 1: Sync drawing canvas to dynamic price/time scale sizes ──
-  // LightweightCharts price scale width varies with price precision (e.g. DENT
-  // has 8 decimal places → wider scale than BTC). This reads the real runtime
-  // width from pScale.width() so the canvas never overlaps the axes.
   _syncDrawingCanvasClip() {
     if (!this.drawingCanvas || !this.chart) return;
     try {
+      const pScale     = this.chart.priceScale(this.priceSide === 'left' ? 'left' : 'right');
+      const scaleW     = pScale.width() || 65;   // fallback 65px if not yet rendered
+      const timeScaleH = 22;                      // LW Charts time scale is always ~22px at default font
+
       const dpr  = window.devicePixelRatio || 1;
       const rect = this.cvs.getBoundingClientRect();
+      const canvasW = Math.max(1, Math.round((rect.width - scaleW) * dpr));
+      const canvasH = Math.max(1, Math.round((rect.height - timeScaleH) * dpr));
 
-      // Çizim canvas'ı tam pane boyutunda olmalı ki extend edilen çizgiler
-      // fiyat ekseni ve zaman ekseni alanlarında kesilmesin.
-      const canvasW = Math.max(1, Math.round(rect.width  * dpr));
-      const canvasH = Math.max(1, Math.round(rect.height * dpr));
+      // Kırpma işlemi: Çizim alanı fiyat ve zaman cetvelinin üzerine taşmasın.
+      this.drawingCanvas.style.width  = `${rect.width - scaleW}px`;
+      this.drawingCanvas.style.height = `${rect.height - timeScaleH}px`;
+      this.drawingCanvas.style.top = '0px';
+      
+      // Fiyat cetveli soldaysa çizim alanını sağa kaydır, sağdaysa sola yapıştır.
+      if (this.priceSide === 'left') {
+          this.drawingCanvas.style.left = `${scaleW}px`;
+      } else {
+          this.drawingCanvas.style.left = '0px';
+      }
 
-      // CSS boyutunu tam pane'e eşitle
-      this.drawingCanvas.style.width  = `${rect.width}px`;
-      this.drawingCanvas.style.height = `${rect.height}px`;
-
-      // Piksel buffer'ı sadece boyut değiştiyse güncelle (gereksiz yeniden çizimi önler)
+      // Update pixel buffer only if size actually changed (avoid unnecessary redraws)
       if (this.drawingCanvas.width !== canvasW || this.drawingCanvas.height !== canvasH) {
         this.drawingCanvas.width  = canvasW;
-        this.drawingCanvas.height = canvasH;        
+        this.drawingCanvas.height = canvasH;
       }
     } catch (_) {}
   }
-
 
   _buildSeries() {
     if (this.series)    try { this.chart.removeSeries(this.series);    } catch(_) {}
@@ -478,9 +482,9 @@ class ChartPane {
 
     if (this.series) {
       this.series.applyOptions({
-        lastValueVisible: this.symValue !== false,
+        lastValueVisible: false,
         priceLineVisible: this.symLine !== false,
-        title: this.symName !== false ? (this.symbol || 'USD') : '',
+        title: '',
       });
     }
 
@@ -646,6 +650,7 @@ class ChartPane {
       this._lastPrice      = safe.close;
       this._lastPriceIsUp  = safe.close >= safe.open;
       this._lastCandleTime = safe.time;
+      this._updateLivePriceLine();
     } catch (err) {
       console.warn('[ChartPane] _onFeedTick update failed:', err);
       // Lightweight-charts rejects updates older than last bar — safe to ignore
@@ -700,6 +705,7 @@ class ChartPane {
       this._lastPrice      = safe.close;
       this._lastPriceIsUp  = safe.close >= safe.open;
       this._lastCandleTime = safe.time;
+      this._updateLivePriceLine();
 
       // candlesData'yı güncelle
       if (lastExistingTime && safe.time === lastExistingTime) {
@@ -878,8 +884,13 @@ class ChartPane {
       try {
         const pos = this.chart.timeScale().scrollPosition();
         this.rtBtn.classList.toggle('visible', pos < -5);
+        if (this.series) {
+          this.series.applyOptions({ priceLineVisible: false, lastValueVisible: false });
+        }
+        this._updateLivePriceLine();
       } catch(_) {}
       EventBus.emit('range:change', { sourceIdx: this.idx, range });
+      this._positionCountdown();
     }
   }
 
@@ -1153,8 +1164,8 @@ class ChartPane {
     if (s.symName != null || s.symValue != null || s.symLine != null) {
        if (this.series) {
          this.series.applyOptions({
-           title: this.symName !== false ? (this.symbol || 'USD') : '',
-           lastValueVisible: this.symValue !== false,
+           title: '',
+           lastValueVisible: false,
            priceLineVisible: this.symLine !== false,
          });
        }
@@ -1323,6 +1334,30 @@ class ChartPane {
     this._countdownTimer = setInterval(tick, 1000);
   }
 
+  
+  _updateLivePriceLine() {
+    if (!this.series || this._lastPrice == null || this.symLine === false) return;
+    const color = this._lastPriceIsUp ? (this.candleUpColor || '#26a69a') : (this.candleDownColor || '#ef5350');
+    const label = this.symValue !== false ? String(this._lastPrice) : '';
+    if (!this._livePriceLine) {
+      this._livePriceLine = this.series.createPriceLine({
+        price: this._lastPrice,
+        color,
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: this.symValue !== false,
+        title: '',
+      });
+    } else {
+      this._livePriceLine.applyOptions({
+        price: this._lastPrice,
+        color,
+        axisLabelVisible: this.symValue !== false,
+        title: this.symName !== false ? (this.symbol || '') : '',
+      });
+    }
+  }
+
   // Position countdown label directly below the last price label on the price scale
   _positionCountdown() {
     if (!this.countdownEl) return;
@@ -1357,7 +1392,7 @@ class ChartPane {
       // Use cached _lastPriceIsUp (from _loadData or realtime updates)
       this.countdownEl.style.background = this._lastPriceIsUp ? this.candleUpColor : this.candleDownColor;
     } catch (_) {}
-  }  
+  }
 
   fitContent() { this.chart?.timeScale().fitContent(); }
   goToRealtime() { this.chart?.timeScale().scrollToRealTime(); }

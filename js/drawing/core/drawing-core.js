@@ -36,17 +36,37 @@ window.DrawingManager = (() => {
     }
     // If we have a saved style for this tool, clone it
     if (_toolStyles[tool]) return JSON.parse(JSON.stringify(_toolStyles[tool]));
-    if (tool === 'texttool') return { fontSize: 16, textColor: '#d1d4dc', fillColor: 'rgba(0,0,0,0)', bold: false, italic: false, textWidth: 200, textWrap: true };
-    if (tool === 'note') return { fontSize: 13, textColor: '#d1d4dc', fillColor: '#1e222d', borderColor: '#363c4e', bold: false, italic: false };
-    if (tool === 'callout') return { fontSize: 13, textColor: '#d1d4dc', fillColor: '#1e222d', borderColor: '#363c4e', bold: false, italic: false };
-    if (tool === 'pricenote') return { textColor: '#d1d4dc', fillColor: '#1e222d', borderColor: '#363c4e', fontSize: 13 };
-    if (tool === 'pricelabel') return { textColor: '#d1d4dc', fillColor: '#2962ff', fontSize: 12 };
+    if (tool === 'texttool') return { fontSize: 16, textColor: '#ffffff', fillColor: 'rgba(0,0,0,0)', bold: false, italic: false, textWidth: 200, textWrap: true };
+    if (tool === 'note') return { fontSize: 13, textColor: '#ffffff', fillColor: '#1e222d', borderColor: '#363c4e', bold: false, italic: false };
+    if (tool === 'callout') return { fontSize: 13, textColor: '#ffffff', fillColor: '#1e222d', borderColor: '#363c4e', bold: false, italic: false };
+    if (tool === 'pricenote') return { textColor: '#ffffff', fillColor: '#1e222d', borderColor: '#363c4e', fontSize: 13 };
+    if (tool === 'pricelabel') return { textColor: '#a3a6af', fillColor: '#2962ff', fontSize: 12 };
     if (tool === 'flagmark') return { color: '#2962ff', textColor: '#ffffff', fontSize: 11 };
-    if (tool === 'tableanno') return { textColor: '#d1d4dc', fillColor: '#1e222d', borderColor: '#363c4e', fontSize: 12, rows: 2, cols: 3 };
-    if (tool === 'trendline') return { color: '#d1d4dc', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false };
-    if (tool === 'ray') return { color: '#d1d4dc', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: true };
-    if (tool === 'extended') return { color: '#d1d4dc', width: 1, lineStyle: 'solid', extendLeft: true, extendRight: true };
+    if (tool === 'tableanno') return { textColor: '#ffffff', fillColor: '#1e222d', borderColor: '#363c4e', fontSize: 12, rows: 2, cols: 3 };
+    if (tool === 'trendline') return { color: '#a3a6af', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
+    if (tool === 'ray') return { color: '#a3a6af', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
+    if (tool === 'extended') return { color: '#a3a6af', width: 1, lineStyle: 'solid', extendLeft: true, extendRight: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
     // Otherwise return a generic default
+    if (tool === 'hray') return { color: '#2962ff', width: 1, lineStyle: 'solid', extendLeft: false, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
+    if (tool === 'hline') return { color: '#2962ff', width: 1, lineStyle: 'solid', textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
+    if (tool === 'vline') return { color: '#2962ff', width: 1, lineStyle: 'solid', textOrientation: 'vertical', timeLabel: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'middle' };
+    if (tool === 'crossline') return { color: '#2962ff', width: 1, lineStyle: 'solid', priceLabel: true, timeLabel: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)' };
+    if (tool === 'flattopbottom') return { color: '#FF9800', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, capLeft: 'normal', capRight: 'normal', showPrices: true, priceColor: '#2962ff', priceFontSize: 12, priceBold: false, priceItalic: false, background: true, bgColor: '#FF9800', bgOpacity: 15, textColor: '#ffffff' };
+    if (tool === 'regression') return {
+      color: '#2962ff', width: 1, lineStyle: 'solid',
+      upperDev: 2, lowerDev: 2,
+      useUpperDev: true, useLowerDev: true,
+      extendRight: false,
+      source: 'close',
+      textColor: '#ffffff',
+      priceLabel: true,
+      showPearson: true,
+      upColor: '#2962ff', upWidth: 1, upStyle: 'dashed', upOpacity: 0.1,
+      downColor: '#2962ff', downWidth: 1, downStyle: 'dashed',
+      baseOpacity: 0.1,
+      fillColor: 'rgba(41, 137, 255, 0.2)'
+    };
+    if (tool === 'channel') return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(9, 105, 218, 0.2)', textColor: '#ffffff', priceLabel: true, textAlignH: 'center', textAlignV: 'top' };
     return { color: '#2962ff', width: 1, lineStyle: 'solid' };
   }
 
@@ -118,10 +138,20 @@ window.DrawingManager = (() => {
     if (_activeTool === 'pointer') {
       const drawings = getDrawingsForPane(pane.symbol);
       let hitId = null, hitType = null, hitDrawing = null;
-      for (let i = drawings.length - 1; i >= 0; i--) {
-        const d = drawings[i];
-        const ht = _hitTest(x, y, d, pane);
-        if (ht) { hitId = d.id; hitType = ht; hitDrawing = d; break; }
+      // Seçili çizimi önce kontrol et — altında başka çizim olsa bile kaçırma
+      if (_selectedId) {
+        const sel = drawings.find(d => d.id === _selectedId);
+        if (sel) {
+          const ht = _hitTest(x, y, sel, pane);
+          if (ht) { hitId = sel.id; hitType = ht; hitDrawing = sel; }
+        }
+      }
+      if (!hitId) {
+        for (let i = drawings.length - 1; i >= 0; i--) {
+          const d = drawings[i];
+          const ht = _hitTest(x, y, d, pane);
+          if (ht) { hitId = d.id; hitType = ht; hitDrawing = d; break; }
+        }
       }
 
       if (hitId) {
@@ -185,6 +215,7 @@ window.DrawingManager = (() => {
 
       if (!_inProgress || _inProgress.tool !== 'measure') {
         _inProgress = { tool: 'measure', symbol: pane.symbol, p1: pt, p2: { ...pt }, id: _uid() };
+      
       } else {
         _inProgress.p2 = pt;
         _inProgress.finished = true;
@@ -273,11 +304,11 @@ window.DrawingManager = (() => {
     // ── Two-point drawing tools (click-click) ──────────
     const TWO_PT_TOOLS = [
       'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
-      'infoline', 'flattopbottom', 'regression',
+      'infoline', 'regression',
       'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral',
       'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed',
       'cyclic-lines', 'time-cycles', 'sine-line',
-      'disjointch', 'circle', 'ellipse',
+      'circle', 'ellipse',
       'note', 'callout', 'pricenote'
     ];
     if (TWO_PT_TOOLS.includes(_activeTool)) {
@@ -287,6 +318,17 @@ window.DrawingManager = (() => {
         // Second click: finish drawing
         if (['note', 'callout', 'pricenote'].includes(_activeTool)) {
           _inProgress.p2 = { time: rawTime, price: rawPrice };
+          } else if (e.shiftKey && ['trendline', 'ray', 'extended'].includes(_activeTool) && _inProgress.p1) {
+          const p1x = _timeToX(pane, _inProgress.p1.time);
+          const p1y = pane.series.priceToCoordinate(_inProgress.p1.price);
+          const rawX = pane.chart.timeScale().timeToCoordinate(pt.time);
+          const dx = rawX - p1x;
+          const dy = pane.series.priceToCoordinate(pt.price) - p1y;
+          if (Math.abs(dy) < Math.abs(dx)) {
+            _inProgress.p2 = { time: pt.time, price: _inProgress.p1.price };
+          } else {
+            _inProgress.p2 = { time: _inProgress.p1.time, price: pt.price };
+          }
         } else {
           _inProgress.p2 = pt;
         }
@@ -313,8 +355,7 @@ window.DrawingManager = (() => {
 
     // ── Three-point drawing tools (click-click-click) ───
     const THREE_PT_TOOLS = [
-      'fib-ext', 'fib-channel', 'fib-timebased',
-      'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch',
+      'flattopbottom', 'fib-ext', 'fib-channel', 'fib-timebased',
       'rotatedrect', 'triangle', 'arc', 'curve', 'channel'
     ];
     if (THREE_PT_TOOLS.includes(_activeTool)) {
@@ -465,6 +506,22 @@ window.DrawingManager = (() => {
             const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
             d.p2 = { time, price };
           }
+        } else if (d.tool === 'flattopbottom' && _dragState.hitType === 'ftb_left') {
+          // Sol yatay anchor: sadece Y (fiyat) hareket eder → p3.price güncelle
+          // X sabit kalır (p1.x'e kilitli, zaten görsel olarak öyle)
+          const { price } = _snapToCandle(pane, rawTime, rawPrice);
+          d.p3 = { ...d.p3, price };
+
+        } else if (d.tool === 'flattopbottom' && _dragState.hitType === 'ftb_right') {
+          // Sağ yatay anchor: sadece Y (fiyat) hareket eder → p3.price güncelle
+          // Her iki anchor aynı fiyatta olmalı, birlikte hareket eder
+          const { price } = _snapToCandle(pane, rawTime, rawPrice);
+          d.p3 = { ...d.p3, price };
+
+        } else if (d.tool === 'flattopbottom' && _dragState.hitType === 'ftb_hline') {
+          // Yatay çizginin gövdesine sürükleme: sadece Y hareket eder
+          const { price } = _snapToCandle(pane, rawTime, rawPrice);
+          d.p3 = { ...d.p3, price };
         } else if (_dragState.hitType === 'p3') {
           const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
           d.p3 = { time, price };
@@ -646,6 +703,52 @@ window.DrawingManager = (() => {
               if (!p1IsTop) d.p1.price = price; else d.p2.price = price;
             }
           }
+        } else if (_dragState.hitType === 'midpoint' && d.tool === 'hline') {
+          const origY = pane.series.priceToCoordinate(_dragState.origPrice);
+          const rawPrice = pane.series.coordinateToPrice(origY + dy);
+          const rawTime = pane.chart.timeScale().coordinateToTime(_dragState.startX + (x - _dragState.startX));
+          const { price } = _snapToCandle(pane, rawTime ?? d.time ?? rawTime, rawPrice);
+          d.price = price;
+          } else if (_dragState.hitType === 'vline_midpoint' && d.tool === 'vline') {
+            if (_magnetMode !== 'off') {
+              const { time } = _snapToCandle(pane, rawTime, rawPrice);
+              d.time = time;
+            } else {
+              d.time = rawTime;
+            }
+        } else if (_dragState.hitType === 'hray_p1') {
+          const origY = pane.series.priceToCoordinate(_dragState.origPrice);
+          const origX = _timeToX(pane, _dragState.origTime);
+          const rawPrice = pane.series.coordinateToPrice(origY + dy);
+          const rawTime = pane.chart.timeScale().coordinateToTime(origX + dx);
+          const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
+          d.price = price;
+          d.time  = time;
+          if (d.p1) { d.p1.price = price; d.p1.time = time; }
+        } else if (_dragState.hitType === 'reg_p1' || _dragState.hitType === 'reg_p2') {
+          const isP1 = _dragState.hitType === 'reg_p1';
+          const candles = pane.candlesData || [];
+          const toSec = t => typeof t === 'object'
+            ? new Date(t.year, t.month-1, t.day, t.hour||0, t.minute||0).getTime()/1000 : t;
+          const rawTimeNum = typeof rawTime === 'object'
+            ? new Date(rawTime.year, rawTime.month-1, rawTime.day, rawTime.hour||0, rawTime.minute||0).getTime()/1000
+            : rawTime;
+          // En yakın mumu bul
+          const nearestCdl = candles.reduce((a, b) =>
+            Math.abs(toSec(b.time) - rawTimeNum) < Math.abs(toSec(a.time) - rawTimeNum) ? b : a, candles[0]);
+          if (nearestCdl) {
+            // En yakın OHLC fiyatını bul — her zaman snap, weak/strong fark etmez
+            const ohlc = [nearestCdl.open, nearestCdl.high, nearestCdl.low, nearestCdl.close].filter(v => v != null);
+            const snapPrice = ohlc.reduce((a, b) => Math.abs(b - rawPrice) < Math.abs(a - rawPrice) ? b : a);
+            if (isP1) d.p1 = { time: nearestCdl.time, price: snapPrice };
+            else      d.p2 = { time: nearestCdl.time, price: snapPrice };
+          } else {
+            if (isP1) d.p1 = { time: rawTime, price: rawPrice };
+            else      d.p2 = { time: rawTime, price: rawPrice };
+          }
+
+        } else if (_dragState.hitType === 'reg_body') {
+          // Sadece seçim — hareket yok
         } else if (_dragState.hitType === 'rect_body') {
           // Translate entire rect by dragging interior
           const origP1X = _timeToX(pane, _dragState.origP1.time);
@@ -745,18 +848,29 @@ window.DrawingManager = (() => {
         const drawings = getDrawingsForPane(pane.symbol);
         let ht = false;
         let htDrawing = null;
-        for (const d of drawings) {
-          ht = _hitTest(x, y, d, pane);
-          if (ht) { htDrawing = d; break; }
+        // Seçili çizimi önce kontrol et
+        if (_selectedId) {
+          const sel = drawings.find(d => d.id === _selectedId);
+          if (sel) {
+            ht = _hitTest(x, y, sel, pane);
+            if (ht) htDrawing = sel;
+          }
         }
+        if (!ht) {
+          for (let i = drawings.length - 1; i >= 0; i--) {
+            ht = _hitTest(x, y, drawings[i], pane);
+            if (ht) { htDrawing = drawings[i]; break; }
+          }
+        }
+        console.log('ht:', ht, htDrawing?.tool);
         if (_globalLock) {
           pane.cvs.style.cursor = 'crosshair';
         } else if (ht) {
           const tool = htDrawing ? htDrawing.tool : '';
           const isPos = ['longpos', 'shortpos', 'posforecast'].includes(tool);
-          if (ht === 'line' || ht === 'body' || ht === 'rect_body' || ht === 'midpoint') {
+          if (ht === 'line' || ht === 'body' || ht === 'rect_body' || ht === 'midpoint' || ht === 'vline_midpoint') {
             // texttool/note/callout: always text cursor when selected; trendline/ray/extended/infoline: text only over hint area
-            const hintTools = ['trendline', 'ray', 'extended', 'infoline', 'hline'];
+            const hintTools = ['trendline', 'ray', 'extended', 'infoline', 'hline', 'hray'];
             const isSelected = htDrawing?.id === _selectedId;
             const isOverHint = isSelected && hintTools.includes(htDrawing?.tool)
               && _isOverTrendTextHint(x, y, htDrawing?.id);
@@ -767,21 +881,38 @@ window.DrawingManager = (() => {
               pane.cvs.style.cursor = _makeBeamCursor(hintAngle);
             } else if (htDrawing?.tool === 'hline' && ht === 'midpoint') {
               pane.cvs.style.cursor = 'ns-resize';
+            } else if (htDrawing?.tool === 'vline' && ht === 'vline_midpoint') {
+              pane.cvs.style.cursor = 'ew-resize';
+            } else if (htDrawing?.tool === 'hray' && ht === 'hray_p1') {
+              pane.cvs.style.cursor = 'default';
+            } else if (tool === 'regression') {
+              pane.cvs.style.cursor = 'grab';
             } else {
               pane.cvs.style.cursor = 'pointer';
             }
+          } else if (ht === 'hray_p1') {
+            pane.cvs.style.cursor = 'default';
           } else if (ht === 'text_resize_r') {
             pane.cvs.style.cursor = 'ew-resize';
           } else if ((ht === 'targetPrice' || ht === 'stopPrice') && isPos) {
             pane.cvs.style.cursor = 'ns-resize';
           } else if (ht === 'endTime' && isPos) {
             pane.cvs.style.cursor = 'ew-resize';
+          } else if (['ftb_left', 'ftb_right', 'ftb_hline'].includes(ht) && htDrawing?.tool === 'flattopbottom') {
+            const isSelected = htDrawing?.id === _selectedId;
+            pane.cvs.style.cursor = isSelected ? 'ns-resize' : 'pointer';
+          } else if (ht === 'line' && htDrawing?.tool === 'flattopbottom') {
+            pane.cvs.style.cursor = 'pointer';
           } else if (tool === 'channel' && (ht === 'ch_p1' || ht === 'ch_p2' || ht === 'ch_bot_p1' || ht === 'ch_bot_p2')) {
             pane.cvs.style.cursor = 'default';
           } else if (tool === 'channel' && (ht === 'ch_mid_top' || ht === 'ch_mid_bot')) {
             pane.cvs.style.cursor = 'ns-resize';
           } else if (tool === 'channel' && ht === 'line') {
             pane.cvs.style.cursor = 'grab';
+          } else if (ht === 'reg_body') {
+            pane.cvs.style.cursor = 'pointer';
+          } else if (ht === 'reg_p1' || ht === 'reg_p2') {
+            pane.cvs.style.cursor = 'default';
           } else if (ht === 'p1' || ht === 'p2' || ht === 'p3') {
             if (tool === 'rotatedrect' && (ht === 'p1' || ht === 'p2')) {
               pane.cvs.style.cursor = 'default';
@@ -848,6 +979,17 @@ window.DrawingManager = (() => {
           if (noMagnetP2.includes(_inProgress.tool)) {
             _inProgress.p2 = { time: rawTime, price: rawPrice };
             isNoMagnet = true;
+          } else if (e.shiftKey && ['trendline', 'ray', 'extended'].includes(_inProgress.tool) && _inProgress.p1) {
+            const p1x = _timeToX(pane, _inProgress.p1.time);
+            const p1y = pane.series.priceToCoordinate(_inProgress.p1.price);
+            const rawX = pane.chart.timeScale().timeToCoordinate(rawTime);
+            const dx = rawX - p1x;
+            const dy = y - p1y;
+            if (Math.abs(dy) < Math.abs(dx)) {
+              _inProgress.p2 = { time, price: _inProgress.p1.price };
+            } else {
+              _inProgress.p2 = { time: _inProgress.p1.time, price };
+            }
           } else {
             _inProgress.p2 = { time, price };
           }
@@ -885,7 +1027,7 @@ window.DrawingManager = (() => {
 
       // If single click on already selected trendline/hline AND over the "Add Text" hint -> open inline editor
       // Double-click koruması: 280ms sonra aç, bu sürede dblclick gelirse iptal et
-      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline', 'hline'].includes(ds.d.tool)) {
+      if (!wasDragging && ds.isReClick && ['trendline', 'ray', 'extended', 'infoline', 'hline', 'hray', 'vline'].includes(ds.d.tool)) {
         const cx = e.clientX - pane.cvs.getBoundingClientRect().left;
         const cy = e.clientY - pane.cvs.getBoundingClientRect().top;
         if (_isOverTrendTextHint(cx, cy, ds.d.id)) {
@@ -942,14 +1084,132 @@ window.DrawingManager = (() => {
     const s = d.style || {};
     const canvasRect = (pane.canvasContainer || pane.drawingCanvas || pane.cvs).getBoundingClientRect();
 
+    // vline: dikey çizgi — zaman eksenine göre X, sabit canvas Y
+    if (d.tool === 'vline') {
+      if (d.time == null) return;
+      const x = pane.chart.timeScale().timeToCoordinate(d.time);
+      if (x == null || !isFinite(x)) return;
+      const dpr = window.devicePixelRatio || 1;
+      const cvsH = pane.drawingCanvas.height / dpr;
+      const textAlignH = s.textAlignH || 'center';
+      const textAlignV = s.textAlignV || 'middle';
+      const orientation = s.textOrientation || 'vertical';
+
+      let tx;
+      if      (textAlignH === 'left')  tx = x - 6;
+      else if (textAlignH === 'right') tx = x + 6;
+      else                             tx = x;
+
+      const rowH = (s.fontSize || 14) + 4;
+      let ty;
+      if      (textAlignV === 'bottom') ty = cvsH - rowH;
+      else if (textAlignV === 'middle') ty = cvsH / 2;
+      else                              ty = 10;
+
+      let transformY, transformOrigin;
+      if (orientation === 'vertical') {
+        transformY = 'translate(-50%, -50%) rotate(-90deg)';
+        transformOrigin = '50% 50%';
+      } else {
+        if      (textAlignH === 'left')  transformY = 'translate(-100%, 0%)';
+        else if (textAlignH === 'right') transformY = 'translate(0%, 0%)';
+        else                             transformY = 'translate(-50%, 0%)';
+        transformOrigin = '0 0';
+      }
+
+      const anchorViewX = canvasRect.left + tx;
+      const anchorViewY = canvasRect.top  + ty;
+      const fontSize = s.fontSize || 13;
+
+      const ta = document.createElement('textarea');
+      ta.id = 'trendline-text-editor';
+      ta.value = s.text || '';
+      ta.placeholder = 'Add text…';
+      ta.rows = 1;
+
+      Object.assign(ta.style, {
+        position:        'fixed',
+        left:            anchorViewX + 'px',
+        top:             anchorViewY + 'px',
+        transform:       transformY,
+        transformOrigin: transformOrigin,
+        zIndex:          '99999',
+        background:      'rgba(19,23,34,0.92)',
+        color:           s.textColor || '#d1d4dc',
+        fontSize:        fontSize + 'px',
+        fontFamily:      '"JetBrains Mono", monospace',
+        fontWeight:      s.bold   ? 'bold'   : 'normal',
+        fontStyle:       s.italic ? 'italic' : 'normal',
+        border:          '1px solid #2962ff',
+        outline:         'none',
+        padding:         '3px 6px',
+        minWidth:        '80px',
+        maxWidth:        '300px',
+        resize:          'none',
+        overflow:        'hidden',
+        borderRadius:    '3px',
+        cursor:          'text',
+        caretColor:      '#fff',
+      });
+
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+
+      const commit = () => {
+        const val = ta.value.trim();
+        d.style = d.style || {};
+        d.style.text = val || '';
+        ta.remove();
+        EventBus.emit('drawing:updated', d);
+        EventBus.emit('drawing:redraw');
+      };
+
+      ta.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ta.remove(); }
+      });
+      ta.addEventListener('blur', commit);
+      return; // vline için burada bitir
+    }
+
     // hline: p1/p2 yok, price ve canvas genişliğinden anchor hesapla
-    if (d.tool === 'hline') {
+    if (d.tool === 'hline' || d.tool === 'hray') {
       if (d.price == null || !isFinite(d.price)) return;
       const y = pane.series.priceToCoordinate(d.price);
       if (y == null || !isFinite(y)) return;
       const cvsW = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const anchorX = cvsW / 2;
-      const anchorY = y;
+      const textAlignH = s.textAlignH || 'center';
+      const textAlignV = s.textAlignV || 'top';
+
+      // Price label genişliğini hesapla (çizginin bittiği yer)
+      let labelW = 0;
+      if (s.priceLabel !== false) {
+        const tmpCtx = pane.drawingCanvas.getContext('2d');
+        tmpCtx.font = '10px "JetBrains Mono", sans-serif';
+        const priceStr = d.price != null ? d.price.toFixed(2) : '';
+        labelW = tmpCtx.measureText(priceStr).width + 18;
+      }
+      const lineEndX = cvsW - labelW;
+
+      // hray için startX, hline için 0
+      let lineStartX = 0;
+      if (d.tool === 'hray') {
+        const rawX = pane.chart.timeScale().timeToCoordinate(d.time);
+        lineStartX = (rawX != null && isFinite(rawX) && !s.extendLeft) ? rawX : 0;
+      }
+
+      let anchorX;
+      if (textAlignH === 'left')       anchorX = lineStartX + 6;
+      else if (textAlignH === 'right') anchorX = lineEndX - 6;
+      else                             anchorX = (lineStartX + lineEndX) / 2;
+
+      // textAlignV'e göre Y
+      let anchorY, transformY;
+      if (textAlignV === 'bottom')      { anchorY = y + 5;  transformY = 'translate(-50%, 0%)'; }
+      else if (textAlignV === 'middle') { anchorY = y;       transformY = 'translate(-50%, -50%)'; }
+      else                              { anchorY = y - 5;   transformY = 'translate(-50%, -100%)'; }
+
       const anchorViewX = canvasRect.left + anchorX;
       const anchorViewY = canvasRect.top  + anchorY;
       const fontSize = s.fontSize || 13;
@@ -963,8 +1223,8 @@ window.DrawingManager = (() => {
       Object.assign(ta.style, {
         position:        'fixed',
         left:            anchorViewX + 'px',
-        top:             (anchorViewY - 5) + 'px',
-        transform:       'translate(-50%, -100%)',
+        top:             anchorViewY + 'px',
+        transform:       transformY,
         transformOrigin: '0 0',
         zIndex:          '99999',
         background:      'rgba(19,23,34,0.92)',
@@ -1133,6 +1393,19 @@ window.DrawingManager = (() => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // Fiyat cetveli veya zaman cetveli bölgesine tıklandıysa drawing hit-test yapma.
+    // Bu bölgelerdeki çift tıklama fitContent() için LWC'ye bırakılmalı.
+    const timeScaleH = 22;
+    const priceScaleW = (pane.chart
+      ? (pane.chart.priceScale(pane.priceSide === 'left' ? 'left' : 'right').width() || 65)
+      : 65);
+    const drawingW = rect.width - priceScaleW;
+    const drawingH = rect.height - timeScaleH;
+    const drawingOffsetX = pane.priceSide === 'left' ? priceScaleW : 0;
+    if (x < drawingOffsetX || x > drawingOffsetX + drawingW || y > drawingH) {
+      return false;
+    }
+
     const drawings = getDrawingsForPane(pane.symbol);
     for (let i = drawings.length - 1; i >= 0; i--) {
       const d = drawings[i];
@@ -1281,6 +1554,7 @@ window.DrawingManager = (() => {
       const activeSym = State.get('activeSymbol');
       if (!activeSym) return;
       const removeLocked = localStorage.getItem('pintrade_remove_locked') === 'true';
+      localStorage.removeItem('pintrade_remove_locked');
 
       const all = State.get('drawings') || {};
       const current = all[activeSym] || [];
@@ -1290,7 +1564,8 @@ window.DrawingManager = (() => {
         all[activeSym] = [];
       }
 
-      _saveState(all);
+      State.set('drawings', all);
+      Storage.save('drawings', all);
       _selectedId = null;
       requestRedrawAll();
       EventBus.emit('drawing:deleted', null); // Trigger UI updates
@@ -1350,6 +1625,15 @@ window.DrawingManager = (() => {
           }
         });
       }
+    });
+
+    // Ctrl+Z: Undo, Ctrl+Y / Ctrl+Shift+Z: Redo
+    document.addEventListener('keydown', e => {
+      const focused = document.activeElement;
+      const isEditing = focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.isContentEditable);
+      if (isEditing) return;
+      if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
+      if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
     });
 
     // Ctrl key: temporarily toggle magnet mode while drawing
@@ -1557,7 +1841,7 @@ window.DrawingManager = (() => {
   }
 
   function _renderAnchors(ctx, d, pane) {
-    const noGenericAnchors = ['note', 'callout', 'pricenote', 'pricelabel', 'tableanno', 'texttool'];
+    const noGenericAnchors = ['note', 'callout', 'pricenote', 'pricelabel', 'tableanno', 'texttool', 'regression'];
     if (noGenericAnchors.includes(d.tool)) return;
 
     const pts = [];
@@ -1671,7 +1955,7 @@ window.DrawingManager = (() => {
           const x = _timeToX(pane, d.time);
           if (x !== null) pts.push({ x, y });
         } else if (d.tool === 'hline') {
-          pts.push({ x: W / 2, y });
+          pts.push({ x: W * 0.90, y });
         }
       }
     }
@@ -1733,8 +2017,8 @@ window.DrawingManager = (() => {
       ctx.setLineDash(dashArr);
 
     if (d.tool === 'hline') window.DrawingTrend.drawHLine(ctx, d, pane, selected);
-    if (d.tool === 'vline') window.DrawingTrend.drawVLine(ctx, d, pane);
-    if (d.tool === 'hray') window.DrawingTrend.drawHRay(ctx, d, pane);
+    if (d.tool === 'vline') window.DrawingTrend.drawVLine(ctx, d, pane, selected);
+    if (d.tool === 'hray') window.DrawingTrend.drawHRay(ctx, d, pane, selected);
     if (d.tool === 'crossline') window.DrawingTrend.drawCrossLine(ctx, d, pane);
     if (d.tool === 'trendline') window.DrawingTrend.drawTrendLine(ctx, d, pane, selected);
     if (d.tool === 'ray')       window.DrawingTrend.drawRay(ctx, d, pane, selected);
@@ -1744,11 +2028,6 @@ window.DrawingManager = (() => {
     if (d.tool === 'infoline') window.DrawingTrend.drawInfoLine(ctx, d, pane, selected);
     if (d.tool === 'flattopbottom') window.DrawingTrend.drawFlatTopBottom(ctx, d, pane);
     if (d.tool === 'regression') window.DrawingTrend.drawRegressionTrend(ctx, d, pane);
-    if (d.tool === 'pitchfork') window.DrawingTrend.drawPitchfork(ctx, d, pane, 'standard');
-    if (d.tool === 'schiffpitch') window.DrawingTrend.drawPitchfork(ctx, d, pane, 'schiff');
-    if (d.tool === 'modschiff') window.DrawingTrend.drawPitchfork(ctx, d, pane, 'modschiff');
-    if (d.tool === 'insidepitch') window.DrawingTrend.drawPitchfork(ctx, d, pane, 'inside');
-    if (d.tool === 'disjointch') window.DrawingTrend.drawDisjointChannel(ctx, d, pane);
     // ── Annotations ──
     if (d.tool === 'texttool') window.DrawingAnnotations.drawTextTool(ctx, d, pane, d.id === _hoverDrawingId, selected);
     if (d.tool === 'note') window.DrawingAnnotations.drawNote(ctx, d, pane, d.id === _hoverDrawingId, selected);
@@ -2124,7 +2403,7 @@ window.DrawingManager = (() => {
 
     const tolerance = 10;
 
-    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'flattopbottom', 'regression', 'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral', 'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed', 'cyclic-lines', 'time-cycles', 'sine-line', 'disjointch', 'fib-ext', 'fib-channel', 'fib-timebased', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'triangle', 'arc', 'curve', 'doublecurve'].includes(d.tool)) {
+    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral', 'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed', 'cyclic-lines', 'time-cycles', 'sine-line', 'fib-ext', 'fib-channel', 'fib-timebased', 'triangle', 'arc', 'curve', 'doublecurve'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && Math.hypot(x - a.x, y - a.y) <= tolerance) return 'p1';
@@ -2137,6 +2416,161 @@ window.DrawingManager = (() => {
         const p4 = _pt2xy(d.p4, pane);
         if (p4 && Math.hypot(x - p4.x, y - p4.y) <= tolerance) return 'p4';
       }
+    }
+
+    // ── Flat Top/Bottom özel hit test ────────────────────────────
+    if (d.tool === 'flattopbottom' && d.p1 && d.p2) {
+      const a = _pt2xy(d.p1, pane);
+      const b = _pt2xy(d.p2, pane);
+      if (!a || !b) return false;
+
+      const ftbTolerance = 5;  // ← 10'dan 5'e düşürüldü
+
+      // p1 anchor (eğimli çizgi sol ucu)
+      if (Math.hypot(x - a.x, y - a.y) <= ftbTolerance) return 'p1';
+      // p2 anchor (eğimli çizgi sağ ucu)
+      if (Math.hypot(x - b.x, y - b.y) <= ftbTolerance) return 'p2';
+
+      // Yatay çizginin anchor noktaları — sadece p3 varsa
+      if (d.p3) {
+        const flatY = pane.series.priceToCoordinate(d.p3.price);
+        if (flatY != null && isFinite(flatY)) {
+          const leftX  = a.x;   // p1.x
+          const rightX = b.x;   // p2.x
+
+          // Sol anchor (p1'in üstünde, p3 fiyatında)
+          if (Math.hypot(x - leftX,  y - flatY) <= ftbTolerance) return 'ftb_left';
+          // Sağ anchor (p2'nin üstünde, p3 fiyatında)
+          if (Math.hypot(x - rightX, y - flatY) <= ftbTolerance) return 'ftb_right';
+
+          // Yatay çizgiye tıklama
+          const minX = Math.min(leftX, rightX);
+          const maxX = Math.max(leftX, rightX);
+          if (Math.abs(y - flatY) <= ftbTolerance && x >= minX - ftbTolerance && x <= maxX + ftbTolerance) {
+            return 'ftb_hline';
+          }
+        }
+      }
+
+      // Eğimli çizgiye tıklama
+      if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= ftbTolerance) return 'line';
+
+      return false;
+    }
+
+    // ── Regression Trend özel hit test ───────────────
+    if (d.tool === 'regression' && d.p1 && d.p2) {
+      const candles = pane.candlesData;
+      if (!candles || candles.length < 3) return false;
+
+      const toSec = t => typeof t === 'object'
+        ? new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0).getTime() / 1000 : t;
+
+      const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
+      const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
+      const inRange = candles.filter(c => { const ct = toSec(c.time); return ct >= tMin && ct <= tMax; });
+      if (inRange.length < 3) return false;
+
+      const s = d.style || {};
+      const src = s.source || 'close';
+      const getPrice = c => {
+        if (src === 'open')  return c.open;
+        if (src === 'high')  return c.high;
+        if (src === 'low')   return c.low;
+        if (src === 'hl2')   return (c.high + c.low) / 2;
+        if (src === 'hlc3')  return (c.high + c.low + c.close) / 3;
+        if (src === 'ohlc4') return (c.open + c.high + c.low + c.close) / 4;
+        return c.close;
+      };
+
+      const n = inRange.length;
+      let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+      inRange.forEach((c, i) => { const p = getPrice(c); sx += i; sy += p; sxy += i * p; sx2 += i * i; });
+      const denom = n * sx2 - sx * sx;
+      if (denom === 0) return false;
+      const slope     = (n * sxy - sx * sy) / denom;
+      const intercept = (sy - slope * sx) / n;
+
+      let sqDev = 0;
+      inRange.forEach((c, i) => { const res = getPrice(c) - (slope * i + intercept); sqDev += res * res; });
+      const stdDev = Math.sqrt(sqDev / (n - 2));
+
+      // Anchor noktaları: center line'ın başı (i=0) ve sonu (i=n-1)
+      const p1cx  = _timeToX(pane, inRange[0].time);
+      const p1reg = slope * 0 + intercept;
+      const p1cy  = pane.series.priceToCoordinate(p1reg);
+
+      const p2cx  = _timeToX(pane, inRange[n - 1].time);
+      const p2reg = slope * (n - 1) + intercept;
+      const p2cy  = pane.series.priceToCoordinate(p2reg);
+
+      if (p1cx != null && p1cy != null && Math.hypot(x - p1cx, y - p1cy) <= tolerance * 1.5) return 'reg_p1';
+      if (p2cx != null && p2cy != null && Math.hypot(x - p2cx, y - p2cy) <= tolerance * 1.5) return 'reg_p2';
+
+      // Çizgi hit: center, upper, lower band'ların herhangi birine yakın mı
+      const upperDev = s.upperDev ?? 2;
+      const lowerDev = s.lowerDev ?? 2;
+      const useUpper = s.useUpperDev !== false;
+      const useLower = s.useLowerDev !== false;
+
+      const points = inRange.map((c, i) => {
+        const cx = _timeToX(pane, c.time);
+        const regPrice = slope * i + intercept;
+        return { cx, regPrice };
+      }).filter(p => p.cx != null && isFinite(p.cx));
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const pa = points[i], pb = points[i + 1];
+
+        // Center line
+        const cya = pane.series.priceToCoordinate(pa.regPrice);
+        const cyb = pane.series.priceToCoordinate(pb.regPrice);
+        if (cya != null && cyb != null && _distToSegment(x, y, pa.cx, cya, pb.cx, cyb) <= tolerance) return 'reg_body';
+
+        // Upper band
+        if (useUpper) {
+          const uya = pane.series.priceToCoordinate(pa.regPrice + upperDev * stdDev);
+          const uyb = pane.series.priceToCoordinate(pb.regPrice + upperDev * stdDev);
+          if (uya != null && uyb != null && _distToSegment(x, y, pa.cx, uya, pb.cx, uyb) <= tolerance) return 'reg_body';
+        }
+
+        // Lower band
+        if (useLower) {
+          const lya = pane.series.priceToCoordinate(pa.regPrice - lowerDev * stdDev);
+          const lyb = pane.series.priceToCoordinate(pb.regPrice - lowerDev * stdDev);
+          if (lya != null && lyb != null && _distToSegment(x, y, pa.cx, lya, pb.cx, lyb) <= tolerance) return 'reg_body';
+        }
+      }
+
+      // Extend Right: son noktadan canvas sağına kadar da hit
+      if (s.extendRight && points.length >= 2) {
+        const last  = points[points.length - 1];
+        const prev  = points[points.length - 2];
+        const W     = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        const pxPerBar = last.cx - prev.cx;
+        if (pxPerBar > 0) {
+          const extEndX  = W;
+          const extBars  = (extEndX - last.cx) / pxPerBar;
+          const extPrice = slope * ((n - 1) + extBars) + intercept;
+
+          const cya = pane.series.priceToCoordinate(last.regPrice);
+          const cyb = pane.series.priceToCoordinate(extPrice);
+          if (cya != null && cyb != null && _distToSegment(x, y, last.cx, cya, extEndX, cyb) <= tolerance) return 'reg_body';
+
+          if (useUpper) {
+            const uya = pane.series.priceToCoordinate(last.regPrice + upperDev * stdDev);
+            const uyb = pane.series.priceToCoordinate(extPrice + upperDev * stdDev);
+            if (uya != null && uyb != null && _distToSegment(x, y, last.cx, uya, extEndX, uyb) <= tolerance) return 'reg_body';
+          }
+          if (useLower) {
+            const lya = pane.series.priceToCoordinate(last.regPrice - lowerDev * stdDev);
+            const lyb = pane.series.priceToCoordinate(extPrice - lowerDev * stdDev);
+            if (lya != null && lyb != null && _distToSegment(x, y, last.cx, lya, extEndX, lyb) <= tolerance) return 'reg_body';
+          }
+        }
+      }
+
+      return false;
     }
 
     if (d.points && d.points.length > 0) {
@@ -2325,12 +2759,15 @@ window.DrawingManager = (() => {
           if (d.tool === 'hray') {
             if (d.time != null) {
               const lx = _timeToX(pane, d.time);
-              if (lx != null && isFinite(lx) && x >= lx - tolerance) return 'line';
+              if (lx != null && isFinite(lx) && x >= lx - tolerance) {
+                if (Math.abs(x - lx) <= tolerance * 1.5) return 'hray_p1';
+                return 'line';
+              }
             }
           } else if (d.tool === 'hline') {
             const cvsW = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
             if (x < 0 || x > cvsW) return null; // fiyat cetveli alanında hit verme
-            if (Math.abs(x - cvsW / 2) <= tolerance * 2) return 'midpoint';
+            if (Math.abs(x - cvsW * 0.90) <= tolerance * 2) return 'midpoint';
             return 'line';
           } else {
             return 'line';
@@ -2342,7 +2779,12 @@ window.DrawingManager = (() => {
     if (d.tool === 'vline' || d.tool === 'crossline') {
       if (d.time != null) {
         const lx = _timeToX(pane, d.time);
-        if (lx != null && isFinite(lx) && Math.abs(x - lx) <= tolerance) return 'line';
+        if (lx != null && isFinite(lx) && Math.abs(x - lx) <= tolerance) {
+          if (d.tool === 'vline') {
+            return 'vline_midpoint';
+          }
+          return 'line';
+        }
       }
     }
 
@@ -2404,7 +2846,7 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (['trendline', 'ray', 'extended', 'channel', 'arrowdraw', 'trendangle', 'infoline', 'flattopbottom', 'regression', 'fib-ret', 'fib-ext', 'fib-channel', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-timebased', 'fib-spiral', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch'].includes(d.tool)) {
+    if (['trendline', 'ray', 'extended', 'channel', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-ext', 'fib-channel', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-timebased', 'fib-spiral'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (!a || !b) return false;

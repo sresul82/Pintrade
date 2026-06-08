@@ -112,8 +112,8 @@ window.PropertyToolbar = (() => {
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
         <div id="ap-preview" style="width:24px;height:24px;background:${baseHex};border:1px solid #7d808b;border-radius:4px;flex-shrink:0;"></div>
-        <input id="ap-hex" type="text" value="${baseHex.toUpperCase()}" style="flex:1;background:#131722;border:1px solid #2962ff;color:#d1d4dc;padding:4px 6px;border-radius:4px;font-family:monospace;font-size:12px;outline:none;"/>
-        <button id="ap-add" style="background:#d1d4dc;color:#131722;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Add</button>
+        <input id="ap-hex" type="text" value="${baseHex.toUpperCase()}" style="flex:1;background:#131722;border:1px solid #2962ff;color:#a3a6af;padding:4px 6px;border-radius:4px;font-family:monospace;font-size:12px;outline:none;"/>
+        <button id="ap-add" style="background:#a3a6af;color:#131722;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Add</button>
       </div>
       <div style="display:flex;gap:10px;">
         <div id="ap-sv" style="position:relative;width:140px;height:140px;background:${hueHex(H)};cursor:crosshair;border-radius:4px;overflow:hidden;flex-shrink:0;">
@@ -126,8 +126,8 @@ window.PropertyToolbar = (() => {
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid #2a2e39;">
-        <button id="ap-cancel" style="background:transparent;border:1px solid #7d808b;color:#d1d4dc;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Cancel</button>
-        <button id="ap-ok" style="background:#d1d4dc;color:#131722;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Ok</button>
+        <button id="ap-cancel" style="background:transparent;border:1px solid #7d808b;color:#a3a6af;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px;">Cancel</button>
+        <button id="ap-ok" style="background:#a3a6af;color:#131722;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:12px;">Ok</button>
       </div>
     `;
     document.body.appendChild(el);
@@ -207,11 +207,11 @@ window.PropertyToolbar = (() => {
       <div style="margin-top:4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
           <span style="font-size:11px;color:#787b86;">Opacity</span>
-          <span id="pt-op-val" style="font-size:11px;color:#d1d4dc;background:#131722;border:1px solid #7d808b;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
+          <span id="pt-op-val" style="font-size:11px;color:#a3a6af;background:#131722;border:1px solid #7d808b;padding:2px 6px;border-radius:3px;min-width:38px;text-align:center;">${baseOp}%</span>
         </div>
         <div style="position:relative;height:12px;border-radius:6px;overflow:hidden;background:repeating-conic-gradient(#363c4e 0% 25%,#2a2e39 0% 50%) 50%/10px 10px;cursor:pointer;" id="pt-op-track">
           <div id="pt-op-overlay" style="position:absolute;inset:0;background:linear-gradient(to right,rgba(${cr},${cg},${cb},0),rgba(${cr},${cg},${cb},1));pointer-events:none;"></div>
-          <div id="pt-op-thumb" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #d1d4dc;box-shadow:0 1px 4px rgba(0,0,0,0.5);transform:translate(-50%,-50%);pointer-events:none;left:${baseOp}%;"></div>
+          <div id="pt-op-thumb" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #a3a6af;box-shadow:0 1px 4px rgba(0,0,0,0.5);transform:translate(-50%,-50%);pointer-events:none;left:${baseOp}%;"></div>
         </div>
         <input id="pt-op-slider" type="range" min="0" max="100" value="${baseOp}" style="position:absolute;opacity:0;pointer-events:none;"/>
       </div>
@@ -303,9 +303,9 @@ window.PropertyToolbar = (() => {
 
     const items = [1,2,3,4];
     el.innerHTML = items.map(w => `
-      <div class="pt-w-item${w===currentWidth?' pt-w-active':''}" data-w="${w}" style="display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer;color:${ w===currentWidth ? '#f0b90b' : '#d1d4dc'};font-size:13px;">
+      <div class="pt-w-item${w===currentWidth?' pt-w-active':''}" data-w="${w}" style="display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer;color:${ w===currentWidth ? '#f0b90b' : '#a3a6af'};font-size:13px;">
         <svg width="28" height="${Math.max(2,w+1)}" viewBox="0 0 28 ${Math.max(2,w+1)}">
-          <line x1="0" y1="${(Math.max(2,w+1))/2}" x2="28" y2="${(Math.max(2,w+1))/2}" stroke="${w===currentWidth?'#f0b90b':'#d1d4dc'}" stroke-width="${w}"/>
+          <line x1="0" y1="${(Math.max(2,w+1))/2}" x2="28" y2="${(Math.max(2,w+1))/2}" stroke="${w===currentWidth?'#f0b90b':'#a3a6af'}" stroke-width="${w}"/>
         </svg>
         ${w}px
       </div>
@@ -342,7 +342,7 @@ window.PropertyToolbar = (() => {
 
     const items = [10, 11, 12, 14, 16, 20, 24, 28, 32, 40, 80];
     el.innerHTML = items.map(s => `
-      <div class="pt-fs-item${s===currentSize?' pt-fs-active':''}" data-s="${s}" style="padding:6px 14px;cursor:pointer;color:${ s===currentSize ? '#f0b90b' : '#d1d4dc'};font-size:13px;text-align:center;">
+      <div class="pt-fs-item${s===currentSize?' pt-fs-active':''}" data-s="${s}" style="padding:6px 14px;cursor:pointer;color:${ s===currentSize ? '#f0b90b' : '#a3a6af'};font-size:13px;text-align:center;">
         ${s}
       </div>
     `).join('');
@@ -383,8 +383,8 @@ window.PropertyToolbar = (() => {
     ];
 
     el.innerHTML = styles.map(s => `
-      <div class="pt-s-item" data-s="${s.key}" style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;color:${s.key===currentStyle?'#f0b90b':'#d1d4dc'};font-size:13px;">
-        <svg width="28" height="2" viewBox="0 0 28 2" style="flex-shrink:0;color:${s.key===currentStyle?'#f0b90b':'#d1d4dc'}">${s.svg}</svg>
+      <div class="pt-s-item" data-s="${s.key}" style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;color:${s.key===currentStyle?'#f0b90b':'#a3a6af'};font-size:13px;">
+        <svg width="28" height="2" viewBox="0 0 28 2" style="flex-shrink:0;color:${s.key===currentStyle?'#f0b90b':'#a3a6af'}">${s.svg}</svg>
         ${s.label}
       </div>
     `).join('');
@@ -417,30 +417,30 @@ window.PropertyToolbar = (() => {
     _closeAllMenus();
 
     const s = _drawing.style || {};
-    const color     = s.color     || '#2962ff';
-    const textColor = s.textColor || '#ffeb3b';
+    const color     = s.color     || (_drawing.tool === 'flattopbottom' ? '#FF9800' : '#2962ff');
+    const textColor = s.textColor || '#ffffff';
     const width     = s.width     || 1;
     const lineStyle = s.lineStyle || 'solid';
 
     const {hex} = _parseColor(color);
 
     const dashSvg = lineStyle === 'dashed'
-      ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="5,3"/>'
+      ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="5,3"/>'
       : lineStyle === 'dotted'
-        ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="2,2"/>'
-        : '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2"/>';
+        ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="2,2"/>'
+        : '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2"/>';
 
     const dashSvgSmall = lineStyle === 'dashed'
-      ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="5,3"/>'
+      ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="5,3"/>'
       : lineStyle === 'dotted'
-        ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="2,2"/>'
-        : '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2"/>';
+        ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="2,2"/>'
+        : '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2"/>';
 
     const isFibo = _drawing.tool && _drawing.tool.startsWith('fib');
     const isPosition = ['longpos', 'shortpos', 'posforecast'].includes(_drawing.tool);
 
-    const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'triangle', 'arc'].includes(_drawing.tool);
-    const hasText = !['vline', 'arrowdraw', 'regression', 'flattopbottom', 'pitchfork', 'schiffpitch', 'modschiff', 'insidepitch', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'curve', 'doublecurve', 'polyline', 'pathtool', 'trendangle'].includes(_drawing.tool);
+    const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'triangle', 'arc'].includes(_drawing.tool);
+    const hasText = !['arrowdraw', 'regression', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'curve', 'doublecurve', 'polyline', 'pathtool', 'trendangle', 'crossline'].includes(_drawing.tool);
     const hasAlert = !['rotatedrect', 'triangle', 'polyline', 'pathtool', 'circle', 'arc', 'curve', 'doublecurve'].includes(_drawing.tool);
 
     _panel = document.createElement('div');
@@ -562,7 +562,7 @@ window.PropertyToolbar = (() => {
         <button id="pt-btn-width" class="pt-btn" title="Line width" style="gap:4px;padding:4px 6px;min-width:60px;">
           <span id="pt-width-label" style="display:flex;align-items:center;gap:6px;">
             <svg width="24" height="16" viewBox="0 0 24 16">${dashSvgSmall}</svg>
-            <span style="font-size:14px;color:#d1d4dc;">${width}px</span>
+            <span style="font-size:14px;color:#a3a6af;">${width}px</span>
           </span>
         </button>
 
@@ -578,7 +578,7 @@ window.PropertyToolbar = (() => {
         <!-- Text Color -->
         <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
           ${textSvg}
-          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#d1d4dc'};"></div>
+          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#a3a6af'};"></div>
         </button>
 
         <!-- Background Color -->
@@ -589,7 +589,7 @@ window.PropertyToolbar = (() => {
 
         <!-- Font Size -->
         <button id="pt-btn-fontsize" class="pt-btn" title="Font Size" style="gap:4px;padding:4px 6px;min-width:40px;">
-          <span id="pt-fontsize-label" style="font-size:14px;color:#d1d4dc;">${s.fontSize || 16}</span>
+          <span id="pt-fontsize-label" style="font-size:14px;color:#a3a6af;">${s.fontSize || 16}</span>
         </button>
 
         <!-- Settings -->
@@ -616,12 +616,12 @@ window.PropertyToolbar = (() => {
         <!-- Text Color -->
         <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
           ${textSvg}
-          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#d1d4dc'};"></div>
+          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#a3a6af'};"></div>
         </button>
 
         <!-- Font Size -->
         <button id="pt-btn-fontsize" class="pt-btn" title="Font Size" style="gap:4px;padding:4px 6px;min-width:40px;">
-          <span id="pt-fontsize-label" style="font-size:14px;color:#d1d4dc;">${s.fontSize || 13}</span>
+          <span id="pt-fontsize-label" style="font-size:14px;color:#a3a6af;">${s.fontSize || 13}</span>
         </button>
 
         <!-- Settings -->
@@ -645,18 +645,18 @@ window.PropertyToolbar = (() => {
         <!-- Text Color -->
         <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
           ${textSvg}
-          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#d1d4dc'};"></div>
+          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#a3a6af'};"></div>
         </button>
 
         <!-- Background Color -->
         <button id="pt-btn-fillcolor" class="pt-btn pt-btn-color" title="Background color">
           ${paintBucketSvg}
-          <div id="pt-fill-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.fillColor || 'transparent'};"></div>
+          <div id="pt-fill-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.fillColor || (_drawing.tool === 'pricelabel' ? '#2962ff' : 'transparent')};"></div>
         </button>
 
         <!-- Font Size -->
         <button id="pt-btn-fontsize" class="pt-btn" title="Font Size" style="gap:4px;padding:4px 6px;min-width:40px;">
-          <span id="pt-fontsize-label" style="font-size:14px;color:#d1d4dc;">${s.fontSize || 13}</span>
+          <span id="pt-fontsize-label" style="font-size:14px;color:#a3a6af;">${s.fontSize || 13}</span>
         </button>
 
         <!-- Settings -->
@@ -686,14 +686,14 @@ window.PropertyToolbar = (() => {
         <!-- Text -->
         <button id="pt-btn-textcolor" class="pt-btn pt-btn-color" title="Text color">
           ${textSvg}
-          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#d1d4dc'};"></div>
+          <div id="pt-text-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.textColor || '#a3a6af'};"></div>
         </button>
 
         <!-- Line Width -->
         <button id="pt-btn-width" class="pt-btn" title="Line width" style="gap:4px;padding:4px 6px;min-width:60px;">
           <span id="pt-width-label" style="display:flex;align-items:center;gap:4px;">
             <svg width="28" height="16" viewBox="0 0 28 16">${dashSvg}</svg>
-            <span style="font-size:12px;color:#d1d4dc;">${width}px</span>
+            <span style="font-size:12px;color:#a3a6af;">${width}px</span>
           </span>
         </button>
 
@@ -731,17 +731,27 @@ window.PropertyToolbar = (() => {
         <!-- Template -->
         <button id="pt-btn-template" class="pt-btn" title="Templates">${templateSvg}</button>
 
-        <!-- Line Color (pencil) -->
+        <!-- Line Color (pencil) — regression'da gösterme -->
+        ${_drawing.tool !== 'regression' ? `
         <button id="pt-btn-color" class="pt-btn pt-btn-color" title="Line color">
           ${pencilSvg}
           <div id="pt-line-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${hex};"></div>
         </button>
+        ` : ''}
 
         <!-- Fill Color -->
         ${hasFill ? `
         <button id="pt-btn-fillcolor" class="pt-btn pt-btn-color" title="Fill color">
           ${paintBucketSvg}
           <div id="pt-fill-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.fillColor || 'rgba(9, 105, 218, 0.2)'};"></div>
+        </button>
+        ` : ''}
+
+        <!-- Background Color (flattopbottom) -->
+        ${_drawing.tool === 'flattopbottom' ? `
+        <button id="pt-btn-bgcolor" class="pt-btn pt-btn-color" title="Background color">
+          ${paintBucketSvg}
+          <div id="pt-bg-color-bar" style="width:16px;height:4px;border-radius:1px;margin-top:1px;background:${s.bgColor || s.color || '#FF9800'};opacity:${(s.bgOpacity ?? 15) / 100};"></div>
         </button>
         ` : ''}
 
@@ -753,11 +763,12 @@ window.PropertyToolbar = (() => {
         </button>
         ` : ''}
 
-        <!-- Line Width -->
+        <!-- Line Width — regression'da gösterme -->
+        ${_drawing.tool !== 'regression' ? `
         <button id="pt-btn-width" class="pt-btn" title="Line width" style="gap:4px;padding:4px 6px;min-width:60px;">
           <span id="pt-width-label" style="display:flex;align-items:center;gap:4px;">
             <svg width="28" height="16" viewBox="0 0 28 16">${dashSvg}</svg>
-            <span style="font-size:12px;color:#d1d4dc;">${width}px</span>
+            <span style="font-size:12px;color:#a3a6af;">${width}px</span>
           </span>
         </button>
 
@@ -767,6 +778,7 @@ window.PropertyToolbar = (() => {
             <svg width="28" height="16" viewBox="0 0 28 16">${dashSvg}</svg>
           </span>
         </button>
+        ` : ''}
 
         <!-- Settings -->
         <button id="pt-btn-settings" class="pt-btn" title="Settings">${settingsSvg}</button>
@@ -866,7 +878,10 @@ window.PropertyToolbar = (() => {
         }
         const btn = e.currentTarget;
         const s = _drawing.style || {};
-        _openColorMenu(btn, s.color || s.borderColor || '#2962ff', newColor => {
+        const defaultStyle = (window.DrawingManager && DrawingManager._getToolStyle) ? (window.DrawingManager && window.DrawingManager._getToolStyle ? window.DrawingManager._getToolStyle(_drawing.tool) : {}) : {};
+        const curLine = s.color || defaultStyle.color || '#2962ff';
+        
+        _openColorMenu(btn, curLine, newColor => {
           _drawing.style = _drawing.style || {};
           if (['note', 'pricenote'].includes(_drawing.tool)) {
             _drawing.style.color = newColor;
@@ -898,10 +913,12 @@ window.PropertyToolbar = (() => {
           return;
         }
         const btn = e.currentTarget;
-        // texttool uses fillColor for background
-        const curFill = _drawing.tool === 'texttool' || ['note', 'pricenote', 'tableanno', 'callout', 'pricelabel'].includes(_drawing.tool)
-          ? (_drawing.style?.fillColor || 'rgba(0,0,0,0)')
-          : (_drawing.tool === 'flagmark' ? (_drawing.style?.color || '#2962ff') : (_drawing.style?.fillColor || 'rgba(9, 105, 218, 0.2)'));
+        const s = _drawing.style || {};
+        const defaultStyle = (window.DrawingManager && window.DrawingManager._getToolStyle ? window.DrawingManager._getToolStyle(_drawing.tool) : {});
+
+        // Decouple: Use own fillColor, then core default. Never fallback to line color.
+        const curFill = s.fillColor || defaultStyle.fillColor || 'rgba(0,0,0,0)';
+        
         _openColorMenu(btn, curFill, newColor => {
           _drawing.style = _drawing.style || {};
           if (_drawing.tool === 'flagmark') {
@@ -926,9 +943,10 @@ window.PropertyToolbar = (() => {
         }
         const btn = e.currentTarget;
         const s = _drawing.style || {};
-        // texttool uses textColor, others use textColor also
-        const hasCustomTextColor = ['texttool', 'note', 'pricenote', 'tableanno', 'callout', 'pricelabel', 'flagmark'].includes(_drawing.tool);
-        const curColor = hasCustomTextColor ? (s.textColor || '#d1d4dc') : (s.textColor || '#ffeb3b');
+        const defaultStyle = (window.DrawingManager && window.DrawingManager._getToolStyle ? window.DrawingManager._getToolStyle(_drawing.tool) : {});
+
+        const curColor = s.textColor || defaultStyle.textColor || '#ffffff';
+        
         _openColorMenu(btn, curColor, newColor => {
           _drawing.style = _drawing.style || {};
           _drawing.style.textColor = newColor;
@@ -937,6 +955,50 @@ window.PropertyToolbar = (() => {
           _redraw();
         });
         if (_openMenu) _openMenu.dataset.srcBtn = 'textcolor';
+      };
+    }
+
+    const btnBgColor = _panel.querySelector('#pt-btn-bgcolor');
+    if (btnBgColor) {
+      btnBgColor.onclick = e => {
+        if (_openMenu && _openMenu.dataset.srcBtn === 'bgcolor') {
+          _closeAllMenus();
+          return;
+        }
+        const btn = e.currentTarget;
+        const s = _drawing.style || {};
+        const defaultStyle = (window.DrawingManager && window.DrawingManager._getToolStyle ? window.DrawingManager._getToolStyle(_drawing.tool) : {});
+
+        // Decouple: Use own bgColor. Never fallback to line color (s.color).
+        const curOpacity = s.bgOpacity ?? defaultStyle.bgOpacity ?? 15;
+        const curHex     = s.bgColor || defaultStyle.bgColor || '#FF9800';
+        const {r, g, b}  = _hexToRgb(curHex);
+        const curColor   = `rgba(${r},${g},${b},${curOpacity / 100})`;
+
+        _openColorMenu(btn, curColor, newColor => {
+          _drawing.style = _drawing.style || {};
+
+          if (newColor.startsWith('rgba') || newColor.startsWith('rgb')) {
+            const m = newColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            if (m) {
+              _drawing.style.bgColor   = '#' + (+m[1]).toString(16).padStart(2,'0')
+                                             + (+m[2]).toString(16).padStart(2,'0')
+                                             + (+m[3]).toString(16).padStart(2,'0');
+              _drawing.style.bgOpacity = m[4] != null ? Math.round(parseFloat(m[4]) * 100) : 100;
+            }
+          } else {
+            _drawing.style.bgColor   = newColor;
+            _drawing.style.bgOpacity = 100;
+          }
+
+          const bar = _panel.querySelector('#pt-bg-color-bar');
+          if (bar) {
+            bar.style.background = _drawing.style.bgColor;
+            bar.style.opacity    = _drawing.style.bgOpacity / 100;
+          }
+          _redraw();
+        });
+        if (_openMenu) _openMenu.dataset.srcBtn = 'bgcolor';
       };
     }
 
@@ -992,26 +1054,26 @@ window.PropertyToolbar = (() => {
           _drawing.style.width = newW;
           const ds = _drawing.style?.lineStyle || 'solid';
           const dsvg = ds==='dashed'
-            ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="5,3"/>'
+            ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="5,3"/>'
             : ds==='dotted'
-              ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="2,2"/>'
-              : '<line x1="2" y1="8" x2="22" y2="8" stroke="#d1d4dc" stroke-width="2"/>';
+              ? '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="2,2"/>'
+              : '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2"/>';
               
           const dsvgNormal = ds==='dashed'
-            ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="5,3"/>'
+            ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="5,3"/>'
             : ds==='dotted'
-              ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="2,2"/>'
-              : '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2"/>';
+              ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="2,2"/>'
+              : '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2"/>';
 
           if (isFibo) {
             _panel.querySelector('#pt-width-label').innerHTML = `
               <svg width="24" height="16" viewBox="0 0 24 16">${dsvg}</svg>
-              <span style="font-size:14px;color:#d1d4dc;">${newW}px</span>
+              <span style="font-size:14px;color:#a3a6af;">${newW}px</span>
             `;
           } else {
             _panel.querySelector('#pt-width-label').innerHTML = `
               <svg width="28" height="16" viewBox="0 0 28 16">${dsvgNormal}</svg>
-              <span style="font-size:12px;color:#d1d4dc;">${newW}px</span>
+              <span style="font-size:12px;color:#a3a6af;">${newW}px</span>
             `;
           }
           _redraw();
@@ -1035,15 +1097,15 @@ window.PropertyToolbar = (() => {
           _drawing.style.dash = ''; // clear explicit dash from settings dialog
           const w2 = _drawing.style?.width || 1;
           const dsvgNormal = newS==='dashed'
-            ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="5,3"/>'
+            ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="5,3"/>'
             : newS==='dotted'
-              ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2" stroke-dasharray="2,2"/>'
-              : '<line x1="2" y1="8" x2="26" y2="8" stroke="#d1d4dc" stroke-width="2"/>';
+              ? '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2" stroke-dasharray="2,2"/>'
+              : '<line x1="2" y1="8" x2="26" y2="8" stroke="#a3a6af" stroke-width="2"/>';
           
           _panel.querySelector('#pt-style-icon').innerHTML = `<svg width="28" height="16" viewBox="0 0 28 16">${dsvgNormal}</svg>`;
           _panel.querySelector('#pt-width-label').innerHTML = `
             <svg width="28" height="16" viewBox="0 0 28 16">${dsvgNormal}</svg>
-            <span style="font-size:12px;color:#d1d4dc;">${w2}px</span>
+            <span style="font-size:12px;color:#a3a6af;">${w2}px</span>
           `;
           _redraw();
         });

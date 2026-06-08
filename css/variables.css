@@ -17,6 +17,7 @@
   --text-primary:   #d1d4dc;  /* Ana metin ve parlak ikonlar */
   --text-secondary: #787b86;  /* Sönük metin ve pasif ikonlar */
   --text-muted:     #50535e;  /* Çok sönük veya açıklama metinleri */
+  --text-active:    #ffffff;  /* Tam beyaz metin */
 
   /* TradingView Dark Theme Accents - Neon Mod */
   --accent-blue:      #00f3ff;
@@ -32,7 +33,7 @@
   --candle-up:   #089981;
   --candle-down: #f23645;
 
-  --panel-width-right: 450px;
+  --panel-width-right: 480px;
   --coin-detail-width: 560px;
   --panel-width-left:  40px;
   --navbar-height:     38px;
@@ -50,6 +51,11 @@
 
   --scrollbar-width: 3px;
   --scrollbar-thumb: #30363d;
+
+  --signal-color-green: #2dd4bf;
+  --signal-color-red:   #f87171;
+  --signal-bg-green:    rgba(45, 212, 191, 0.08);
+  --signal-bg-red:      rgba(248, 113, 113, 0.08);
 }
 
 [data-theme="light"] {
@@ -68,6 +74,7 @@
   --text-primary:   #1f2328;
   --text-secondary: #656d76;
   --text-muted:     #9ca3af;
+  --text-active:    #000000;  /* Tam siyah metin */
 
   --accent-blue:      #0969da;
   --accent-blue-bg:   rgba(9, 105, 218, 0.1);
@@ -82,4 +89,9 @@
   --candle-down: #cf222e;
 
   --scrollbar-thumb: #d0d7de;
+
+  --signal-color-green: #0d9488;
+  --signal-color-red:   #dc2626;
+  --signal-bg-green:    rgba(13, 148, 136, 0.06);
+  --signal-bg-red:      rgba(220, 38,  38,  0.06);
 }

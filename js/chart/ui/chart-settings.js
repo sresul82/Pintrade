@@ -368,7 +368,7 @@ function tabCanvas() {
     ${buildRow('Background', buildSelect(['Solid', 'Gradient'], 'Solid', 'bgType') + buildLineToolBtn('bgColor1', '#131722', 1, 'solid', false) + buildLineToolBtn('bgColor2', '#2a2e39', 1, 'solid', false))}
     ${buildRow('Grid lines', buildSelect(['Vert and horz', 'Vert only', 'Horz only', 'None'], 'Vert and horz', 'gridType') + buildLineToolBtn('gridVertColor', '#363c4e', 1, 'solid', false) + buildLineToolBtn('gridHorzColor', '#363c4e', 1, 'solid', false))}
     ${buildRow('Crosshair', buildLineToolBtn('crosshairColor', '#787b86', 1, 'solid', false))}
-    ${buildRow('Watermark', buildSelect(['Ticker', 'Interval', 'Description', 'Replay mode'], 'Ticker', 'watermarkMode') + buildLineToolBtn('watermarkColor', '#363c4e', 1, 'solid', false))}
+    ${buildRow('Watermark', buildSelect(['Ticker', 'Interval', 'Description'], 'Ticker', 'watermarkMode') + buildLineToolBtn('watermarkColor', '#363c4e', 1, 'solid', false))}
     
     ${buildSection('SCALES')}
     ${buildRow('Text', buildLineToolBtn('scaleTextColor', '#d1d4dc', 1, 'solid', false) + buildSelect(['10', '12', '14', '16', '18', '20', '22', '24', '26', '28', '30', '32', '34', '36', '38', '40'], '12', 'scaleFontSize'))}

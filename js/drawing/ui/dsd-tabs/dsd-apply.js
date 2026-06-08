@@ -18,8 +18,11 @@ window.DSDApply = (() => {
     const statsPEl = get('dsd-statspos');   if (statsPEl) s.statsPos   = statsPEl.value;
     const aStEl    = get('dsd-alwaysstats');if (aStEl)    s.alwaysStats= aStEl.checked;
     const statsOnEl= get('dsd-stats-on');   if (statsOnEl) s.statsOn    = statsOnEl.checked;
-    const statCbs  = overlay.querySelectorAll('.js-stat-field:checked');
-    if (statCbs.length >= 0) s.statsFields = [...statCbs].map(c => c.dataset.field);
+    const allStatCbs = overlay.querySelectorAll('.js-stat-field');
+    if (allStatCbs.length > 0) {
+      const statCbs = overlay.querySelectorAll('.js-stat-field:checked');
+      s.statsFields = [...statCbs].map(c => c.dataset.field);
+    }
 
     // Fill / background color (channel, rect) — read from swatch data-color
     const fillSwatch = overlay.querySelector('.js-fill-color');
@@ -36,6 +39,23 @@ window.DSDApply = (() => {
     if (borderSwatch) s.borderColor = borderSwatch.dataset.color;
     const midlineSwatch = overlay.querySelector('.js-midline-color');
     if (midlineSwatch) s.midlineColor = midlineSwatch.dataset.color;
+
+    if (drawing.tool === 'flattopbottom') {
+      const ftBgCb = get('dsd-ftbg');
+      if (ftBgCb) s.background = ftBgCb.checked;
+      const ftBgSwatch = overlay.querySelector('.js-ftbg-color');
+      if (ftBgSwatch && ftBgSwatch.dataset.color) s.bgColor = ftBgSwatch.dataset.color;
+      const ftShowPricesCb = get('dsd-showprices');
+      if (ftShowPricesCb) s.showPrices = ftShowPricesCb.checked;
+      const ftPriceSwatch = overlay.querySelector('.js-price-color');
+      if (ftPriceSwatch && ftPriceSwatch.dataset.color) s.priceColor = ftPriceSwatch.dataset.color;
+      const ftPriceBoldBtn = get('dsd-pricebold');
+      if (ftPriceBoldBtn) s.priceBold = ftPriceBoldBtn.classList.contains('active');
+      const ftPriceItalicBtn = get('dsd-priceitalic');
+      if (ftPriceItalicBtn) s.priceItalic = ftPriceItalicBtn.classList.contains('active');
+      const ftPriceFsEl = get('dsd-pricefontsize');
+      if (ftPriceFsEl) s.priceFontSize = parseInt(ftPriceFsEl.value);
+    }
 
     // Text tab
     const fsEl  = get('dsd-fontsize');
@@ -249,18 +269,50 @@ window.DSDApply = (() => {
       const levelSwatches = overlay.querySelectorAll('.js-ch-level-color');
       const levelVals = overlay.querySelectorAll('.js-ch-level-val');
 
-      if ((levelCbs.length > 0 || levelSwatches.length > 0 || levelVals.length > 0) && s.channelLevels && s.channelLevels.length > 0) {
+      if (levelCbs.length > 0 || levelSwatches.length > 0 || levelVals.length > 0) {
+        if (!s.channelLevels) s.channelLevels = [];
+        
+        const initLevel = (idx) => {
+           if (!s.channelLevels[idx]) {
+              const valInput = overlay.querySelector(`.js-ch-level-val[data-idx="${idx}"]`);
+              const swatch = overlay.querySelector(`.js-ch-level-color[data-idx="${idx}"]`);
+              const combo = overlay.querySelector(`.js-ch-level-combo[data-idx="${idx}"]`);
+              let c = '#2962ff', w = 1, st = 'solid';
+              if (swatch && swatch.dataset.color) c = swatch.dataset.color;
+              if (combo) {
+                 const path = combo.querySelector('path');
+                 if (path) {
+                    w = parseInt(path.getAttribute('stroke-width')) || 1;
+                    const dash = path.getAttribute('stroke-dasharray');
+                    if (dash === '8,5') st = 'dashed';
+                    else if (dash === '3,3') st = 'dotted';
+                 }
+              }
+              s.channelLevels[idx] = { 
+                 v: (valInput ? (parseFloat(valInput.value) || 0) : 0), 
+                 active: false, color: c, width: w, style: st 
+              };
+           }
+        };
+
         levelCbs.forEach(cb => {
           const idx = parseInt(cb.dataset.idx);
-          if (!isNaN(idx) && s.channelLevels[idx]) s.channelLevels[idx].active = cb.checked;
+          if (!isNaN(idx)) {
+             initLevel(idx);
+             s.channelLevels[idx].active = cb.checked;
+          }
         });
         levelSwatches.forEach(sw => {
           const idx = parseInt(sw.dataset.idx);
-          if (!isNaN(idx) && s.channelLevels[idx] && sw.dataset.color) s.channelLevels[idx].color = sw.dataset.color;
+          if (!isNaN(idx)) {
+             initLevel(idx);
+             if (sw.dataset.color) s.channelLevels[idx].color = sw.dataset.color;
+          }
         });
         levelVals.forEach(inp => {
           const idx = parseInt(inp.dataset.idx);
-          if (!isNaN(idx) && s.channelLevels[idx]) {
+          if (!isNaN(idx)) {
+             initLevel(idx);
              const v = parseFloat(inp.value);
              if (!isNaN(v)) s.channelLevels[idx].v = v;
           }

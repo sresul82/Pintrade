@@ -53,7 +53,9 @@ const BinanceAPI = (() => {
   async function fetchSymbols() {
     try {
       const res  = await fetch(`${BASE}/fapi/v1/exchangeInfo?_t=${Date.now()}`);
+      if (!res.ok) { console.warn('[BinanceAPI] exchangeInfo HTTP', res.status); return []; }
       const data = await res.json();
+      if (!data || !Array.isArray(data.symbols)) { console.warn('[BinanceAPI] exchangeInfo: symbols dizisi yok'); return []; }
       return data.symbols
         .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL')
         .map(s => s.symbol);

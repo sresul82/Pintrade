@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 5500;
 // ==========================================
 app.use(cors()); // En basit CORS ayarı
 app.use(express.json());
-
+app.use(express.static(__dirname));
 // İstekleri logla (Sorunu görmek için)
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -71,12 +71,12 @@ app.get('/health', (req, res) => { res.json({ status: 'ok' }); });
 // 4. Binance Proxy Rotaları (Daha Basit)
 // ==========================================
 
-app.get('/api/binance/futures/:path*', (req, res) => {
+app.get('/api/binance/futures/*', (req, res) => {
   const path = req.url.replace('/api/binance/futures', '');
   proxyRequest('fapi.binance.com', path, res);
 });
 
-app.get('/api/binance/spot/:path*', (req, res) => {
+app.get('/api/binance/spot/*', (req, res) => {
   const path = req.url.replace('/api/binance/spot', '');
   proxyRequest('api.binance.com', path, res);
 });

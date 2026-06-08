@@ -59,30 +59,29 @@ window.DrawingTrend = (() => {
     return isNaN(num) ? '' : num.toFixed(2);
   }
 
-  function _drawPriceLabel(ctx, price, y, pane) {
+  function _drawPriceLabel(ctx, price, y, pane, color) {
     if (price == null || y == null) return;
     const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
     const text = _formatPrice(price);
     
     ctx.save();
-    ctx.font = '12px "JetBrains Mono", sans-serif';
+    ctx.font = '10px "JetBrains Mono", sans-serif';
     const pad = 4;
     const txtW = ctx.measureText(text).width;
     const boxW = txtW + pad * 2;
-    const boxH = 20;
+    const boxH = 16;
     
-    // Y ekseni (sağ kenar) üzerinde yeşil etiket (Binance yeşili)
-    ctx.fillStyle = '#26a69a';
+    const bgColor = color || 'rgba(80, 80, 90, 0.85)';
+    ctx.fillStyle = bgColor;
     ctx.fillRect(w - boxW, y - boxH/2, boxW, boxH);
     
-    // Sol tarafa küçük bir ok şeklinde girinti yapmak istersen (isteğe bağlı)
     ctx.beginPath();
     ctx.moveTo(w - boxW, y - boxH/2);
     ctx.lineTo(w - boxW - 5, y);
     ctx.lineTo(w - boxW, y + boxH/2);
     ctx.fill();
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, w - boxW/2, y);
@@ -106,24 +105,50 @@ window.DrawingTrend = (() => {
         ctx.setLineDash(dashArr);
 
         // Çizgiyi çiz
+        // Price label (sağ kenar)
+        const showHlineLabel = s.priceLabel !== false;
+        let hlineLabelW = 0;
+        if (showHlineLabel) {
+          ctx.save();
+          ctx.font = '10px "JetBrains Mono", sans-serif';
+          hlineLabelW = ctx.measureText(_formatPrice(d.price)).width + 8 + 5 + 5; // pad*2 + ok + boşluk
+          ctx.restore();
+        }
+
+        // Çizgiyi çiz (label varsa önünde dur)
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
+        ctx.lineTo(w - hlineLabelW, y);
         ctx.stroke();
 
-        // Price label (sağ kenar)
-        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
+        if (showHlineLabel) _drawPriceLabel(ctx, d.price, y, pane, s.color || '#2962ff');
 
         // Metin (Settings'ten veya inline editörden)
         const hlineText = s.text || '';
+        const textAlignH = s.textAlignH || 'center';
+        const textAlignV = s.textAlignV || 'top';
+
+        // textAlignH'e göre X konumu hesapla
+        const endX = w - hlineLabelW;
+        let textX;
+        if (textAlignH === 'left')       textX = 6;
+        else if (textAlignH === 'right') textX = endX - 6;
+        else                             textX = endX / 2;
+
+        // textAlignV'e göre Y offset
+        let textY, textBaseline;
+        if (textAlignV === 'bottom')     { textY = y + 5;  textBaseline = 'top'; }
+        else if (textAlignV === 'middle'){ textY = y;       textBaseline = 'middle'; }
+        else                             { textY = y - 5;   textBaseline = 'bottom'; }
+
         if (hlineText) {
           ctx.save();
           ctx.font = `${s.bold ? 'bold ' : ''}${s.italic ? 'italic ' : ''}${s.fontSize || 14}px "JetBrains Mono", sans-serif`;
-          ctx.fillStyle = s.textColor || (s.color || '#2962ff');
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
+          ctx.fillStyle = s.textColor || '#ffffff';
+          ctx.textAlign = textAlignH === 'right' ? 'right' : textAlignH === 'left' ? 'left' : 'center';
+          ctx.textBaseline = textBaseline;
           ctx.globalAlpha = 1;
-          ctx.fillText(hlineText, w / 2, y - 5);
+          ctx.fillText(hlineText, textX, textY);
           ctx.restore();
         }
 
@@ -134,18 +159,21 @@ window.DrawingTrend = (() => {
           ctx.font = '12px "JetBrains Mono", sans-serif';
           ctx.fillStyle = s.color || '#2962ff';
           ctx.globalAlpha = 0.6;
-          ctx.textAlign = 'center';
+          ctx.textAlign = textAlignH === 'right' ? 'right' : textAlignH === 'left' ? 'left' : 'center';
           ctx.textBaseline = 'bottom';
-          ctx.fillText(hintText, w / 2, y - 5);
+          ctx.fillText(hintText, textX, y - 5);
           const hintTextW = ctx.measureText(hintText).width;
           ctx.restore();
 
-          // Hint alanını global map'e kaydet (cursor + click için)
           if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
-          window._trendTextHintAreas[d.id] = { cx: w / 2, cy: y - 5, hw: hintTextW / 2 + 6, hh: 10, angle: 0 };
+          window._trendTextHintAreas[d.id] = { cx: textX, cy: y - 5, hw: hintTextW / 2 + 6, hh: 10, angle: 0 };
         } else if (selected && hlineText) {
+          ctx.save();
+          ctx.font = `${s.fontSize || 14}px "JetBrains Mono", sans-serif`;
           const tw = ctx.measureText(hlineText).width;
-          window._trendTextHintAreas[d.id] = { cx: w / 2, cy: y - 5, hw: tw / 2 + 6, hh: 10, angle: 0 };
+          ctx.restore();
+          if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+          window._trendTextHintAreas[d.id] = { cx: textX, cy: textY, hw: tw / 2 + 6, hh: 10, angle: 0 };
         } else {
           if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
         }
@@ -154,12 +182,32 @@ window.DrawingTrend = (() => {
       } catch(e) { console.warn('[HLine] render error', e); }
     }
 
-  function _drawVLine(ctx, d, pane) {
+  function _drawVLine(ctx, d, pane, selected) {
       try {
         if (d.time == null) return;
         const x = _timeToX(pane, d.time);
         if (x == null || !isFinite(x)) return;
-        const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+        const dpr = window.devicePixelRatio || 1;
+        const allPanes = window.PaneManagerInstance?.panes || [];
+        const hasIndicatorPane = allPanes.length > 1;
+        const extendAll = !!(d.style && d.style.extendAll);
+
+        // Çizginin boyu: extend açıksa tüm pane'leri kapsar, değilse sadece mevcut pane
+        let lineH = pane.drawingCanvas.height / dpr;
+        if (extendAll && hasIndicatorPane) {
+          lineH = allPanes.reduce((sum, p) => sum + (p.drawingCanvas?.height || 0) / dpr, 0) || lineH;
+        } else if (!hasIndicatorPane) {
+          lineH = allPanes.reduce((sum, p) => sum + (p.drawingCanvas?.height || 0) / dpr, 0) || lineH;
+        }
+
+        // Yazının dikey referans noktası: extend'den bağımsız
+        // - indicator yoksa → ana pane'in altı
+        // - indicator varsa → indicator pane'inin altı (extend olsa da olmasa da)
+        let textBaseH = pane.drawingCanvas.height / dpr;
+        if (hasIndicatorPane) {
+          textBaseH = allPanes.reduce((sum, p) => sum + (p.drawingCanvas?.height || 0) / dpr, 0) || textBaseH;
+        }
+
         const s = d.style || {};
         ctx.save();
         ctx.strokeStyle = s.color || '#2962ff';
@@ -170,36 +218,259 @@ window.DrawingTrend = (() => {
         ctx.setLineDash(dashArr);
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
+        ctx.lineTo(x, lineH);
         ctx.stroke();
+        // Time label
+        if (s.timeLabel !== false) {
+          const t = d.time;
+          let dateObj;
+          if (t && typeof t === 'object' && t.year) {
+            dateObj = new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0);
+          } else {
+            dateObj = new Date(typeof t === 'number' ? t * 1000 : t);
+          }
+          const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const dd = days[dateObj.getDay()];
+          const d2 = String(dateObj.getDate()).padStart(2, '0');
+          const mo = months[dateObj.getMonth()];
+          const yr = String(dateObj.getFullYear()).slice(2);
+          const hh = String(dateObj.getHours()).padStart(2, '0');
+          const mm = String(dateObj.getMinutes()).padStart(2, '0');
+          const label = `${dd} ${d2} ${mo} '${yr}  ${hh}:${mm}`;
+          const fontSize = 11;
+          ctx.save();
+          ctx.font = `${fontSize}px "JetBrains Mono", sans-serif`;
+          const pad = 6;
+          const tw = ctx.measureText(label).width;
+          const boxW = tw + pad * 2;
+          const boxH = fontSize + 8;
+          const dpr = window.devicePixelRatio || 1;
+          const canvasH = pane.drawingCanvas.height / dpr;
+          const bx = x - boxW / 2;
+          const by = canvasH - boxH;
+          ctx.fillStyle = s.color || '#2962ff';
+          ctx.beginPath();
+          ctx.roundRect(bx, by, boxW, boxH, 3);
+          ctx.fill();
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, x, by + boxH / 2);
+          ctx.restore();
+        }
+        const vlineText = s.text || '';
+        
+        const textAlignH  = s.textAlignH    || 'center';
+        const textAlignV  = s.textAlignV    || 'middle';
+        const orientation = s.textOrientation || 'vertical';
+        const fontSize    = s.fontSize || 14;
+        const rowH        = fontSize + 4;
+        
+        // textAlignH → çizginin solunda / üzerinde / sağında
+        let tx, canvasTextAlign;
+        if      (textAlignH === 'left')  { tx = x - 6; canvasTextAlign = 'right';  }
+        else if (textAlignH === 'right') { tx = x + 6; canvasTextAlign = 'left';   }
+        else                             { tx = x;      canvasTextAlign = 'center'; }
+
+        // textAlignV → çizgi boyunca yukarı / orta / aşağı
+        let ty;
+        if      (textAlignV === 'top')    ty = 10;
+        else if (textAlignV === 'bottom') ty = textBaseH - rowH;
+        else                              ty = textBaseH / 2;
+
+        if (vlineText) {
+          ctx.save();
+          ctx.font      = `${s.bold ? 'bold ' : ''}${s.italic ? 'italic ' : ''}${fontSize}px "JetBrains Mono", sans-serif`;
+          ctx.fillStyle = s.textColor || '#ffffff';
+          ctx.globalAlpha = 1;
+
+          if (orientation === 'vertical') {
+            ctx.translate(tx, ty);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(vlineText, 0, 0);
+          } else {
+            ctx.textAlign    = canvasTextAlign;
+            ctx.textBaseline = 'top';
+            ctx.fillText(vlineText, tx, ty);
+          }
+          ctx.restore();
+        }
+
+        // "Add Text" hint — seçili ve metin yok
+        if (selected && !vlineText) {
+          const hintText = 'Add Text';
+          ctx.save();
+          ctx.font = '12px "JetBrains Mono", sans-serif';
+          ctx.fillStyle = s.color || '#2962ff';
+          ctx.globalAlpha = 0.6;
+          
+          let hw, hh, cx, cy, angle;
+          if (orientation === 'vertical') {
+            ctx.translate(tx, ty);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(hintText, 0, 0);
+            hw = ctx.measureText(hintText).width / 2 + 6;
+            hh = 10;
+            cx = tx;
+            cy = ty;
+            angle = -Math.PI / 2;
+          } else {
+            ctx.textAlign = canvasTextAlign;
+            ctx.textBaseline = 'top';
+            ctx.fillText(hintText, tx, ty);
+            hw = ctx.measureText(hintText).width / 2 + 6;
+            hh = 10;
+            // tx is not the center if canvasTextAlign is left or right
+            cx = canvasTextAlign === 'right' ? tx - hw + 6 : canvasTextAlign === 'center' ? tx : tx + hw - 6;
+            cy = ty + hh;
+            angle = 0;
+          }
+          ctx.restore();
+          
+          if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+          window._trendTextHintAreas[d.id] = { cx, cy, hw, hh, angle };
+        } else if (selected && vlineText) {
+          ctx.save();
+          ctx.font = `${fontSize}px "JetBrains Mono", sans-serif`;
+          const tw = ctx.measureText(vlineText).width;
+          ctx.restore();
+          
+          let hw = tw / 2 + 6;
+          let hh = 10;
+          let cx, cy, angle;
+          
+          if (orientation === 'vertical') {
+            cx = tx;
+            cy = ty;
+            angle = -Math.PI / 2;
+          } else {
+            cx = canvasTextAlign === 'right' ? tx - hw + 6 : canvasTextAlign === 'center' ? tx : tx + hw - 6;
+            cy = ty + hh;
+            angle = 0;
+          }
+          
+          if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+          window._trendTextHintAreas[d.id] = { cx, cy, hw, hh, angle };
+        } else {
+          if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
+        }
         ctx.restore();
       } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
-  function _drawHRay(ctx, d, pane) {
-      try {
-        if (d.price == null || !isFinite(d.price)) return;
-        if (d.time == null) return;
-        const y = pane.series.priceToCoordinate(d.price);
-        const x = _timeToX(pane, d.time);
-        if (y == null || !isFinite(y) || x == null || !isFinite(x)) return;
-        const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-        const s = d.style || {};
+  function _drawHRay(ctx, d, pane, selected) {
+    try {
+      if (d.price == null || !isFinite(d.price)) return;
+      if (d.time == null) return;
+      const y = pane.series.priceToCoordinate(d.price);
+      if (y == null || !isFinite(y)) return;
+
+      const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+      const s = d.style || {};
+
+      // Başlangıç X'ini hesapla; görünür alan dışına çıkmışsa 0'a sabitle
+      const extendLeft = !!s.extendLeft;
+      const rawX = _timeToX(pane, d.time);
+      const startX = extendLeft ? 0 : ((rawX != null && isFinite(rawX)) ? rawX : 0);
+
+      ctx.save();
+      ctx.strokeStyle = s.color || '#2962ff';
+      ctx.lineWidth   = s.width || 1;
+      let dashArr = [];
+      if (s.lineStyle === 'dashed') dashArr = [8, 5];
+      else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+      ctx.setLineDash(dashArr);
+
+      // Price label genişliği
+      const showLabel = s.priceLabel !== false;
+      let hrayLabelW = 0;
+      if (showLabel) {
         ctx.save();
-        ctx.strokeStyle = s.color || '#2962ff';
-        ctx.lineWidth   = s.width || 1;
-        let dashArr = [];
-        if (s.lineStyle === 'dashed') dashArr = [8, 5];
-        else if (s.lineStyle === 'dotted') dashArr = [3, 3];
-        ctx.setLineDash(dashArr);
-        if (s.priceLabel) _drawPriceLabel(ctx, d.price, y, pane);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
+        ctx.font = '10px "JetBrains Mono", sans-serif';
+        hrayLabelW = ctx.measureText(_formatPrice(d.price)).width + 8 + 5 + 5;
         ctx.restore();
-      } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
-    }
+      }
+
+      const endX = w - hrayLabelW;
+
+      // Başlangıç noktası bitiş noktasının sağına geçmişse çizgiyi gösterme
+      // (zaman henüz chart'a girmemiş demektir — sağda bekliyor)
+      if (startX < endX) {
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+      }
+
+      if (showLabel) _drawPriceLabel(ctx, d.price, y, pane, s.color || '#2962ff');
+
+      // Metin
+      const hrayText = s.text || '';
+      if (hrayText) {
+        ctx.save();
+        ctx.font = `${s.bold ? 'bold ' : ''}${s.italic ? 'italic ' : ''}${s.fontSize || 14}px "JetBrains Mono", sans-serif`;
+        ctx.fillStyle = s.textColor || '#ffffff';
+        ctx.textBaseline = 'bottom';
+        ctx.globalAlpha = 1;
+        const textAlignH = s.textAlignH || 'center';
+        const textAlignV = s.textAlignV || 'top';
+        let tx, ty;
+        if (textAlignH === 'left')        { ctx.textAlign = 'left';   tx = startX + 6; }
+        else if (textAlignH === 'center') { ctx.textAlign = 'center'; tx = (startX + w) / 2; }
+        else if (textAlignH === 'right')  { ctx.textAlign = 'right';  tx = w - 6; }
+        if (textAlignV === 'top')         { ctx.textBaseline = 'bottom'; ty = y - 5; }
+        else if (textAlignV === 'middle') { ctx.textBaseline = 'middle'; ty = y; }
+        else if (textAlignV === 'bottom') { ctx.textBaseline = 'top';    ty = y + 5; }
+        ctx.fillText(hrayText, tx, ty);
+        ctx.restore();
+      }
+
+      // "Add Text" hint — textAlignH'e göre konum
+      const textAlignH = s.textAlignH || 'center';
+      const textAlignV = s.textAlignV || 'top';
+
+      let hintX;
+      if (textAlignH === 'left')       hintX = startX + 6;
+      else if (textAlignH === 'right') hintX = endX - 6;
+      else                             hintX = (startX + endX) / 2;
+
+      let hintY, hintBaseline;
+      if (textAlignV === 'bottom')      { hintY = y + 5;  hintBaseline = 'top'; }
+      else if (textAlignV === 'middle') { hintY = y;       hintBaseline = 'middle'; }
+      else                              { hintY = y - 5;   hintBaseline = 'bottom'; }
+
+      if (selected && !hrayText) {
+        const hintText = 'Add Text';
+        ctx.save();
+        ctx.font = '12px "JetBrains Mono", sans-serif';
+        ctx.fillStyle = s.color || '#2962ff';
+        ctx.globalAlpha = 0.6;
+        ctx.textAlign = textAlignH === 'right' ? 'right' : textAlignH === 'left' ? 'left' : 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(hintText, hintX, y - 5);
+        const hintTextW = ctx.measureText(hintText).width;
+        ctx.restore();
+        if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+        window._trendTextHintAreas[d.id] = { cx: hintX, cy: y - 5, hw: hintTextW / 2 + 6, hh: 10, angle: 0 };
+      } else if (selected && hrayText) {
+        ctx.save();
+        ctx.font = `${s.fontSize || 14}px "JetBrains Mono", sans-serif`;
+        const tw = ctx.measureText(hrayText).width;
+        ctx.restore();
+        if (!window._trendTextHintAreas) window._trendTextHintAreas = {};
+        window._trendTextHintAreas[d.id] = { cx: hintX, cy: hintY, hw: tw / 2 + 6, hh: 10, angle: 0 };
+      } else {
+        if (window._trendTextHintAreas) delete window._trendTextHintAreas[d.id];
+      }
+
+      ctx.restore();
+    } catch(e) { console.warn('[HRay] render error', e); }
+  }
 
   function _drawCrossLine(ctx, d, pane) {
       try {
@@ -218,11 +489,76 @@ window.DrawingTrend = (() => {
         if (s.lineStyle === 'dashed') dashArr = [8, 5];
         else if (s.lineStyle === 'dotted') dashArr = [3, 3];
         ctx.setLineDash(dashArr);
+
+        // Price label genişliği — varsa yatay çizgi label'in önünde durur
+        const showPriceLabel = s.priceLabel !== false;
+        let priceLabelW = 0;
+        if (showPriceLabel) {
+          ctx.save();
+          ctx.font = '10px "JetBrains Mono", sans-serif';
+          priceLabelW = ctx.measureText(_formatPrice(d.price)).width + 18;
+          ctx.restore();
+        }
+
+        // Yatay çizgi
         ctx.beginPath();
-        ctx.moveTo(0, y); ctx.lineTo(w, y);
-        ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        ctx.moveTo(0, y);
+        ctx.lineTo(w - priceLabelW, y);
         ctx.stroke();
+
+        // Dikey çizgi
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+
         ctx.restore();
+
+        // Price label (sağ kenar — HLine ile aynı mantık)
+        if (showPriceLabel) {
+          _drawPriceLabel(ctx, d.price, y, pane, s.color || '#2962ff');
+        }
+
+        // Time label (alt kenar — VLine ile aynı mantık)
+        if (s.timeLabel !== false) {
+          const t = d.time;
+          let dateObj;
+          if (t && typeof t === 'object' && t.year) {
+            dateObj = new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0);
+          } else {
+            dateObj = new Date(typeof t === 'number' ? t * 1000 : t);
+          }
+          const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const dd = days[dateObj.getDay()];
+          const d2 = String(dateObj.getDate()).padStart(2, '0');
+          const mo = months[dateObj.getMonth()];
+          const yr = String(dateObj.getFullYear()).slice(2);
+          const hh = String(dateObj.getHours()).padStart(2, '0');
+          const mm = String(dateObj.getMinutes()).padStart(2, '0');
+          const label = `${dd} ${d2} ${mo} '${yr}  ${hh}:${mm}`;
+          const fontSize = 11;
+          ctx.save();
+          ctx.font = `${fontSize}px "JetBrains Mono", sans-serif`;
+          const pad = 6;
+          const tw = ctx.measureText(label).width;
+          const boxW = tw + pad * 2;
+          const boxH = fontSize + 8;
+          const dpr = window.devicePixelRatio || 1;
+          const canvasH = pane.drawingCanvas.height / dpr;
+          const bx = x - boxW / 2;
+          const by = canvasH - boxH;
+          ctx.fillStyle = s.color || '#2962ff';
+          ctx.beginPath();
+          ctx.roundRect(bx, by, boxW, boxH, 3);
+          ctx.fill();
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, x, by + boxH / 2);
+          ctx.restore();
+        }
+
       } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
     }
 
@@ -404,10 +740,10 @@ window.DrawingTrend = (() => {
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#d1d4dc';
+      ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.strokeStyle = '#d1d4dc';
+      ctx.strokeStyle = '#ffffff';
 
       lines.forEach((text, i) => {
          const y = by + padY + i * lh + lh/2;
@@ -488,8 +824,8 @@ window.DrawingTrend = (() => {
 
       // Price Labels (Sağ eksen üzerine başlangıç ve bitiş fiyatlarını yeşil yazdır)
       if (priceLabel) {
-        if (d.p1.price != null) _drawPriceLabel(ctx, d.p1.price, a.y, pane);
-        if (d.p2.price != null) _drawPriceLabel(ctx, d.p2.price, b.y, pane);
+        if (d.p1.price != null) _drawPriceLabel(ctx, d.p1.price, a.y, pane, s.color || '#2962ff');
+        if (d.p2.price != null) _drawPriceLabel(ctx, d.p2.price, b.y, pane, s.color || '#2962ff');
       }
       
       // Text (s.text from settings or inline edit) — drawn parallel to the line
@@ -558,7 +894,7 @@ window.DrawingTrend = (() => {
       if (hasText) {
         ctx.save();
         ctx.font = `${s.italic ? 'italic ' : ''}${s.bold ? 'bold ' : ''}${s.fontSize || 13}px "JetBrains Mono", sans-serif`;
-        ctx.fillStyle = s.textColor || '#d1d4dc';
+        ctx.fillStyle = s.textColor || '#ffffff';
         _drawParallelText(ctx, trendText, 1);
         ctx.restore();
       }
@@ -567,7 +903,7 @@ window.DrawingTrend = (() => {
       if (selected && !hasText && d.tool !== 'trendangle') {
         ctx.save();
         ctx.font = '12px "JetBrains Mono", sans-serif';
-        ctx.fillStyle = '#d1d4dc';
+        ctx.fillStyle = '#ffffff';
         _drawParallelText(ctx, 'Add Text', 0.35);
         ctx.restore();
       }
@@ -599,8 +935,6 @@ window.DrawingTrend = (() => {
       d.style = d.style || {};
       if (d.style.extendRight === undefined) d.style.extendRight = true;
       if (d.style.extendLeft  === undefined) d.style.extendLeft  = false;
-      d.style.extendRight = true;   // Ray her zaman sağa uzar — override
-      d.style.extendLeft  = false;  // Ray hiçbir zaman sola uzamaz — override
       _drawTrendLine(ctx, d, pane, selected);
   }
 
@@ -624,10 +958,22 @@ window.DrawingTrend = (() => {
     let drawB = { x: b.x, y: b.y };
 
     if (extendLeft || extendRight) {
-      const wCanvas = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const hCanvas = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-      if (extendLeft) drawA = _extendToEdge(b.x, b.y, a.x, a.y, wCanvas, hCanvas);
-      if (extendRight) drawB = _extendToEdge(a.x, a.y, b.x, b.y, wCanvas, hCanvas);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const ux = dx / len;
+        const uy = dy / len;
+        // Sınırlarla kırpmak yerine 100.000 piksel sonsuz uzatıyoruz.
+        // Böylece ekran sınırına değen çizgilerin diğer paralel kopyaları ekran ortasında dikey kesilmez.
+        const EXT = 100000;
+        if (extendLeft) {
+          drawA = { x: a.x - ux * EXT, y: a.y - uy * EXT };
+        }
+        if (extendRight) {
+          drawB = { x: b.x + ux * EXT, y: b.y + uy * EXT };
+        }
+      }
     }
 
     // p3 yoksa eski channelOffset sistemiyle geriye dönük uyumluluk
@@ -743,6 +1089,13 @@ window.DrawingTrend = (() => {
       ctx.restore();
     }
 
+
+      // Price labels for Parallel Channel
+      if (s.priceLabel !== false) {
+        if (d.p1.price != null) _drawPriceLabel(ctx, d.p1.price, a.y, pane, s.color || '#2962ff');
+        if (d.p2.price != null) _drawPriceLabel(ctx, d.p2.price, b.y, pane, s.color || '#2962ff');
+      }
+
     // Text rendering logic for Parallel Channel
     const trendText = s.text || '';
     const hasText = !!trendText;
@@ -812,7 +1165,7 @@ window.DrawingTrend = (() => {
       if (hasText) {
         ctx.save();
         ctx.font = `${s.italic ? 'italic ' : ''}${s.bold ? 'bold ' : ''}${s.fontSize || 13}px "JetBrains Mono", sans-serif`;
-        ctx.fillStyle = s.textColor || '#d1d4dc';
+        ctx.fillStyle = s.textColor || '#ffffff';
         _drawChannelText(ctx, trendText, 1);
         ctx.restore();
       }
@@ -820,7 +1173,7 @@ window.DrawingTrend = (() => {
       if (isSelected && !hasText) {
         ctx.save();
         ctx.font = '12px "JetBrains Mono", sans-serif';
-        ctx.fillStyle = '#d1d4dc';
+        ctx.fillStyle = '#ffffff';
         _drawChannelText(ctx, 'Add Text', 0.35);
         ctx.restore();
       }
@@ -848,6 +1201,49 @@ window.DrawingTrend = (() => {
     }
   }
 
+  function _drawInlineLabel(ctx, price, x, y, color, bold, italic, fontSize) {
+    if (price == null || x == null || y == null) return;
+    const text = _formatPrice(price);
+    if (!text) return;
+    const fs = fontSize || 10;
+    const fontStr = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${fs}px "JetBrains Mono", sans-serif`;
+
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.font = fontStr;
+
+    const pad  = 4;
+    const txtW = ctx.measureText(text).width;
+    const boxW = txtW + pad * 2;
+    const boxH = fs + 6;
+    const bx   = x - boxW / 2;
+    const by   = y - boxH - 6;
+
+    // Arka plan kutusu
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, boxW, boxH, 3);
+    else ctx.rect(bx, by, boxW, boxH);
+    ctx.fillStyle = color || '#505060';
+    ctx.fill();
+
+    // Metin (arka plana göre kontrast: açık renk üstüne koyu, koyu üstüne açık)
+    // Basit luminance hesabı
+    let textColor = '#ffffff';
+    if (color && color.startsWith('#') && color.length >= 7) {
+      const r = parseInt(color.slice(1,3), 16);
+      const g = parseInt(color.slice(3,5), 16);
+      const b = parseInt(color.slice(5,7), 16);
+      const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+      textColor = lum > 0.55 ? '#000000' : '#ffffff';
+    }
+    ctx.fillStyle    = textColor;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, by + boxH / 2);
+
+    ctx.restore();
+  }
+
   function _drawInfoLine(ctx, d, pane, selected) {
       d.style = d.style || {};
       if (d.style.statsOn === undefined) d.style.statsOn = true;
@@ -856,185 +1252,450 @@ window.DrawingTrend = (() => {
     }
 
   function _drawFlatTopBottom(ctx, d, pane) {
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane);
+    try {
+      const a = _pt2xy(d.p1, pane);  // sol köşe (flat çizginin başlangıcı)
+      const b = _pt2xy(d.p2, pane);  // eğimli çizginin sonu
       if (!a || !b) return;
-      const W = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const color = d.style?.color || '#2962ff';
-  
-      // Main slanted line
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-  
-      // Flat band: horizontal at the "opposite" endpoint price
-      const flatPrice = d.p2.price > d.p1.price ? d.p1.price : d.p2.price;
-      const flatY = pane.series.priceToCoordinate(flatPrice);
-      if (flatY === null) return;
-  
-      const leftX  = Math.min(a.x, b.x);
-      const rightX = Math.max(a.x, b.x);
-  
+
+      const s     = d.style || {};
+      const color = s.color || '#FF9800';
+      const W     = pane.drawingCanvas.width  / (window.devicePixelRatio || 1);
+      const H     = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+
+      // Dash array
+      let dashArr = [];
+      if (s.lineStyle === 'dashed') dashArr = [8, 5];
+      else if (s.lineStyle === 'dotted') dashArr = [3, 3];
+
+      // p3 yoksa fallback: b ile aynı y (çizim henüz tamamlanmadı)
+      let c = d.p3 ? _pt2xy(d.p3, pane) : { x: b.x, y: b.y };
+      if (!c) c = { x: b.x, y: b.y };
+
+      // Flat çizgi:
+      //   - Sol ucu  → p1.x (a.x) — p1'in tam üstünde
+      //   - Sağ ucu  → p2.x (b.x) — p2'nin tam üstünde
+      //   - Yükseklik → p3'ün fiyat seviyesi (c.y)
+      const flatY    = c.y;   // p3'ün y koordinatı
+      const flatLeft = a.x;   // p1'in x koordinatı (değişmedi)
+      const flatRight = b.x;  // p2'nin x koordinatı (eskiden c.x idi — düzeltildi)
+
+      // Extend — extendLeft/extendRight boolean'ları kullan (trendline ile aynı mantık)
+      const extendLeft  = !!s.extendLeft;
+      const extendRight = !!s.extendRight;
+      let slantA = { ...a };
+      let slantB = { ...b };
+      let hLeft  = flatLeft;
+      let hRight = flatRight;
+      if (extendLeft)  { slantA = _extendToEdge(b.x, b.y, a.x, a.y, W, H); hLeft  = 0; }
+      if (extendRight) { slantB = _extendToEdge(a.x, a.y, b.x, b.y, W, H); hRight = W; }
+
+      // ── Background fill ───────────────────────────────
+      if (s.background !== false) {
+        const bgColor   = s.bgColor || '#FF9800';
+        const bgOpacity = (s.bgOpacity != null) ? s.bgOpacity / 100 : 0.15;
+        ctx.save();
+        ctx.globalAlpha = bgOpacity;
+        ctx.fillStyle   = bgColor;
+        ctx.beginPath();
+
+        // Sol üst: slantA (extend açıksa INF'a uzuyor)
+        ctx.moveTo(slantA.x, slantA.y);
+
+        // Sağ üst: slantB (extend açıysa INF'a uzuyor)
+        ctx.lineTo(slantB.x, slantB.y);
+
+        // Extend right açıysa: slantB ile flatY arasındaki köşeyi kapat
+        if (extendRight) ctx.lineTo(hRight, slantB.y);
+
+        // Sağ alt: yatay çizginin sağ ucu
+        ctx.lineTo(hRight, flatY);
+
+        // Sol alt: yatay çizginin sol ucu
+        ctx.lineTo(hLeft, flatY);
+
+        // Extend left açıysa: hLeft ile slantA arasındaki köşeyi kapat
+        if (extendLeft) ctx.lineTo(hLeft, slantA.y);
+
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ── Çizgiler ─────────────────────────────────────
       ctx.save();
-      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = s.width || 1;
+      ctx.setLineDash(dashArr);
+
+      // Eğimli çizgi (p1 → p2)
       ctx.beginPath();
-      ctx.moveTo(leftX, flatY); ctx.lineTo(rightX, flatY);
+      ctx.moveTo(slantA.x, slantA.y);
+      ctx.lineTo(slantB.x, slantB.y);
       ctx.stroke();
-      ctx.setLineDash([]);
-  
-      // Thin fill between slant and flat side
-      ctx.globalAlpha = 0.07;
-      ctx.fillStyle = color;
+
+      // Yatay (flat) çizgi (p1.x → p3.x, p1 fiyat seviyesi)
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.lineTo(rightX, flatY); ctx.lineTo(leftX, flatY);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(hLeft,  flatY);
+      ctx.lineTo(hRight, flatY);
+      ctx.stroke();
+
+      // Arrow caps — trendline ile aynı _drawArrowHead helper'ı kullanılır
+      const capLeft  = s.capLeft  || 'normal';
+      const capRight = s.capRight || 'normal';
+
+      // Eğimli çizgi uçları: slantA = p1 tarafı, slantB = p2 tarafı
+      if (capLeft  === 'arrow') _drawArrowHead(ctx, slantB, slantA); // p1 yönüne ok
+      if (capRight === 'arrow') _drawArrowHead(ctx, slantA, slantB); // p2 yönüne ok
+
+      // Yatay çizgi uçları: hLeft = p1.x tarafı, hRight = p2.x tarafı
+      const hLeftPt  = { x: hLeft,  y: flatY };
+      const hRightPt = { x: hRight, y: flatY };
+      if (capLeft  === 'arrow') _drawArrowHead(ctx, hRightPt, hLeftPt);  // sol uca ok
+      if (capRight === 'arrow') _drawArrowHead(ctx, hLeftPt,  hRightPt); // sağ uca ok
+
       ctx.restore();
-    }
+
+      // ── Fiyat etiketleri ─────────────────────────────
+      if (s.showPrices !== false) {
+        const labelColor  = s.priceColor  || '#2962ff';
+        const labelFs     = s.priceFontSize || 10;
+        const labelBold   = !!s.priceBold;
+        const labelItalic = !!s.priceItalic;
+
+        // p1 etiketi — eğimli çizginin sol noktasının üstünde
+        _drawInlineLabel(ctx, d.p1.price, a.x, a.y, labelColor, labelBold, labelItalic, labelFs);
+
+        // p2 etiketi — eğimli çizginin sağ noktasının üstünde
+        _drawInlineLabel(ctx, d.p2.price, b.x, b.y, labelColor, labelBold, labelItalic, labelFs);
+
+        // p3 etiketi — yatay çizginin sağ ucunun üstünde (p2.x'te, p3 fiyatında)
+        if (d.p3) {
+          _drawInlineLabel(ctx, d.p3.price, b.x, flatY, labelColor, labelBold, labelItalic, labelFs);
+        }
+      }
+
+      // ── Text label ──────────────────────────────────
+      const ftbText = s.text || '';
+      const hasText = !!ftbText;
+
+      if (hasText) {
+        const textAlignH = s.textAlignH || 'center';
+        const textAlignV = s.textAlignV || 'top';
+
+        // Her zaman orijinal p1(a) ve p2(b) — slantA/B değil, extend'den etkilenmez
+        const tH = textAlignH === 'left' ? 0.05 : textAlignH === 'right' ? 0.95 : 0.5;
+
+        // Eğimli çizgi: a → b (extend edilmemiş orijinal noktalar)
+        const slantPt = {
+          x: a.x + (b.x - a.x) * tH,
+          y: a.y + (b.y - a.y) * tH
+        };
+
+        // Yatay çizgi: flatLeft → flatRight (hLeft/hRight değil, extend edilmemiş)
+        const flatPt = {
+          x: flatLeft + (flatRight - flatLeft) * tH,
+          y: flatY
+        };
+
+        let anchorX, anchorY, rawAngle;
+
+        if (textAlignV === 'top') {
+          anchorX  = flatPt.x;
+          anchorY  = flatPt.y;
+          rawAngle = 0;
+        } else if (textAlignV === 'bottom') {
+          anchorX  = slantPt.x;
+          anchorY  = slantPt.y;
+          rawAngle = Math.atan2(b.y - a.y, b.x - a.x);  // a/b kullan
+        } else {
+          anchorX  = (flatPt.x + slantPt.x) / 2;
+          anchorY  = (flatPt.y + slantPt.y) / 2;
+          rawAngle = Math.atan2(b.y - a.y, b.x - a.x) / 2;  // a/b kullan
+        }
+
+        let drawAngle = rawAngle;
+        if (drawAngle > Math.PI / 2 || drawAngle < -Math.PI / 2) drawAngle += Math.PI;
+
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.font      = `${s.italic ? 'italic ' : ''}${s.bold ? 'bold ' : ''}${s.fontSize || 13}px "JetBrains Mono", sans-serif`;
+        ctx.fillStyle = s.textColor || '#ffffff';
+        ctx.translate(anchorX, anchorY);
+        ctx.rotate(drawAngle);
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(ftbText, 0, -4);
+        ctx.restore();
+      }
+
+    } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
+  }
 
   function _drawRegressionTrend(ctx, d, pane) {
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane);
-      if (!a || !b) return;
-  
+    try {
+      if (!d.p1 || !d.p2) return;
+      const s = d.style || {};
+
       const candles = pane.candlesData;
-      if (!candles || candles.length === 0) {
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        return;
-      }
-  
+      if (!candles || candles.length === 0) return;
+
       const toSec = t => typeof t === 'object'
-        ? new Date(t.year, t.month - 1, t.day).getTime() / 1000 : t;
+        ? new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0).getTime() / 1000
+        : t;
+
       const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
       const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
-      const inRange = candles.filter(c => { const ct = toSec(c.time); return ct >= tMin && ct <= tMax; });
-  
-      if (inRange.length < 2) {
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        return;
-      }
-  
+      const inRange = candles.filter(c => {
+        const ct = toSec(c.time);
+        return ct >= tMin && ct <= tMax;
+      });
+      if (inRange.length < 3) return;
+
+      // — Source seçimi —
+      const src = s.source || 'close';
+      const getPrice = c => {
+        if (src === 'open')  return c.open;
+        if (src === 'high')  return c.high;
+        if (src === 'low')   return c.low;
+        if (src === 'hl2')   return (c.high + c.low) / 2;
+        if (src === 'hlc3')  return (c.high + c.low + c.close) / 3;
+        if (src === 'ohlc4') return (c.open + c.high + c.low + c.close) / 4;
+        return c.close;
+      };
+
       const n = inRange.length;
+
+      // — OLS Linear Regression —
       let sx = 0, sy = 0, sxy = 0, sx2 = 0;
-      inRange.forEach((c, i) => { sx += i; sy += c.close; sxy += i * c.close; sx2 += i * i; });
-      const slope     = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+      inRange.forEach((c, i) => {
+        const p = getPrice(c);
+        sx  += i;
+        sy  += p;
+        sxy += i * p;
+        sx2 += i * i;
+      });
+      const denom    = n * sx2 - sx * sx;
+      if (denom === 0) return;
+      const slope     = (n * sxy - sx * sy) / denom;
       const intercept = (sy - slope * sx) / n;
-  
+
+      // — Standart Sapma (degrees of freedom = n-2) —
       let sqDev = 0;
-      inRange.forEach((c, i) => { const r = slope * i + intercept; sqDev += (c.close - r) ** 2; });
-      const stdDev = Math.sqrt(sqDev / n);
-  
-      const startX = Math.min(a.x, b.x);
-      const endX   = Math.max(a.x, b.x);
-      const spanX  = endX - startX || 1;
-  
-      const drawBand = (stdMult) => {
+      inRange.forEach((c, i) => {
+        const res = getPrice(c) - (slope * i + intercept);
+        sqDev += res * res;
+      });
+      const stdDev = Math.sqrt(sqDev / (n - 2));
+
+      // — Pearson's R —
+      const pearsonR = (() => {
+        const meanX = sx / n;
+        const meanY = sy / n;
+        let num = 0, dx2 = 0, dy2 = 0;
+        inRange.forEach((c, i) => {
+          const p  = getPrice(c);
+          const dx = i - meanX;
+          const dy = p - meanY;
+          num += dx * dy;
+          dx2 += dx * dx;
+          dy2 += dy * dy;
+        });
+        const div = Math.sqrt(dx2 * dy2);
+        return div === 0 ? 0 : num / div;
+      })();
+
+      // — Her mum için regression fiyatını x koordinatına çevir —
+      // Sadece inRange.length kadar nokta — pixel döngüsü yok
+      const points = inRange.map((c, i) => {
+        const regPrice = slope * i + intercept;
+        const cx = _timeToX(pane, c.time);
+        return { i, cx, regPrice };
+      }).filter(p => p.cx != null && isFinite(p.cx));
+
+      if (points.length < 2) return;
+
+      const upperDev = s.upperDev ?? 2;
+      const lowerDev = s.lowerDev ?? 2;
+      const useUpper = s.useUpperDev !== false;
+      const useLower = s.useLowerDev !== false;
+
+      const W = pane.drawingCanvas.width  / (window.devicePixelRatio || 1);
+      const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+
+      // Extend Right: son noktadan sağa doğru regression çizgisini uzat
+      let extPoints = [...points];
+      if (s.extendRight) {
+        // Son indeksten canvas sağ kenarına kadar
+        const last = points[points.length - 1];
+        // Sağ kenara karşılık gelen "idx" değerini bul
+        // Son mum indeksi = n-1, sağ kenar x = W
+        // idx lineer interpolasyon: her mum arası pixel farkı sabit değil
+        // O yüzden sadece görsel olarak son noktadan slope'u uzatıyoruz
+        const first = points[0];
+        const pxPerBar = (last.cx - first.cx) / (n - 1);
+        if (pxPerBar > 0) {
+          const extraBars = Math.ceil((W - last.cx) / pxPerBar);
+          for (let e = 1; e <= extraBars; e++) {
+            const ei = (n - 1) + e;
+            const ex = last.cx + e * pxPerBar;
+            if (ex > W) break;
+            extPoints.push({ i: ei, cx: ex, regPrice: slope * ei + intercept });
+          }
+        }
+      }
+
+      // — Çizim yardımcısı: fiyat offsetiyle çizgi çiz —
+      const drawLine = (pts, offset) => {
         ctx.beginPath();
-        let first = true;
-        for (let px = startX; px <= endX; px += 1) {
-          const idx   = ((px - startX) / spanX) * (n - 1);
-          const price = slope * idx + intercept + stdMult * stdDev;
-          const py    = pane.series.priceToCoordinate(price);
-          if (py === null) { first = true; continue; }
-          first ? (ctx.moveTo(px, py), first = false) : ctx.lineTo(px, py);
+        let started = false;
+        for (const p of pts) {
+          const py = pane.series.priceToCoordinate(p.regPrice + offset);
+          if (py == null || !isFinite(py)) { started = false; continue; }
+          if (!started) { ctx.moveTo(p.cx, py); started = true; }
+          else ctx.lineTo(p.cx, py);
         }
         ctx.stroke();
       };
-  
-      // Centre line (solid, already set by caller)
-      drawBand(0);
-  
-      // ±1 std-dev bands (dashed, slightly transparent)
-      ctx.save();
-      ctx.setLineDash([5, 4]);
-      ctx.globalAlpha = ((d.style?.opacity ?? 100) / 100) * 0.75;
-      drawBand(1);
-      drawBand(-1);
-      ctx.restore();
-    }
 
-  function _drawPitchfork(ctx, d, pane, type) {
-      if (!d.p1 || !d.p2) return;
-      const p1 = _pt2xy(d.p1, pane);
-      const p2 = _pt2xy(d.p2, pane);
-      if (!p1 || !p2) return;
-      if (!d.p3) {
+      // — Fill yardımcısı —
+      const drawFill = (pts, offsetTop, offsetBot, fillColor) => {
         ctx.save();
-        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = '#787b86'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]); ctx.stroke();
+        ctx.beginPath();
+        let started = false;
+        for (const p of pts) {
+          const py = pane.series.priceToCoordinate(p.regPrice + offsetTop);
+          if (py == null || !isFinite(py)) { started = false; continue; }
+          if (!started) { ctx.moveTo(p.cx, py); started = true; }
+          else ctx.lineTo(p.cx, py);
+        }
+        for (let j = pts.length - 1; j >= 0; j--) {
+          const p  = pts[j];
+          const py = pane.series.priceToCoordinate(p.regPrice + offsetBot);
+          if (py == null || !isFinite(py)) continue;
+          ctx.lineTo(p.cx, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fillColor;
+        ctx.fill();
         ctx.restore();
-        return;
-      }
-      const p3 = _pt2xy(d.p3, pane);
-      if (!p3) return;
-  
-      const W = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
-      const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-  
-      // Calculate origins based on pitchfork type
-      let originX = p1.x, originY = p1.y;
-      const midX = (p2.x + p3.x) / 2;
-      const midY = (p2.y + p3.y) / 2;
-  
-      if (type === 'schiff') {
-        originX = (p1.x + p2.x) / 2;
-        originY = (p1.y + p2.y) / 2;
-      } else if (type === 'modschiff') {
-        originX = (p1.x + midX) / 2;
-        originY = (p1.y + midY) / 2;
-      } else if (type === 'inside') {
-        originX = midX;
-        originY = midY;
-        // p2 and p3 become the median vectors instead of outer limits
-      }
-  
-      // Median line extending from origin through midpoint
-      const medianEnd = _extendToEdge(originX, originY, midX, midY, W, H);
-      
-      ctx.save();
-      
-      // Draw base line connecting p2 and p3
-      ctx.beginPath();
-      ctx.moveTo(p2.x, p2.y);
-      ctx.lineTo(p3.x, p3.y);
-      ctx.stroke();
-  
-      // Draw median line
-      ctx.beginPath();
-      ctx.moveTo(originX, originY);
-      ctx.lineTo(medianEnd.x, medianEnd.y);
-      ctx.stroke();
-  
-      // Vector for parallel lines
-      const dx = midX - originX;
-      const dy = midY - originY;
-  
-      // Extend p2 parallel to median
-      const p2End = _extendToEdge(p2.x, p2.y, p2.x + dx, p2.y + dy, W, H);
-      ctx.beginPath();
-      ctx.moveTo(p2.x, p2.y);
-      ctx.lineTo(p2End.x, p2End.y);
-      ctx.stroke();
-  
-      // Extend p3 parallel to median
-      const p3End = _extendToEdge(p3.x, p3.y, p3.x + dx, p3.y + dy, W, H);
-      ctx.beginPath();
-      ctx.moveTo(p3.x, p3.y);
-      ctx.lineTo(p3End.x, p3End.y);
-      ctx.stroke();
-      
-      // Background Fill
-      ctx.globalAlpha = 0.1;
-      ctx.beginPath();
-      ctx.moveTo(p2.x, p2.y);
-      ctx.lineTo(p2End.x, p2End.y);
-      ctx.lineTo(p3End.x, p3End.y);
-      ctx.lineTo(p3.x, p3.y);
-      ctx.closePath();
-      ctx.fill();
-  
-      ctx.restore();
-    }
+      };
 
-  function _drawDisjointChannel() {}
+      ctx.save();
+      ctx.strokeStyle = s.color || '#2962ff';
+      ctx.lineWidth   = s.width  || 1;
+      const dashArr = s.lineStyle === 'dashed' ? [8, 5]
+                    : s.lineStyle === 'dotted' ? [3, 3] : [];
+      ctx.setLineDash(dashArr);
+
+      const showBase = s.showBase !== false;
+      const showUp   = s.showUp   !== false;
+      const showDown = s.showDown !== false;
+
+      // Fill — önce çiz ki çizgiler üstüne gelsin
+      const hexToRgba = (hex, opacity) => {
+        const h = hex.replace('#', '');
+        const r = parseInt(h.substring(0,2),16);
+        const g = parseInt(h.substring(2,4),16);
+        const b = parseInt(h.substring(4,6),16);
+        return `rgba(${r},${g},${b},${opacity})`;
+      };
+      const toRgba = (color, opacity) => {
+        if (!color) return `rgba(41,98,255,${opacity})`;
+        if (color.startsWith('#')) return hexToRgba(color, opacity);
+        if (color.startsWith('rgba')) return color.replace(/[\d.]+\)$/, `${opacity})`);
+        return color;
+      };
+
+      // Up fill: center → upper band arası (upColor + upOpacity)
+      const upOpacity   = s.upOpacity   ?? 0.1;
+      const fillUp      = toRgba(s.upColor   || '#2962ff', upOpacity);
+
+      // Base fill: center → lower band arası (color + baseOpacity)
+      const baseOpacity = s.baseOpacity ?? 0.1;
+      const fillBase    = toRgba(s.color || '#2962ff', baseOpacity);
+
+      if (useUpper && showUp)   drawFill(extPoints,  upperDev * stdDev, 0, fillUp);
+      if (useLower && showDown) drawFill(extPoints, 0, -lowerDev * stdDev, fillBase);
+
+      // Center line (Base)
+      if (showBase) {
+        ctx.strokeStyle = s.color     || '#2962ff';
+        ctx.lineWidth   = s.width     || 1;
+        const bd = s.lineStyle === 'dashed' ? [8,5] : s.lineStyle === 'dotted' ? [3,3] : [];
+        ctx.setLineDash(bd);
+        drawLine(extPoints, 0);
+      }
+
+      // Upper band
+      if (useUpper && showUp) {
+        ctx.strokeStyle = s.upColor   || '#2962ff';
+        ctx.lineWidth   = s.upWidth   || 1;
+        const ud = s.upStyle === 'dashed' ? [8,5] : s.upStyle === 'dotted' ? [3,3] : [5,4];
+        ctx.setLineDash(ud);
+        drawLine(extPoints, upperDev * stdDev);
+      }
+
+      // Lower band
+      if (useLower && showDown) {
+        ctx.strokeStyle = s.downColor || '#2962ff';
+        ctx.lineWidth   = s.downWidth || 1;
+        const dd = s.downStyle === 'dashed' ? [8,5] : s.downStyle === 'dotted' ? [3,3] : [];
+        ctx.setLineDash(dd);
+        drawLine(extPoints, -lowerDev * stdDev);
+      }
+
+      ctx.restore();
+
+      // — Anchor noktaları: P1 ve P2 center line üzerinde —
+      const p1pt  = points[0];
+      const p2pt  = points[points.length - 1];
+      const p1py  = pane.series.priceToCoordinate(p1pt.regPrice);
+      const p2py  = pane.series.priceToCoordinate(p2pt.regPrice);
+
+      if (p1py != null && isFinite(p1py)) {
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p1pt.cx, p1py, 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (p2py != null && isFinite(p2py)) {
+        ctx.save();
+        ctx.strokeStyle = s.color || '#2962ff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p2pt.cx, p2py, 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+
+      // Price labels for Regression Trend
+      if (s.priceLabel !== false) {
+        if (p1pt.regPrice != null) _drawPriceLabel(ctx, p1pt.regPrice, p1py, pane, s.color || '#2962ff');
+        if (p2pt.regPrice != null) _drawPriceLabel(ctx, p2pt.regPrice, p2py, pane, s.color || '#2962ff');
+      }
+
+      // — Pearson's R metni —
+      if (s.showPearson !== false) {
+        const rText = `R: ${pearsonR.toFixed(4)}`;
+        ctx.save();
+        ctx.font      = '11px "JetBrains Mono", sans-serif';
+        ctx.fillStyle = s.color || '#2962ff';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        const labelX = p1pt.cx + 4;
+        const labelY = (p1py ?? 20) - 4;
+        ctx.fillText(rText, labelX, labelY);
+        ctx.restore();
+      }
+
+    } catch(e) { /* render hatasının diğer çizimleri etkilememesi için */ }
+  }
 
 
   return {
@@ -1049,8 +1710,6 @@ window.DrawingTrend = (() => {
     drawChannel: _drawChannel,
     drawInfoLine: _drawInfoLine,
     drawFlatTopBottom: _drawFlatTopBottom,
-    drawRegressionTrend: _drawRegressionTrend,
-    drawPitchfork: _drawPitchfork,
-    drawDisjointChannel: _drawDisjointChannel
+    drawRegressionTrend: _drawRegressionTrend
   };
 })();

@@ -136,7 +136,7 @@ const DetailPanel = (() => {
         psEl.textContent = _fmt(data.spotPrice);
         psEl.title = '';
       } else {
-        psEl.innerHTML = '<span title="Binance Spot pazarında işlem görmüyor" style="color:#f5a623;font-size:13px;">&#9888;</span>';
+        psEl.innerHTML = '<span title="Spot pazarında işlem görmüyor" style="color:#f5a623;font-size:13px;">&#9888;</span>';
       }
     }
 
@@ -258,165 +258,200 @@ const DetailPanel = (() => {
   }
 
   // ── Load data for a symbol ────────────────────────
-  async function loadSymbol(sym, exchange) {
-    if (!sym) return;
+  async function loadSymbol(sym, exchange = 'binance') {
     sym = sym.replace(/USDT$/, '');
-
     const nameEl = document.getElementById('dp-coin-name');
     if (nameEl) nameEl.textContent = sym + 'USDT.P';
-
-    // Forcing Binance fapi for these endpoints since Bybit doesn't have them on these paths
     const pairSym = sym + 'USDT';
 
     try {
-      // ── 24hr ticker ─────────────────────────────
       let price = null, changePct = null, vol24h = null;
-      try {
-        const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
-        if (tk.ok) {
-          const d = await tk.json();
-          price     = parseFloat(d.lastPrice);
-          changePct = parseFloat(d.priceChangePercent);
-          vol24h    = parseFloat(d.quoteVolume);
-        }
-      } catch {}
-
-      // ── Spot Price ──────────────────────────────
-      let spotPrice = null;
-      try {
-        // Strip futures-only prefixes: 1000PEPE -> PEPE, 1000SATS -> SATS etc.
-        const spotSym = pairSym
-          .replace(/^1000000/, '')   // 1000000X -> X
-          .replace(/^10000/, '')     // 10000X   -> X
-          .replace(/^1000/, '');     // 1000X    -> X
-        const spotResp = await fetch(`${AppConfig.API.binance.restSpot}/api/v3/ticker/price?symbol=${spotSym}`);
-        if (spotResp.ok) {
-          const d = await spotResp.json();
-          if (d.price) spotPrice = parseFloat(d.price);
-        }
-        // If still null, the coin may not trade on spot (e.g. DRIFT, PIXEL)
-      } catch {}
-
-      // ── Funding rate & Time ─────────────────────────────
       let frPct = null, nextFundingTime = null, frIntervalText = '8h';
-      try {
-        const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
-        if (fr.ok) {
-          const d = await fr.json();
-          frPct = parseFloat(d.lastFundingRate || 0) * 100;
-          nextFundingTime = parseInt(d.nextFundingTime || 0);
-        }
-      } catch {}
-
-      try {
-         // Interval hesaplama: Son 2 gerçekleşmiş funding ödemesi aralığı
-         const frHist = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/fundingRate?symbol=${pairSym}&limit=2`);
-         if(frHist.ok){
-            const d = await frHist.json();
-            if(d.length === 2){
-               const diffMs = parseInt(d[1].fundingTime) - parseInt(d[0].fundingTime);
-               const hours = Math.round(diffMs / 3600000);
-               if(hours > 0) frIntervalText = hours + 'h';
-            }
-         }
-      } catch {}
-
-      // ── Open Interest history ────────────────────
       let oi = null, oiHistory = [];
-      try {
-        const oiResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/openInterestHist?symbol=${pairSym}&period=5m&limit=8`);
-        if (oiResp.ok) {
-          const arr = await oiResp.json();
-          oiHistory = arr.map(x => parseFloat(x.sumOpenInterestValue || x.openInterest || 0));
-          if (oiHistory.length) oi = oiHistory[oiHistory.length - 1];
-        }
-      } catch {}
-
-      // ── RSI (1m, 5m, 1h, 4h, 1d) ───────────────────
+      let lsRatio = 1;
+      let spotPrice = null;
       let rsiData = {};
-      try {
-         const tfs = ['1m', '5m', '1h', '4h', '1d'];
-         const calcRsi = (closes, period = 14) => {
+
+      if (exchange === 'bybit') {
+        // ── Ticker (fiyat, chg, vol, funding) ──
+        try {
+          const tk = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${pairSym}`);
+          if (tk.ok) {
+            const d = (await tk.json())?.result?.list?.[0];
+            if (d) {
+              price      = parseFloat(d.lastPrice);
+              changePct  = parseFloat(d.price24hPcnt) * 100;
+              vol24h     = parseFloat(d.turnover24h);
+              frPct      = parseFloat(d.fundingRate) * 100;
+              nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym) || parseInt(d.nextFundingTime) || 0;
+              await new Promise(r => setTimeout(r, 500));
+              frIntervalText = window.fundingIntervalManager?.get(pairSym) || '8h';
+            }
+          }
+        } catch {}
+
+        // ── Spot ──
+        try {
+          const sp = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${pairSym}`);
+          if (sp.ok) {
+            const d = (await sp.json())?.result?.list?.[0];
+            if (d) spotPrice = parseFloat(d.lastPrice);
+          }
+        } catch {}
+
+        // ── OI history ──
+        try {
+          const oiResp = await fetch(`https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${pairSym}&intervalTime=5min&limit=8`);
+          if (oiResp.ok) {
+            const arr = (await oiResp.json())?.result?.list || [];
+            oiHistory = arr.map(x => parseFloat(x.openInterest) * (price || 1)).reverse();
+            if (oiHistory.length) oi = oiHistory[oiHistory.length - 1];
+          }
+        } catch {}
+
+        // ── L/S ratio ──
+        try {
+          const lsResp = await fetch(`https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${pairSym}&period=5min&limit=1`);
+          if (lsResp.ok) {
+            const d = (await lsResp.json())?.result?.list?.[0];
+            if (d) lsRatio = parseFloat(d.buyRatio) / parseFloat(d.sellRatio);
+          }
+        } catch {}
+
+        // ── RSI ──
+        try {
+          const tfMap = { '1m': '1', '5m': '5', '1h': '60', '4h': '240', '1d': 'D' };
+          const calcRsi = (closes, period = 14) => {
             if (closes.length <= period) return null;
             let gains = 0, losses = 0;
             for (let i = 1; i <= period; i++) {
-               let diff = closes[i] - closes[i - 1];
-               if (diff >= 0) gains += diff;
-               else losses -= diff;
+              const diff = closes[i] - closes[i - 1];
+              if (diff >= 0) gains += diff; else losses -= diff;
             }
-            let avgGain = gains / period;
-            let avgLoss = losses / period;
+            let avgGain = gains / period, avgLoss = losses / period;
             for (let i = period + 1; i < closes.length; i++) {
-               let diff = closes[i] - closes[i - 1];
-               if (diff >= 0) {
-                  avgGain = (avgGain * (period - 1) + diff) / period;
-                  avgLoss = (avgLoss * (period - 1)) / period;
-               } else {
-                  avgGain = (avgGain * (period - 1)) / period;
-                  avgLoss = (avgLoss * (period - 1) - diff) / period;
-               }
+              const diff = closes[i] - closes[i - 1];
+              if (diff >= 0) { avgGain = (avgGain * (period-1) + diff) / period; avgLoss = (avgLoss * (period-1)) / period; }
+              else { avgGain = (avgGain * (period-1)) / period; avgLoss = (avgLoss * (period-1) - diff) / period; }
             }
             if (avgLoss === 0) return 100;
-            return 100 - (100 / (1 + (avgGain / avgLoss)));
-         };
-
-         const fetchRsi = async (tf) => {
-            const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/klines?symbol=${pairSym}&interval=${tf}&limit=100`);
+            return 100 - (100 / (1 + avgGain / avgLoss));
+          };
+          const results = await Promise.all(Object.entries(tfMap).map(async ([tf, interval]) => {
+            const resp = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${pairSym}&interval=${interval}&limit=100`);
             if (resp.ok) {
-               const data = await resp.json();
-               const closes = data.map(k => parseFloat(k[4])); 
-               return calcRsi(closes);
+              const data = (await resp.json())?.result?.list || [];
+              const closes = data.map(k => parseFloat(k[4])).reverse();
+              return [tf, calcRsi(closes)];
             }
+            return [tf, null];
+          }));
+          results.forEach(([tf, val]) => rsiData[tf] = val);
+        } catch {}
+
+      } else {
+        // ── BINANCE ──
+        try {
+          const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
+          if (tk.ok) {
+            const d = await tk.json();
+            price     = parseFloat(d.lastPrice);
+            changePct = parseFloat(d.priceChangePercent);
+            vol24h    = parseFloat(d.quoteVolume);
+          }
+        } catch {}
+
+        try {
+          const spotSym = pairSym.replace(/^1000000/, '').replace(/^10000/, '').replace(/^1000/, '');
+          const sp = await fetch(`${AppConfig.API.binance.restSpot}/api/v3/ticker/price?symbol=${spotSym}`);
+          if (sp.ok) { const d = await sp.json(); if (d.price) spotPrice = parseFloat(d.price); }
+        } catch {}
+
+        try {
+          const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
+          if (fr.ok) {
+            const d = await fr.json();
+            frPct = parseFloat(d.lastFundingRate || 0) * 100;
+            nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym) || parseInt(d.nextFundingTime || 0);
+          }
+        } catch {}
+
+        try {
+          const frHist = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/fundingRate?symbol=${pairSym}&limit=2`);
+          if (frHist.ok) {
+            const d = await frHist.json();
+            if (d.length === 2) {
+              const hours = Math.round((parseInt(d[1].fundingTime) - parseInt(d[0].fundingTime)) / 3600000);
+              if (hours > 0) frIntervalText = hours + 'h';
+            }
+          }
+        } catch {}
+
+        try {
+          const oiResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/openInterestHist?symbol=${pairSym}&period=5m&limit=8`);
+          if (oiResp.ok) {
+            const arr = await oiResp.json();
+            oiHistory = arr.map(x => parseFloat(x.sumOpenInterestValue || x.openInterest || 0));
+            if (oiHistory.length) oi = oiHistory[oiHistory.length - 1];
+          }
+        } catch {}
+
+        try {
+          const tfs = ['1m', '5m', '1h', '4h', '1d'];
+          const calcRsi = (closes, period = 14) => {
+            if (closes.length <= period) return null;
+            let gains = 0, losses = 0;
+            for (let i = 1; i <= period; i++) { const diff = closes[i] - closes[i-1]; if (diff >= 0) gains += diff; else losses -= diff; }
+            let avgGain = gains / period, avgLoss = losses / period;
+            for (let i = period + 1; i < closes.length; i++) {
+              const diff = closes[i] - closes[i-1];
+              if (diff >= 0) { avgGain = (avgGain*(period-1)+diff)/period; avgLoss = (avgLoss*(period-1))/period; }
+              else { avgGain = (avgGain*(period-1))/period; avgLoss = (avgLoss*(period-1)-diff)/period; }
+            }
+            if (avgLoss === 0) return 100;
+            return 100 - (100 / (1 + avgGain / avgLoss));
+          };
+          const results = await Promise.all(tfs.map(async tf => {
+            const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/klines?symbol=${pairSym}&interval=${tf}&limit=100`);
+            if (resp.ok) { const data = await resp.json(); return calcRsi(data.map(k => parseFloat(k[4]))); }
             return null;
-         };
-         
-         const results = await Promise.all(tfs.map(tf => fetchRsi(tf)));
-         tfs.forEach((tf, i) => rsiData[tf] = results[i]);
-      } catch {}
+          }));
+          tfs.forEach((tf, i) => rsiData[tf] = results[i]);
+        } catch {}
 
-      // ── Global L/S ratio ────────────────────────
-      let lsRatio = 1;
-      try {
-        const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
-        if (lsResp.ok) {
-          const lsArr = await lsResp.json();
-          lsRatio = parseFloat(lsArr[0]?.longShortRatio || 1);
-        }
-      } catch {}
+        try {
+          const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
+          if (lsResp.ok) { const arr = await lsResp.json(); lsRatio = parseFloat(arr[0]?.longShortRatio || 1); }
+        } catch {}
+      }
 
-      // ── Fundamental Info (CoinGecko) ────────────
+      // ── CoinGecko (ortak) ──
       let cgData = null;
       try {
-        let searchSym = sym.replace(/^10000?/, '').toLowerCase(); // Fix 1000PEPE -> pepe
+        let searchSym = sym.replace(/^10000?/, '').toLowerCase();
         if (!window.cgSymbolCache) window.cgSymbolCache = {};
         let cgId = window.cgSymbolCache[searchSym];
-        
         if (!cgId) {
           const searchResp = await fetch(`https://api.coingecko.com/api/v3/search?query=${searchSym}`);
           if (searchResp.ok) {
             const searchData = await searchResp.json();
             const match = searchData.coins.find(c => c.symbol.toLowerCase() === searchSym);
-            if (match) {
-              cgId = match.id;
-              window.cgSymbolCache[searchSym] = cgId;
-            }
+            if (match) { cgId = match.id; window.cgSymbolCache[searchSym] = cgId; }
           }
         }
-
         if (cgId) {
           const coinResp = await fetch(`https://api.coingecko.com/api/v3/coins/${cgId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`);
-          if (coinResp.ok) {
-             cgData = await coinResp.json();
-          }
+          if (coinResp.ok) cgData = await coinResp.json();
         }
-      } catch (e) {}
-
-      update({ sym, price, changePct, spotPrice, frPct, nextFundingTime, frIntervalText, oi, oiHistory, vol24h, lsRatio, rsi: rsiData, cgData });
-
+      } catch {}
+      console.log('frIntervalText:', frIntervalText);
+      update({ sym, price, changePct, spotPrice, frPct, nextFundingTime, frIntervalText, oi, oiHistory, vol24h, lsRatio, rsi: rsiData, cgData, exchange });
     } catch (e) {
       console.error('[DetailPanel] Load error:', e);
     }
   }
+
+
 
   // ── Init ──────────────────────────────────────────
   function init() {
@@ -452,11 +487,31 @@ const DetailPanel = (() => {
       if (pfEl) pfEl.textContent = _fmt(price);
     });
 
+    // ── ScalpFR Signals Tab ───────────────────────────────────────────
+    if (typeof BotSignalsPanel !== 'undefined') {
+      BotSignalsPanel.init();
+    }
+
+    // New signal arrived → re-render
+    EventBus.on('scalp:frSignal', () => {
+      if (typeof BotSignalsPanel !== 'undefined') BotSignalsPanel.render();
+    });
+
+    // Also catch native event (fired by ScalpFRMonitor)
+    window.addEventListener('scalpFRSignal', () => {
+      if (typeof BotSignalsPanel !== 'undefined') BotSignalsPanel.render();
+    });
+
     // Load default symbol
     const defaultSym = State.get('activeSymbol') || 'BTC';
     loadSymbol(defaultSym.replace(/USDT$/, ''), State.get('activeExchange') || 'binance');
 
     console.log('[DetailPanel] Initialized ✓');
+    EventBus.on('funding:loaded', () => {
+      const sym = State.get('activeSymbol') || 'BTC';
+      const exchange = State.get('activeExchange') || 'binance';
+      loadSymbol(sym.replace(/USDT$/, ''), exchange);
+    });
   }
 
   return { init, update, loadSymbol };

@@ -36,10 +36,6 @@ const DrawingSettingsDialog = (() => {
     'fib-speedfan':'Fib Speed Resistance Fan',
     'fib-timebased':'Trend-Based Fib Time',
     'fib-spiral':  'Fib Spiral',
-    pitchfork:     'Pitchfork',
-    schiffpitch:   'Schiff Pitchfork',
-    modschiff:     'Modified Schiff',
-    insidepitch:   'Inside Pitchfork',
     longpos:       'Long Position',
     shortpos:      'Short Position',
     posforecast:   'Forecast',
@@ -75,8 +71,8 @@ const DrawingSettingsDialog = (() => {
   const TOOL_CAPS = {
     hline:        { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:true, coordsMode:'priceOnly' },
     hray:         { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },
-    vline:        { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'timeOnly'  },
-    crossline:    { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },
+    vline:        { priceLabel:false, extend:true, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:true, hasTimeLabel:true, coordsMode:'timeOnly'  },
+    crossline:    { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:false, hasTimeLabel:true, coordsMode:'p1only'   },
     trendline:    { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
     ray:          { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
     extended:     { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:true, coordsMode:'p2' },
@@ -84,8 +80,8 @@ const DrawingSettingsDialog = (() => {
     trendangle:   { priceLabel:true,  extend:true,  midpoint:true,  stats:true,  capArrows:true,  hasFill:false, hasText:false, coordsMode:'p2' },
     arrowdraw:    { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true,  hasFill:false, coordsMode:'p2'       },
     channel:      { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:true, coordsMode:'p2' },
-    regression:   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p2'       },
-    flattopbottom:{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p2'       },
+    regression:   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasInputs:true, coordsMode:'p2'       },
+    flattopbottom:{ priceLabel:false, extend:true, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:true, hasFlatTopStyle:true, coordsMode:'p3' },
     rect:         { priceLabel:false, extend:true,  midpoint:true, stats:false, capArrows:false, hasFill:true, hasText:true, coordsMode:'p2'       },
     vwap:         { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },
     // Fibo
@@ -97,11 +93,6 @@ const DrawingSettingsDialog = (() => {
     'fib-speedfan': { isFibo:true, coordsMode:'p2' },
     'fib-timebased': { isFibo:true, coordsMode:'p3' },
     'fib-spiral':  { isFibo:true, coordsMode:'p2' },
-    // Pitchfork
-    'pitchfork':  { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, coordsMode:'p3' },
-    'schiffpitch':{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, coordsMode:'p3' },
-    'modschiff':  { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, coordsMode:'p3' },
-    'insidepitch':{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, coordsMode:'p3' },
     // Positions
     'longpos':    { isPos:true, coordsMode:'p3' },
     'shortpos':   { isPos:true, coordsMode:'p3' },
@@ -270,7 +261,7 @@ const DrawingSettingsDialog = (() => {
     const caps = _getCaps(drawing.tool);
     // Callout and Text tools always open on Text tab
     const effectiveTab = (drawing.tool === 'callout' || drawing.tool === 'texttool') ? 'text' : opts.tab;
-    _activeTab = effectiveTab || (caps.isPos ? 'inputs' : (caps.isTextTool ? 'text' : 'style'));
+    _activeTab = effectiveTab || ((caps.isPos || caps.hasInputs) ? 'inputs' : (caps.isTextTool ? 'text' : 'style'));
     _onOk = opts.onOk;
     _onCancel = opts.onCancel;
     // Save snapshot for cancel
@@ -299,9 +290,9 @@ const DrawingSettingsDialog = (() => {
         </div>
 
         <div class="dsd-tabs">
-          ${_getCaps(drawing.tool).isPos ? `<button class="dsd-tab ${_activeTab==='inputs'?'active':''}" data-tab="inputs">Inputs</button>` : ''}
+          ${(_getCaps(drawing.tool).isPos || _getCaps(drawing.tool).hasInputs) ? `<button class="dsd-tab ${_activeTab==='inputs'?'active':''}" data-tab="inputs">Inputs</button>` : ''}
           ${!_getCaps(drawing.tool).isTextTool && drawing.tool !== 'callout' ? `<button class="dsd-tab ${_activeTab==='style'?'active':''}" data-tab="style">Style</button>` : ''}
-          ${((!_getCaps(drawing.tool).isFibo && !_getCaps(drawing.tool).isPos && _getCaps(drawing.tool).hasText !== false) || drawing.tool === 'callout') && drawing.tool !== 'pricelabel' ? `<button class="dsd-tab ${_activeTab==='text'?'active':''}" data-tab="text">Text</button>` : ''}
+          ${((!_getCaps(drawing.tool).isFibo && !_getCaps(drawing.tool).isPos && _getCaps(drawing.tool).hasText !== false) || drawing.tool === 'callout') && drawing.tool !== 'pricelabel' && drawing.tool !== 'regression' ? `<button class="dsd-tab ${_activeTab==='text'?'active':''}" data-tab="text">Text</button>` : ''}
           ${(!_getCaps(drawing.tool).isAnnotation && !_getCaps(drawing.tool).isTextTool) || ['callout', 'pricelabel'].includes(drawing.tool) ? `<button class="dsd-tab ${_activeTab==='coords'?'active':''}" data-tab="coords">Coordinates</button>` : ''}
           <button class="dsd-tab ${_activeTab==='visibility'?'active':''}" data-tab="visibility">Visibility</button>
         </div>
@@ -414,11 +405,13 @@ const DrawingSettingsDialog = (() => {
   function _renderTab(tab, d) {
     if (tab === 'inputs') {
       if (_getCaps(d.tool).isPos) return DSDPositionTabs.renderPositionInputsTab(d);
+      if (d.tool === 'regression') return _renderRegressionInputsTab(d);
     }
     if (tab === 'style') {
       if (_getCaps(d.tool).isFibo) return DSDFiboTabs.renderFibStyleTab(d);
       if (_getCaps(d.tool).isPos)  return DSDPositionTabs.renderPositionStyleTab(d);
       if (_getCaps(d.tool).isAnnotation) return DSDAnnotationTabs.renderAnnotationStyleTab(d);
+      if (d.tool === 'regression') return _renderRegressionStyleTab(d);
       return DSDStandardTabs.renderStyleTab(d);
     }
     if (tab === 'text') {
@@ -460,6 +453,14 @@ const DrawingSettingsDialog = (() => {
         EventBus.emit('drawing:settings:saved');
       });
     }
+    const orientEl = overlay.querySelector('#dsd-textOrientation');
+    if (orientEl) {
+      orientEl.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.textOrientation = orientEl.value;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
 
     // Line color swatch (js-style-color)
     overlay.querySelectorAll('.dsd-color-swatch.js-style-color').forEach(swatch => {
@@ -467,6 +468,16 @@ const DrawingSettingsDialog = (() => {
         e.stopPropagation();
         if (swatch.classList.contains('js-combined-line')) {
            DSDColorPicker.showCombinedLineSettings(swatch, swatch.dataset.color || '#58a6ff', drawing.style?.width || 1, drawing.style?.lineStyle || 'solid', true, (res) => {
+              swatch.style.background = res.color;
+              swatch.dataset.color = res.color;
+              drawing.style = drawing.style || {};
+              drawing.style.color = res.color;
+              drawing.style.width = res.width;
+              drawing.style.lineStyle = res.style;
+              EventBus.emit('drawing:settings:saved');
+           });
+        } else if (swatch.classList.contains('js-ftb-line-combo')) {
+           DSDColorPicker.showCombinedLineSettings(swatch, swatch.dataset.color || '#FF9800', drawing.style?.width || 1, drawing.style?.lineStyle || 'solid', true, (res) => {
               swatch.style.background = res.color;
               swatch.dataset.color = res.color;
               drawing.style = drawing.style || {};
@@ -786,6 +797,119 @@ const DrawingSettingsDialog = (() => {
       });
     }
 
+    // ── Flat Top/Bottom özel alanları ────────────────────
+    // Prices checkbox
+    const showPricesCb = overlay.querySelector('#dsd-showprices');
+    if (showPricesCb) {
+      showPricesCb.addEventListener('change', () => {
+        drawing.style.showPrices = showPricesCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // Price label rengi
+    overlay.querySelectorAll('.dsd-color-swatch.js-price-color').forEach(sw => {
+      sw.addEventListener('click', e => {
+        e.stopPropagation();
+        DSDColorPicker.showColorPalette(sw, sw.dataset.color || '#F44336', newColor => {
+          sw.style.background = newColor;
+          sw.dataset.color = newColor;
+          drawing.style.priceColor = newColor;
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+    });
+
+    // Price font size
+    const priceFsEl = overlay.querySelector('#dsd-pricefontsize');
+    if (priceFsEl) {
+      priceFsEl.addEventListener('change', () => {
+        drawing.style.priceFontSize = parseInt(priceFsEl.value, 10);
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // Price bold / italic
+    const priceBoldBtn = overlay.querySelector('#dsd-pricebold');
+    if (priceBoldBtn) {
+      priceBoldBtn.addEventListener('click', () => {
+        drawing.style.priceBold = !drawing.style.priceBold;
+        priceBoldBtn.classList.toggle('active', !!drawing.style.priceBold);
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+    const priceItalicBtn = overlay.querySelector('#dsd-priceitalic');
+    if (priceItalicBtn) {
+      priceItalicBtn.addEventListener('click', () => {
+        drawing.style.priceItalic = !drawing.style.priceItalic;
+        priceItalicBtn.classList.toggle('active', !!drawing.style.priceItalic);
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // Background checkbox (flat top/bottom)
+    const ftBgCb = overlay.querySelector('#dsd-ftbg');
+    if (ftBgCb) {
+      ftBgCb.addEventListener('change', () => {
+        drawing.style.background = ftBgCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // Flat Top/Bottom background swatch (.js-ftbg-color)
+    overlay.querySelectorAll('.dsd-color-swatch.js-ftbg-color').forEach(sw => {
+      sw.addEventListener('click', e => {
+        e.stopPropagation();
+        
+        let curHex = drawing.style.bgColor || sw.dataset.color || '#FF9800';
+        let curOp  = drawing.style.bgOpacity !== undefined ? drawing.style.bgOpacity : 15;
+        let startColor = curHex;
+        if (curHex.startsWith('#')) {
+           let c = curHex.substring(1);
+           if (c.length===3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+           let r=parseInt(c.slice(0,2),16), g=parseInt(c.slice(2,4),16), b=parseInt(c.slice(4,6),16);
+           startColor = `rgba(${r},${g},${b},${curOp/100})`;
+        }
+
+        DSDColorPicker.showColorPalette(sw, startColor, newColor => {
+          sw.style.background = newColor;
+          
+          if (newColor.startsWith('rgba') || newColor.startsWith('rgb')) {
+            const m = newColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            if (m) {
+              const hex = '#' + (+m[1]).toString(16).padStart(2,'0') + (+m[2]).toString(16).padStart(2,'0') + (+m[3]).toString(16).padStart(2,'0');
+              const op = m[4] != null ? Math.round(parseFloat(m[4]) * 100) : 100;
+              drawing.style.bgColor = hex;
+              drawing.style.bgOpacity = op;
+            }
+          } else {
+            drawing.style.bgColor = newColor;
+            drawing.style.bgOpacity = 100;
+          }
+          
+          sw.dataset.color = drawing.style.bgColor;
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+    });
+
+    // Extend dropdown (flat top/bottom)
+    const ftExtHeader = overlay.querySelector('#dsd-ftextend-header');
+    const ftExtBody   = overlay.querySelector('#dsd-ftextend-body');
+    if (ftExtHeader && ftExtBody) {
+      ftExtHeader.addEventListener('click', () => ftExtBody.classList.toggle('hidden'));
+      ftExtBody.querySelectorAll('.dsd-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          drawing.style.extend = opt.dataset.val;
+          overlay.querySelector('#dsd-ftextend-label').textContent = opt.textContent.trim();
+          ftExtBody.classList.add('hidden');
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+    }
+    // ── /Flat Top/Bottom ─────────────────────────────────
+
+
     // Show border checkbox (texttool)
     const showBorderCb = overlay.querySelector('#dsd-showborder');
     if (showBorderCb) {
@@ -852,7 +976,130 @@ const DrawingSettingsDialog = (() => {
       });
     });
 
+    const priceLabelCb = overlay.querySelector('#dsd-pricelabel');
+    if (priceLabelCb) {
+      priceLabelCb.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.priceLabel = priceLabelCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
+    // ── Regression Trend: Inputs tab events ──────
+    const regUpperDev = overlay.querySelector('#reg-upper-dev');
+    if (regUpperDev) regUpperDev.addEventListener('input', () => {
+      const v = parseFloat(regUpperDev.value);
+      if (!isNaN(v) && v > 0) { drawing.style = drawing.style||{}; drawing.style.upperDev = v; EventBus.emit('drawing:settings:saved'); }
+    });
+    const regLowerDev = overlay.querySelector('#reg-lower-dev');
+    if (regLowerDev) regLowerDev.addEventListener('input', () => {
+      const v = parseFloat(regLowerDev.value);
+      if (!isNaN(v) && v > 0) { drawing.style = drawing.style||{}; drawing.style.lowerDev = v; EventBus.emit('drawing:settings:saved'); }
+    });
+    const regUseUpper = overlay.querySelector('#reg-use-upper');
+    if (regUseUpper) regUseUpper.addEventListener('change', () => {
+      drawing.style = drawing.style||{}; drawing.style.useUpperDev = regUseUpper.checked; EventBus.emit('drawing:settings:saved');
+    });
+    const regUseLower = overlay.querySelector('#reg-use-lower');
+    if (regUseLower) regUseLower.addEventListener('change', () => {
+      drawing.style = drawing.style||{}; drawing.style.useLowerDev = regUseLower.checked; EventBus.emit('drawing:settings:saved');
+    });
+    const regSource = overlay.querySelector('#reg-source');
+    if (regSource) regSource.addEventListener('change', () => {
+      drawing.style = drawing.style||{}; drawing.style.source = regSource.value; EventBus.emit('drawing:settings:saved');
+    });
+
+    // ── Regression Trend: Style tab events ───────
+    const regExtRight = overlay.querySelector('#reg-extend-right');
+    if (regExtRight) regExtRight.addEventListener('change', () => {
+      drawing.style = drawing.style||{}; drawing.style.extendRight = regExtRight.checked; EventBus.emit('drawing:settings:saved');
+    });
+    const regPearson = overlay.querySelector('#reg-pearson');
+    if (regPearson) regPearson.addEventListener('change', () => {
+      drawing.style = drawing.style||{}; drawing.style.showPearson = regPearson.checked; EventBus.emit('drawing:settings:saved');
+    });
+
+    // Visibility checkboxes (Base/Up/Down)
+    [
+      { id: 'reg-show-base', key: 'showBase' },
+      { id: 'reg-show-up',   key: 'showUp'   },
+      { id: 'reg-show-down', key: 'showDown'  },
+    ].forEach(({ id, key }) => {
+      const cb = overlay.querySelector('#' + id);
+      if (cb) cb.addEventListener('change', () => {
+        drawing.style = drawing.style||{}; drawing.style[key] = cb.checked; EventBus.emit('drawing:settings:saved');
+      });
+    });
+
+    // Line combo buttons (Base/Up/Down) — tek tıklama, renk+kalınlık+stil+opacity
+    [
+      { selector: '.js-reg-line-base',  colorKey:'color',     widthKey:'width',     styleKey:'lineStyle', opacityKey:'baseOpacity', prevId:'#reg-prev-base' },
+      { selector: '.js-reg-line-up',    colorKey:'upColor',   widthKey:'upWidth',   styleKey:'upStyle',   opacityKey:'upOpacity',   prevId:'#reg-prev-up'   },
+      { selector: '.js-reg-line-down',  colorKey:'downColor', widthKey:'downWidth', styleKey:'downStyle', opacityKey:'downOpacity', prevId:'#reg-prev-down' },
+    ].forEach(({ selector, colorKey, widthKey, styleKey, opacityKey, prevId }) => {
+      const combo = overlay.querySelector(selector);
+      if (!combo) return;
+      const swatch = combo.querySelector('.dsd-reg-swatch');
+      combo.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const curHex = combo.dataset.color || '#2962ff';
+        const curOp  = parseFloat(combo.dataset.opacity ?? 1);
+        const h = curHex.replace('#','');
+        const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+        const curC = `rgba(${r},${g},${b},${curOp})`;
+        const curW = parseInt(combo.dataset.width) || 1;
+        const curS = combo.dataset.linestyle || 'solid';
+        DSDColorPicker.showCombinedLineSettings(combo, curC, curW, curS, true, (res) => {
+          // res.color içinden opacity'yi ayır — çizgi tam opak, dolgu transparan
+          const rgbaMatch = res.color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+          const hexColor  = rgbaMatch
+            ? '#' + [rgbaMatch[1],rgbaMatch[2],rgbaMatch[3]].map(v => parseInt(v).toString(16).padStart(2,'0')).join('')
+            : res.color;
+          const opacity   = rgbaMatch && rgbaMatch[4] != null ? parseFloat(rgbaMatch[4]) : 1;
+
+          swatch.style.background = hexColor;
+          combo.dataset.color     = hexColor;
+          combo.dataset.width     = res.width;
+          combo.dataset.linestyle = res.style;
+          combo.dataset.opacity   = opacity;
+          drawing.style = drawing.style || {};
+          drawing.style[colorKey]   = hexColor;   // çizgi rengi — tam opak hex
+          drawing.style[widthKey]   = res.width;
+          drawing.style[styleKey]   = res.style;
+          drawing.style[opacityKey] = opacity;    // dolgu opacity'si ayrı
+          const line = overlay.querySelector(prevId + ' line');
+          if (line) {
+            line.setAttribute('stroke', res.color);
+            line.setAttribute('stroke-width', res.width);
+            const dash = res.style === 'dashed' ? '6,4' : res.style === 'dotted' ? '2,3' : '';
+            line.setAttribute('stroke-dasharray', dash);
+          }
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+    });
+
+    const timeLabelCb = overlay.querySelector('#dsd-timelabel');
+    if (timeLabelCb) {
+      timeLabelCb.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.timeLabel = timeLabelCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
+
     // Extend checkboxes
+    // vline: tek "Extend" checkbox (dsd-ext-all) → extendAll, extendRight, extendLeft hepsini set et
+    const extAllCb = overlay.querySelector('#dsd-ext-all');
+    if (extAllCb) {
+      extAllCb.addEventListener('change', () => {
+        drawing.style = drawing.style || {};
+        drawing.style.extendAll   = extAllCb.checked;
+        drawing.style.extendRight = extAllCb.checked;
+        drawing.style.extendLeft  = extAllCb.checked;
+        EventBus.emit('drawing:settings:saved');
+      });
+    }
     ['dsd-ext-left', 'dsd-ext-right'].forEach(id => {
       const cb = overlay.querySelector('#' + id);
       if (cb) {
@@ -1225,6 +1472,112 @@ const DrawingSettingsDialog = (() => {
 
   // ── Apply form values to drawing on OK ───────────
 
+
+  // ── Regression Trend: Inputs Tab ─────────────────
+  function _renderRegressionInputsTab(d) {
+    const s = d.style || {};
+    const upperDev = s.upperDev ?? 2;
+    const lowerDev = s.lowerDev ?? 2;
+    const useUpper = s.useUpperDev !== false;
+    const useLower = s.useLowerDev !== false;
+    const source   = s.source || 'close';
+    const sourceLabels = {
+      open: 'Open', high: 'High', low: 'Low', close: 'Close',
+      hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4'
+    };
+    const sourceOpts = Object.entries(sourceLabels)
+      .map(([v, label]) => `<option value="${v}" ${source===v?'selected':''}>${label}</option>`)
+      .join('');
+    return `
+      <div style="padding:8px 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #2a2e39;">
+          <label style="color:#d1d4dc;font-size:13px;">Upper Deviation</label>
+          <input id="reg-upper-dev" type="number" min="0.1" step="0.1" value="${upperDev}"
+            style="width:80px;background:#1e222d;border:1px solid #363c4e;color:#d1d4dc;border-radius:4px;padding:4px 8px;font-size:13px;text-align:left;">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #2a2e39;">
+          <label style="color:#d1d4dc;font-size:13px;">Lower Deviation</label>
+          <input id="reg-lower-dev" type="number" min="0.1" step="0.1" value="${lowerDev}"
+            style="width:80px;background:#1e222d;border:1px solid #363c4e;color:#d1d4dc;border-radius:4px;padding:4px 8px;font-size:13px;text-align:left;">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
+          <input id="reg-use-upper" type="checkbox" ${useUpper?'checked':''} style="width:16px;height:16px;cursor:pointer;">
+          <label for="reg-use-upper" style="color:#d1d4dc;font-size:13px;cursor:pointer;">Use Upper Deviation</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
+          <input id="reg-use-lower" type="checkbox" ${useLower?'checked':''} style="width:16px;height:16px;cursor:pointer;">
+          <label for="reg-use-lower" style="color:#d1d4dc;font-size:13px;cursor:pointer;">Use Lower Deviation</label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
+          <label style="color:#d1d4dc;font-size:13px;">Source</label>
+          <select id="reg-source"
+            style="background:#1e222d;border:1px solid #363c4e;color:#d1d4dc;border-radius:4px;padding:4px 8px;font-size:13px;min-width:90px;">
+            ${sourceOpts}
+          </select>
+        </div>
+      </div>`;
+  }
+
+  // ── Regression Trend: Style Tab ──────────────────
+  function _renderRegressionStyleTab(d) {
+    const s = d.style || {};
+
+    // Base (center line)
+    const baseColor  = s.color      || '#2962ff';
+    const baseWidth  = s.width      || 1;
+    const baseStyle  = s.lineStyle  || 'solid';
+    const showBase   = s.showBase   !== false;
+
+    // Up band
+    const upColor    = s.upColor    || '#2962ff';
+    const upWidth    = s.upWidth    || 1;
+    const upStyle    = s.upStyle    || 'dashed';
+    const showUp     = s.showUp     !== false;
+
+    // Down band
+    const downColor  = s.downColor  || '#2962ff';
+    const downWidth  = s.downWidth  || 1;
+    const downStyle  = s.downStyle  || 'dashed';
+    const showDown   = s.showDown   !== false;
+
+    const extRight   = s.extendRight   === true;
+    const showPearson = s.showPearson !== false;
+
+    // Line preview SVG helper
+    const linePrev = (id, color, w, st) => {
+      const dash = st === 'dashed' ? '6,4' : st === 'dotted' ? '2,3' : '';
+      return `<svg id="${id}" width="50" height="16" viewBox="0 0 50 16">
+        <line x1="2" y1="8" x2="48" y2="8" stroke="${color}" stroke-width="${w}"
+          stroke-dasharray="${dash}" stroke-linecap="round"/>
+      </svg>`;
+    };
+
+    const row = (cbId, label, swatchClass, color, width, lineStyle, previewId, opacity) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
+        <input id="${cbId}" type="checkbox" ${(s[cbId.replace('reg-show-','show'+(cbId.includes('base')?'Base':cbId.includes('up')?'Up':'Down'))] !== false) ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
+        <label for="${cbId}" style="color:#d1d4dc;font-size:13px;min-width:46px;cursor:pointer;">${label}</label>
+        <div class="dsd-reg-line-combo ${swatchClass}" data-color="${color}" data-width="${width}" data-linestyle="${lineStyle}" data-opacity="${opacity ?? 0.1}"
+          style="display:flex;align-items:center;gap:4px;background:#1e222d;border:1px solid #363c4e;border-radius:4px;padding:3px 7px;cursor:pointer;">
+          <div class="dsd-reg-swatch" style="width:20px;height:20px;border-radius:3px;background:${color};flex-shrink:0;pointer-events:none;"></div>
+          ${linePrev(previewId, color, width, lineStyle)}
+        </div>
+      </div>`;
+
+    return `
+      <div style="padding:8px 0;">
+        ${row('reg-show-base','Base','js-reg-line-base', baseColor, baseWidth, baseStyle, 'reg-prev-base', s.baseOpacity ?? 0.1)}
+        ${row('reg-show-up',  'Up',  'js-reg-line-up',   upColor,   upWidth,   upStyle,   'reg-prev-up',   s.upOpacity   ?? 0.1)}
+        ${row('reg-show-down','Down','js-reg-line-down',  downColor, downWidth, downStyle, 'reg-prev-down', s.downOpacity ?? 0)}
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
+          <input id="reg-extend-right" type="checkbox" ${extRight?'checked':''} style="width:16px;height:16px;cursor:pointer;">
+          <label for="reg-extend-right" style="color:#d1d4dc;font-size:13px;cursor:pointer;">Extend lines</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;">
+          <input id="reg-pearson" type="checkbox" ${showPearson?'checked':''} style="width:16px;height:16px;cursor:pointer;">
+          <label for="reg-pearson" style="color:#d1d4dc;font-size:13px;cursor:pointer;">Pearson's R</label>
+        </div>
+      </div>`;
+  }
 
   return { open, showTemplateMenu, getCaps: _getCaps };
 
