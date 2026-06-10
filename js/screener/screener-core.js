@@ -543,9 +543,9 @@ const ScreenerCore = (() => {
 
         _priceMap.set(sym, price);
 
-        if (_frTracker) _frTracker.addFRValue(d.symbol, fr);
+        if (_frTracker) _frTracker.addFRValue(d.symbol, fr * 100);
         if (window.FRDataBridge) {
-          FRDataBridge.feed('binance', d.symbol, fr, Date.now());
+          FRDataBridge.feed('binance', d.symbol, fr * 100, Date.now());
         }
 
         const row = _rows.find(r => r.sym === sym);
@@ -591,7 +591,7 @@ const ScreenerCore = (() => {
         _priceMap.set(sym, price);
 
         if (window.FRDataBridge) {
-          FRDataBridge.feed('bybit', d.symbol, fr, Date.now());
+          FRDataBridge.feed('bybit', d.symbol, fr * 100, Date.now());
         }
 
         const row = _rows.find(r => r.sym === sym);
