@@ -453,6 +453,9 @@ const scalpFRMonitor_bybit   = new ScalpFRMonitor('bybit');
 window.scalpFRMonitor        = scalpFRMonitor;          // geriye dönük uyumluluk
 window.scalpFRMonitor_bybit  = scalpFRMonitor_bybit;
 
+window.frTracker_binance     = new FRTracker();
+window.frTracker_bybit       = new FRTracker();
+
 // Exchange adına göre instance döndüren yardımcı
 window.getScalpMonitor = (exchange) =>
   exchange === 'bybit' ? scalpFRMonitor_bybit : scalpFRMonitor;

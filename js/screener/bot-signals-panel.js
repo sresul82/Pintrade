@@ -234,7 +234,13 @@ const BotSignalsPanel = (() => {
     render();
   }
 
+  let _renderTimer = null;
   function render() {
+    if (_renderTimer) clearTimeout(_renderTimer);
+    _renderTimer = setTimeout(_renderSync, 50);
+  }
+
+  function _renderSync() {
     // Tum hedef container'lari topla
     const _allContainers = [
       document.getElementById('dp-signals-tab'),
@@ -318,8 +324,8 @@ const BotSignalsPanel = (() => {
 
     // Combine signals from both monitors for the list
     const mainListSignals = mainMonitor ? mainMonitor.getSignals(5000) : [];
-    const altListSignals = altMonitor ? altMonitor.getSignals(5000) : [];
-    const allSignals = [...mainListSignals, ...altListSignals];
+    // Only show main exchange signals in the list below to avoid interleaving and confusion
+    const allSignals = [...mainListSignals];
 
     const signals = allSignals.filter(s => {
       if (s.timestamp < cutoff) return false;
@@ -338,12 +344,15 @@ const BotSignalsPanel = (() => {
     let mainSignals = [];
     let altSignals = [];
     if (_coinFilter === 'selected' && _selectedSymbol) {
-      mainSignals = (mainMonitor?.getSignals(200) || [])
-        .filter(s => s.symbol === _selectedSymbol + 'USDT')
+      const mainTracker = window[`frTracker_${mainExchange}`];
+      const altTracker = window[`frTracker_${altExchange}`];
+
+      mainSignals = (mainTracker?.getHistory(_selectedSymbol + 'USDT') || [])
+        .map(h => ({ timestamp: h.timestamp, currentFR: h.value }))
         .sort((a, b) => a.timestamp - b.timestamp);
 
-      altSignals = (altMonitor?.getSignals(200) || [])
-        .filter(s => s.symbol === _selectedSymbol + 'USDT')
+      altSignals = (altTracker?.getHistory(_selectedSymbol + 'USDT') || [])
+        .map(h => ({ timestamp: h.timestamp, currentFR: h.value }))
         .sort((a, b) => a.timestamp - b.timestamp);
 
       const hasAltData = altSignals.length > 0;
@@ -358,7 +367,7 @@ const BotSignalsPanel = (() => {
             border-bottom:0.5px solid var(--border-primary);
           ">
             <span style="font-size:10px; font-weight:600; color:var(--text-primary);">
-              ${_selectedSymbol} FR — <span style="color:#f0b90b">${mainExchange.toUpperCase()}</span>${hasAltData ? ' <span style="color:var(--text-secondary)">+</span> <span style="color:#7b61ff">${altExchange.toUpperCase()}</span>' : ''}
+              ${_selectedSymbol} FR — <span style="color:#f0b90b">${mainExchange.toUpperCase()}</span>${hasAltData ? ` <span style="color:var(--text-secondary)">+</span> <span style="color:#7b61ff">${altExchange.toUpperCase()}</span>` : ''}
             </span>
             <span id="bsp-chart-arrow" style="
               font-size:10px; color:var(--text-secondary);
@@ -501,12 +510,14 @@ const BotSignalsPanel = (() => {
             borderColor:          '#f0b90b',   // sarı — ana
             backgroundColor:      'transparent',
             borderWidth:          1.5,
-            pointBackgroundColor: mainSignals.map(s =>
-              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
-            ),
-            pointBorderColor: mainSignals.map(s =>
-              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
-            ),
+            pointBackgroundColor: mainSignals.map((s, i) => {
+              if (i === 0) return signalGreen;
+              return (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
+            }),
+            pointBorderColor: mainSignals.map((s, i) => {
+              if (i === 0) return signalGreen;
+              return (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
+            }),
             pointStyle:  'triangle',
             pointRadius: 4,
             tension:     0.2,
@@ -525,12 +536,14 @@ const BotSignalsPanel = (() => {
             segment: {
               borderDash: () => [4, 3],        // Chart.js 3.x için fallback
             },
-            pointBackgroundColor: altSignals.map(s =>
-              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
-            ),
-            pointBorderColor: altSignals.map(s =>
-              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
-            ),
+            pointBackgroundColor: altSignals.map((s, i) => {
+              if (i === 0) return signalGreen;
+              return (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
+            }),
+            pointBorderColor: altSignals.map((s, i) => {
+              if (i === 0) return signalGreen;
+              return (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
+            }),
             pointStyle:  'circle',
             pointRadius: 3,
             tension:     0.2,
