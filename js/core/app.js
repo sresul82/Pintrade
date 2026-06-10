@@ -31,8 +31,26 @@ const App = {
     State.init();
     if (window.DrawingManager) window.DrawingManager.init();
     if (window.Sidebar) window.Sidebar.init();
-    if (window.bybitFRPoller) window.bybitFRPoller.start();          // ← add here
-    // if (window.binanceFRPoller) window.binanceFRPoller.start();   // Binance ready, disabled for now
+
+    // ── FR Sistemi — sıra kritik, değiştirme ──
+    if (window.FRDataBridge)    FRDataBridge.init();       // 1. önce bridge başlat
+    if (window.bybitFRPoller)   bybitFRPoller.start();     // 2. bybit poller
+    if (window.binanceFRPoller) binanceFRPoller.start();   // 3. binance poller
+
+    // ── Visibility API — poller'ları arka planda yavaşlat ───────────
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Arka plan: FR poller'ları 2 dakikaya düşür
+        window.bybitFRPoller?._setInterval(120000);
+        window.binanceFRPoller?._setInterval(120000);
+      } else {
+        // Ön plan: normal hıza dön + hemen bir poll yap
+        window.bybitFRPoller?._setInterval(60000);
+        window.binanceFRPoller?._setInterval(60000);
+        window.bybitFRPoller?._poll();
+        window.binanceFRPoller?._poll();
+      }
+    });
 
     // Initialize chart if present
     if (window.initChartCore) {

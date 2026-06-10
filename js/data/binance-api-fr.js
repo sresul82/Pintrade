@@ -41,6 +41,13 @@ class BinanceFRPoller {
         console.log('[BinanceFRPoller] Durduruldu');
     }
 
+    _setInterval(ms) {
+        if (this._timer) clearInterval(this._timer);
+        if (!this._isRunning) return;
+        this._timer = setInterval(() => this._poll(), ms);
+        console.log(`[BinanceFRPoller] Interval → ${ms / 1000}sn`);
+    }
+
     // ─────────────────────────────────────────────────────────────
     async _poll() {
         try {
@@ -67,7 +74,9 @@ class BinanceFRPoller {
 
                 if (isNaN(frPct)) return;
 
-                if (typeof scalpFRMonitor !== 'undefined') {
+                if (window.FRDataBridge) {
+                    window.FRDataBridge.feed('binance', symbol, frPct, now);
+                } else if (typeof scalpFRMonitor !== 'undefined') {
                     scalpFRMonitor.onFRUpdate(symbol, frPct, now);
                 }
 

@@ -286,6 +286,9 @@ const ScreenerCore = (() => {
       const rows = frData
         .filter(f => f.symbol.endsWith('USDT') && validSet.has(f.symbol))
         .map(f => {
+          if (window.FRDataBridge) {
+            FRDataBridge.feed('binance', f.symbol, parseFloat(f.lastFundingRate), Date.now());
+          }
           const tk = tkMap[f.symbol] || {};
           return {
             sym:   f.symbol.replace(/USDT$/, ''),
@@ -380,17 +383,22 @@ const ScreenerCore = (() => {
 
       const rows = (data?.result?.list || [])
         .filter(t => t.symbol.endsWith('USDT') && validSet.has(t.symbol))
-        .map(t => ({
-          sym:   t.symbol.replace(/USDT$/, ''),
-          price: parseFloat(t.lastPrice) || null,
-          pct:   parseFloat(t.price24hPcnt) * 100 || null,
-          fr:    parseFloat(t.fundingRate) || null,
-          frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0),
-          nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0,
-          vol:   parseFloat(t.turnover24h) || null,
-          oi:    parseFloat(t.openInterestValue) || null,
-          oiDir: null,
-        }));
+        .map(t => {
+          if (window.FRDataBridge) {
+            FRDataBridge.feed('bybit', t.symbol, parseFloat(t.fundingRate), Date.now());
+          }
+          return {
+            sym:   t.symbol.replace(/USDT$/, ''),
+            price: parseFloat(t.lastPrice) || null,
+            pct:   parseFloat(t.price24hPcnt) * 100 || null,
+            fr:    parseFloat(t.fundingRate) || null,
+            frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0),
+            nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0,
+            vol:   parseFloat(t.turnover24h) || null,
+            oi:    parseFloat(t.openInterestValue) || null,
+            oiDir: null,
+          };
+        });
 
       rows.sort((a, b) => (a.fr ?? 0) - (b.fr ?? 0));
       _rows = rows.slice(0, 20);
@@ -536,6 +544,9 @@ const ScreenerCore = (() => {
         _priceMap.set(sym, price);
 
         if (_frTracker) _frTracker.addFRValue(d.symbol, fr);
+        if (window.FRDataBridge) {
+          FRDataBridge.feed('binance', d.symbol, fr, Date.now());
+        }
 
         const row = _rows.find(r => r.sym === sym);
         if (row) {
@@ -578,6 +589,10 @@ const ScreenerCore = (() => {
         const pct   = parseFloat(d.price24hPcnt) * 100;
 
         _priceMap.set(sym, price);
+
+        if (window.FRDataBridge) {
+          FRDataBridge.feed('bybit', d.symbol, fr, Date.now());
+        }
 
         const row = _rows.find(r => r.sym === sym);
         if (row) {

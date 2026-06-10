@@ -45,7 +45,7 @@ const BotSignalsPanel = (() => {
           const sym = tickerLink.dataset.symbol; // e.g. 'BABY'
           _selectedSymbol = sym;
           _coinFilter = 'selected';
-          EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: 'binance' });
+          EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: ExchangeRouter.getActive() });
           render();
           return;
         }
@@ -83,6 +83,9 @@ const BotSignalsPanel = (() => {
     // Increase max signals limit from default 200 to 5000 to keep all 24h signals
     if (typeof scalpFRMonitor !== 'undefined') {
       scalpFRMonitor.maxSignals = 5000;
+    }
+    if (typeof scalpFRMonitor_bybit !== 'undefined') {
+      scalpFRMonitor_bybit.maxSignals = 5000;
     }
 
     // Insert styles dynamically
@@ -305,8 +308,19 @@ const BotSignalsPanel = (() => {
     const maxAge = 24 * 60 * 60 * 1000;
     const cutoff = Date.now() - maxAge;
 
-    // Filter signals from scalpFRMonitor
-    const allSignals = scalpFRMonitor.getSignals(5000);
+    const mainExchange = _coinFilter === 'selected'
+      ? ExchangeRouter.getActive()
+      : 'binance';
+    const altExchange = ExchangeRouter.getOpposite(mainExchange);
+
+    const mainMonitor = ExchangeRouter.getMonitor(mainExchange);
+    const altMonitor = ExchangeRouter.getMonitor(altExchange);
+
+    // Combine signals from both monitors for the list
+    const mainListSignals = mainMonitor ? mainMonitor.getSignals(5000) : [];
+    const altListSignals = altMonitor ? altMonitor.getSignals(5000) : [];
+    const allSignals = [...mainListSignals, ...altListSignals];
+
     const signals = allSignals.filter(s => {
       if (s.timestamp < cutoff) return false;
       if (_coinFilter === 'selected' && _selectedSymbol) {
@@ -321,13 +335,20 @@ const BotSignalsPanel = (() => {
 
     // ── 4. Mini Chart (only for selected mode on 'fr' bot) ──
     let hasChart = false;
-    let chartSignals = [];
+    let mainSignals = [];
+    let altSignals = [];
     if (_coinFilter === 'selected' && _selectedSymbol) {
-      chartSignals = allSignals
-        .filter(s => s.symbol.replace(/USDT$/, '') === _selectedSymbol)
+      mainSignals = (mainMonitor?.getSignals(200) || [])
+        .filter(s => s.symbol === _selectedSymbol + 'USDT')
         .sort((a, b) => a.timestamp - b.timestamp);
 
-      if (chartSignals.length > 0) {
+      altSignals = (altMonitor?.getSignals(200) || [])
+        .filter(s => s.symbol === _selectedSymbol + 'USDT')
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      const hasAltData = altSignals.length > 0;
+
+      if (mainSignals.length > 0 || hasAltData) {
         hasChart = true;
         html += `
           <div id="bsp-chart-titlebar" style="
@@ -337,7 +358,7 @@ const BotSignalsPanel = (() => {
             border-bottom:0.5px solid var(--border-primary);
           ">
             <span style="font-size:10px; font-weight:600; color:var(--text-primary);">
-              ${_selectedSymbol} FR GEÇMİŞİ (son 24s)
+              ${_selectedSymbol} FR — <span style="color:#f0b90b">${mainExchange.toUpperCase()}</span>${hasAltData ? ' <span style="color:var(--text-secondary)">+</span> <span style="color:#7b61ff">${altExchange.toUpperCase()}</span>' : ''}
             </span>
             <span id="bsp-chart-arrow" style="
               font-size:10px; color:var(--text-secondary);
@@ -385,7 +406,7 @@ const BotSignalsPanel = (() => {
       html += `
         <div style="padding:24px 16px; text-align:center; color: var(--text-active); font-size:12px;">
           Sinyal bekleniyor...<br>
-          <span style="font-size:10px; opacity:0.6;">${scalpFRMonitor.windows.size} aktif pencere izleniyor</span>
+          <span style="font-size:10px; opacity:0.6;">${mainMonitor?.windows?.size || 0} aktif pencere izleniyor</span>
         </div>`;
     } else {
       html += `<div id="bsp-signals-list" style="overflow-y:auto; max-height:calc(100vh - ${hasChart ? '460px' : '320px'}); flex:1;">`;
@@ -465,11 +486,6 @@ const BotSignalsPanel = (() => {
       const canvas = container.querySelector('#bsp-mini-chart');
       const ctx = canvas?.getContext('2d');
       if (ctx) {
-        const labels   = chartSignals.map(s =>
-          new Date(s.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
-        );
-        const frValues = chartSignals.map(s => s.currentFR); // zaten % değeri, *100 YOK
-
         // Determine theme variables for chart
         const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-primary').trim() || '#2a2e39';
         const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#787b86';
@@ -477,53 +493,96 @@ const BotSignalsPanel = (() => {
         const signalGreen = getComputedStyle(document.documentElement).getPropertyValue('--signal-color-green').trim() || '#0d9488';
         const signalRed = getComputedStyle(document.documentElement).getPropertyValue('--signal-color-red').trim() || '#dc2626';
 
-        // Her veri noktası için nokta tipi ve renk
-        const ptRadius = chartSignals.map(() => 3);
-        const ptStyle  = chartSignals.map(() => 'triangle');  // hepsi üçgen — sinyal noktaları
-        const ptColor  = chartSignals.map(s => {
-          const delta = s.startFR - s.currentFR;
-          return delta > 0 ? signalGreen : signalRed;
-        });
-        const ptRotation = chartSignals.map(s => {
-          const delta = s.startFR - s.currentFR;
-          return delta > 0 ? 0 : 180;   // yeşil yukarı, kırmızı aşağı
-        });
+        const hasAltData = altSignals.length > 0;
+        const datasets = [
+          {
+            label: mainExchange.charAt(0).toUpperCase() + mainExchange.slice(1),
+            data:  mainSignals.map(s => ({ x: s.timestamp, y: s.currentFR })),
+            borderColor:          '#f0b90b',   // sarı — ana
+            backgroundColor:      'transparent',
+            borderWidth:          1.5,
+            pointBackgroundColor: mainSignals.map(s =>
+              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointBorderColor: mainSignals.map(s =>
+              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointStyle:  'triangle',
+            pointRadius: 4,
+            tension:     0.2,
+            fill:        false,
+          }
+        ];
+
+        if (hasAltData) {
+          datasets.push({
+            label: altExchange.charAt(0).toUpperCase() + altExchange.slice(1),
+            data:  altSignals.map(s => ({ x: s.timestamp, y: s.currentFR })),
+            borderColor:          '#7b61ff',   // mor — karşı exchange
+            backgroundColor:      'transparent',
+            borderWidth:          1.5,
+            borderDash:           [4, 3],      // Chart.js 4.x için
+            segment: {
+              borderDash: () => [4, 3],        // Chart.js 3.x için fallback
+            },
+            pointBackgroundColor: altSignals.map(s =>
+              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointBorderColor: altSignals.map(s =>
+              (s.startFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointStyle:  'circle',
+            pointRadius: 3,
+            tension:     0.2,
+            fill:        false,
+          });
+        }
 
         _chartInstance = new Chart(ctx, {
           type: 'line',
           data: {
-            labels,
-            datasets: [{
-              data: frValues,
-              borderColor: '#f0b90b',     // Binance sarısı
-              borderWidth: 1.5,
-              pointBackgroundColor: ptColor,
-              pointBorderColor: ptColor,
-              pointRadius: ptRadius,
-              pointStyle: ptStyle,
-              rotation: ptRotation,
-              tension: 0.2,
-              fill: false,
-            }]
+            datasets
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
             plugins: {
-              legend: { display: false },
+              legend: {
+                display: hasAltData,
+                labels: {
+                  font:      { size: 10 },
+                  color:     textColor,
+                  boxWidth:  12,
+                  boxHeight: 2,
+                }
+              },
               tooltip: {
                 mode: 'index',
                 intersect: false,
                 callbacks: {
-                  label: ctx => ' ' + ctx.parsed.y.toFixed(4) + '%'
+                  label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(4) + '%'
                 }
               }
             },
             scales: {
               x: {
+                type: 'linear',
                 grid: { color: gridColor },
-                ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 6 }
+                ticks: {
+                  callback: (val) => {
+                    const d = new Date(val);
+                    // Geçerli timestamp değilse boş döndür
+                    if (isNaN(d.getTime())) return '';
+                    return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                  },
+                  maxTicksLimit: 6,
+                  color: textColor,
+                  font: { size: 9 },
+                },
+                // Min/max otomatik hesaplansın — tüm datayı göster
+                min: undefined,
+                max: undefined,
               },
               y: {
                 grid: { color: gridColor },

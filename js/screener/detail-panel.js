@@ -16,6 +16,14 @@ const DetailPanel = (() => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
 
+  function _fmtOI(n) {
+    if (!n || isNaN(n)) return '—';
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+    return Math.floor(n).toLocaleString('en-US');
+  }
+
   function _fmtBig(n) {
     if (!n) return '—';
     if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
@@ -323,7 +331,8 @@ const DetailPanel = (() => {
             const price     = parseFloat(d.lastPrice);
             const changePct = parseFloat(d.price24hPcnt) * 100;
             const vol24h    = parseFloat(d.turnover24h);
-            const frPct     = parseFloat(d.fundingRate) * 100;
+            const rawFR  = window.FRDataBridge?.getLastFR('bybit', pairSym);
+            const frPct = rawFR !== null && rawFR !== undefined ? rawFR : parseFloat(d.fundingRate) * 100;
 
             const pfEl = document.getElementById('dp-price-futures');
             if (pfEl) pfEl.textContent = _fmt(price);
@@ -342,13 +351,21 @@ const DetailPanel = (() => {
               volEl.innerHTML = `${Math.floor(vol24h).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${arrow}</span>`;
             }
 
+            // Bridge'e besle + karşı borsa volume göster
+            window.FRDataBridge?.feedVol('bybit', pairSym, vol24h);
+            const altVol = window.FRDataBridge?.getLastVol('binance', pairSym);
+            const altVolEl = document.getElementById('dp-vol-alt');
+            if (altVolEl) {
+              altVolEl.textContent = altVol ? `BN: ${_fmtOI(altVol.value)}` : '';
+            }
+
             const frEl = document.getElementById('dp-funding');
             if (frEl) {
               frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
               frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
             }
 
-            const nextFT = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
+            const nextFT = ExchangeRouter.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
             if (nextFT) _startFrTimer(nextFT);
           }
         }
@@ -361,11 +378,24 @@ const DetailPanel = (() => {
           if (oiHistory.length) {
             const oi = oiHistory[oiHistory.length - 1];
             const isOiUp = oiHistory.length > 1 ? oiHistory[oiHistory.length - 1] >= oiHistory[oiHistory.length - 2] : true;
+
+            // Bridge'e besle
+            window.FRDataBridge?.feedOI('bybit', pairSym, oi);
+
+            // Ana OI göster
             const oiEl = document.getElementById('dp-oi-val');
             if (oiEl) {
               oiEl.style.color = isOiUp ? 'var(--dp-green)' : 'var(--dp-red)';
               oiEl.innerHTML = `${Math.floor(oi).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${isOiUp ? '↗' : '↘'}</span>`;
             }
+
+            // Karşı borsa OI (Binance) — cache'den oku
+            const altOI = window.FRDataBridge?.getLastOI('binance', pairSym);
+            const altOIEl = document.getElementById('dp-oi-alt');
+            if (altOIEl) {
+              altOIEl.textContent = altOI ? `BN: ${_fmtOI(altOI.value)}` : '';
+            }
+
             _buildOiBars(oiHistory);
           }
         }
@@ -414,18 +444,26 @@ const DetailPanel = (() => {
             volEl.style.color = isVolUp ? 'var(--dp-green)' : 'var(--dp-red)';
             volEl.innerHTML = `${Math.floor(vol24h).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${arrow}</span>`;
           }
-        }
+
+          // Bridge'e besle + karşı borsa volume göster
+          window.FRDataBridge?.feedVol('binance', pairSym, vol24h);
+          const altVol = window.FRDataBridge?.getLastVol('bybit', pairSym);
+          const altVolEl = document.getElementById('dp-vol-alt');
+          if (altVolEl) {
+            altVolEl.textContent = altVol ? `BY: ${_fmtOI(altVol.value)}` : '';
+          }
 
         const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
         if (fr.ok) {
           const d = await fr.json();
-          const frPct = parseFloat(d.lastFundingRate || 0) * 100;
+          const rawFR = window.FRDataBridge?.getLastFR('binance', pairSym);
+          const frPct = rawFR !== null && rawFR !== undefined ? rawFR : parseFloat(d.lastFundingRate || 0) * 100;
           const frEl = document.getElementById('dp-funding');
           if (frEl) {
             frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
             frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
           }
-          const nextFT = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+          const nextFT = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
           if (nextFT) _startFrTimer(nextFT);
         }
 
@@ -436,11 +474,24 @@ const DetailPanel = (() => {
           if (oiHistory.length) {
             const oi = oiHistory[oiHistory.length - 1];
             const isOiUp = oiHistory.length > 1 ? oiHistory[oiHistory.length - 1] >= oiHistory[oiHistory.length - 2] : true;
+
+            // Bridge'e besle
+            window.FRDataBridge?.feedOI('binance', pairSym, oi);
+
+            // Ana OI göster
             const oiEl = document.getElementById('dp-oi-val');
             if (oiEl) {
               oiEl.style.color = isOiUp ? 'var(--dp-green)' : 'var(--dp-red)';
               oiEl.innerHTML = `${Math.floor(oi).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${isOiUp ? '↗' : '↘'}</span>`;
             }
+
+            // Karşı borsa OI (Bybit) — cache'den oku
+            const altOI = window.FRDataBridge?.getLastOI('bybit', pairSym);
+            const altOIEl = document.getElementById('dp-oi-alt');
+            if (altOIEl) {
+              altOIEl.textContent = altOI ? `BY: ${_fmtOI(altOI.value)}` : '';
+            }
+
             _buildOiBars(oiHistory);
           }
         }
@@ -517,8 +568,8 @@ const DetailPanel = (() => {
               changePct  = parseFloat(d.price24hPcnt) * 100;
               vol24h     = parseFloat(d.turnover24h);
               frPct      = parseFloat(d.fundingRate) * 100;
-              nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
-              frIntervalText = window.fundingIntervalManager?.get(pairSym, 'bybit') || '8h';
+              nextFundingTime = ExchangeRouter.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
+              frIntervalText  = ExchangeRouter.getFundingInterval(pairSym, 'bybit');
             }
           }
         } catch {}
@@ -605,7 +656,7 @@ const DetailPanel = (() => {
           if (fr.ok) {
             const d = await fr.json();
             frPct = parseFloat(d.lastFundingRate || 0) * 100;
-            nextFundingTime = window.fundingIntervalManager?.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+            nextFundingTime = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
           }
         } catch {}
 
@@ -748,6 +799,20 @@ const DetailPanel = (() => {
       const sym = State.get('activeSymbol') || 'BTC';
       const exchange = State.get('activeExchange') || 'binance';
       loadSymbol(sym.replace(/USDT$/, ''), exchange);
+    });
+
+    // ── Visibility API — arka plan / ön plan geçişi ──────────────────
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Sayfa arka plana geçti — polling'i yavaşlat (pil/bant genişliği tasarrufu)
+        _stopPolling();
+        _pollTimer = setInterval(_pollDetailData, 30000); // 30sn'ye düşür
+      } else {
+        // Sayfa öne geldi — hemen güncelle, normal hıza dön
+        _stopPolling();
+        _pollDetailData(); // Anında bir kere çalıştır
+        _pollTimer = setInterval(_pollDetailData, 10000); // 10sn'ye geri al
+      }
     });
   }
 

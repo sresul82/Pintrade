@@ -566,10 +566,12 @@
                   <div class="dp-info-card">
                     <span class="dp-info-label">OI(USDT)</span>
                     <span class="dp-info-value" id="dp-oi-val">—</span>
+                    <div id="dp-oi-alt" style="font-size:9px;color:var(--text-secondary);text-align:right;margin-top:2px;opacity:0.7;"></div>
                   </div>
                   <div class="dp-info-card">
                     <span class="dp-info-label">Volume(USDT)</span>
                     <span class="dp-info-value" id="dp-vol-val">—</span>
+                    <div id="dp-vol-alt" style="font-size:9px;color:var(--text-secondary);text-align:right;margin-top:2px;opacity:0.7;"></div>
                   </div>
                 </div>
               </div>
@@ -779,7 +781,9 @@
 
   <!-- Screener modülleri -->
   <script src="js/screener/search-core.js"></script>
+<script src="js/screener/exchange-router.js"></script>
   <script src="js/screener/fr-tracker.js"></script>        <!-- first: scalpFRMonitor is created here -->
+  <script src="js/screener/fr-data-bridge.js"></script>   <!-- fr-tracker'dan sonra -->
   <script src="js/data/bybit-api-fr.js"></script>          <!-- then: uses scalpFRMonitor -->
   <script src="js/data/binance-api-fr.js"></script>        <!-- then: uses scalpFRMonitor -->
   <script src="js/screener/funding-interval.js"></script>

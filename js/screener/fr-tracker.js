@@ -213,7 +213,8 @@ class ScalpFRMonitor {
     // Pencere süresi: 10 dakika (ms)
     static WINDOW_MS = 10 * 60 * 1000;
 
-    constructor() {
+    constructor(exchange = 'binance') {
+        this.exchange = exchange;
         // Her sembol için aktif pencere
         // Map<symbol, { startFR, startTime, minuteSnapshots: [{fr, ts}] }>
         this.windows = new Map();
@@ -315,7 +316,7 @@ class ScalpFRMonitor {
 
         const signal = {
             symbol,
-            exchange: (typeof ScreenerCore !== 'undefined' && ScreenerCore.getActiveTab && ScreenerCore.getActiveTab().startsWith('by')) ? 'bybit' : 'binance',
+            exchange: this.exchange,
             startFR,           // pencere başlangıç FR (borsadaki % değeri)
             currentFR,         // tetiklenme anındaki FR
             delta: d,          // currentFR - startFR
@@ -446,5 +447,12 @@ class ScalpFRMonitor {
 // =====================================================================
 window.FRTracker = FRTracker;
 
-const scalpFRMonitor = new ScalpFRMonitor();
-window.scalpFRMonitor = scalpFRMonitor;
+const scalpFRMonitor         = new ScalpFRMonitor('binance');
+const scalpFRMonitor_bybit   = new ScalpFRMonitor('bybit');
+
+window.scalpFRMonitor        = scalpFRMonitor;          // geriye dönük uyumluluk
+window.scalpFRMonitor_bybit  = scalpFRMonitor_bybit;
+
+// Exchange adına göre instance döndüren yardımcı
+window.getScalpMonitor = (exchange) =>
+  exchange === 'bybit' ? scalpFRMonitor_bybit : scalpFRMonitor;
