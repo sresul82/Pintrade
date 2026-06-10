@@ -569,6 +569,7 @@ const DetailPanel = (() => {
               changePct  = parseFloat(d.price24hPcnt) * 100;
               vol24h     = parseFloat(d.turnover24h);
               frPct      = parseFloat(d.fundingRate) * 100;
+              oi         = parseFloat(d.openInterestValue || 0);
               nextFundingTime = ExchangeRouter.getNextFundingTime(pairSym, 'bybit') || parseInt(d.nextFundingTime) || 0;
               frIntervalText  = ExchangeRouter.getFundingInterval(pairSym, 'bybit');
             }
@@ -590,7 +591,6 @@ const DetailPanel = (() => {
           if (oiResp.ok) {
             const arr = (await oiResp.json())?.result?.list || [];
             oiHistory = arr.map(x => parseFloat(x.openInterest) * (price || 1)).reverse();
-            if (oiHistory.length) oi = oiHistory[oiHistory.length - 1];
           }
         } catch {}
 
@@ -673,11 +673,18 @@ const DetailPanel = (() => {
         } catch {}
 
         try {
+          const oiLive = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/openInterest?symbol=${pairSym}`);
+          if (oiLive.ok) {
+            const data = await oiLive.json();
+            oi = parseFloat(data.openInterest) * (price || 1);
+          }
+        } catch {}
+
+        try {
           const oiResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/openInterestHist?symbol=${pairSym}&period=5m&limit=8`);
           if (oiResp.ok) {
             const arr = await oiResp.json();
             oiHistory = arr.map(x => parseFloat(x.sumOpenInterestValue || x.openInterest || 0));
-            if (oiHistory.length) oi = oiHistory[oiHistory.length - 1];
           }
         } catch {}
 
