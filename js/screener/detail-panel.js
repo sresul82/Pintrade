@@ -452,6 +452,7 @@ const DetailPanel = (() => {
           if (altVolEl) {
             altVolEl.textContent = altVol ? `BY: ${_fmtOI(altVol.value)}` : '';
           }
+        }
 
         const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
         if (fr.ok) {
