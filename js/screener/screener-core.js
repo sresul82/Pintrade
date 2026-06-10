@@ -287,7 +287,7 @@ const ScreenerCore = (() => {
         .filter(f => f.symbol.endsWith('USDT') && validSet.has(f.symbol))
         .map(f => {
           if (window.FRDataBridge) {
-            FRDataBridge.feed('binance', f.symbol, parseFloat(f.lastFundingRate), Date.now());
+            FRDataBridge.feed('binance', f.symbol, parseFloat(f.lastFundingRate) * 100, Date.now());
           }
           const tk = tkMap[f.symbol] || {};
           return {
@@ -385,7 +385,7 @@ const ScreenerCore = (() => {
         .filter(t => t.symbol.endsWith('USDT') && validSet.has(t.symbol))
         .map(t => {
           if (window.FRDataBridge) {
-            FRDataBridge.feed('bybit', t.symbol, parseFloat(t.fundingRate), Date.now());
+            FRDataBridge.feed('bybit', t.symbol, parseFloat(t.fundingRate) * 100, Date.now());
           }
           return {
             sym:   t.symbol.replace(/USDT$/, ''),

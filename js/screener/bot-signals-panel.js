@@ -561,6 +561,11 @@ const BotSignalsPanel = (() => {
                 mode: 'index',
                 intersect: false,
                 callbacks: {
+                  title: (context) => {
+                    if (!context || !context.length) return '';
+                    const d = new Date(context[0].parsed.x);
+                    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  },
                   label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(4) + '%'
                 }
               }
