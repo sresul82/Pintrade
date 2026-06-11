@@ -11,6 +11,7 @@ const BotSignalsPanel = (() => {
   let _chartInstance = null;      // Chart.js instance for the mini graph
   let _sortOrder = 'desc';        // 'desc' = yeni yukari | 'asc' = yeni asagi
   let _chartOpen = true;          // grafik baslangicta acik
+  let _chartHourOffset = 0;       // 0 = now, -1 = 1 hour ago
   let _extraContainers = [];      // Floating panel gibi ek render hedefleri
 
   const BOT_TABS = [
@@ -46,6 +47,16 @@ const BotSignalsPanel = (() => {
           _selectedSymbol = sym;
           _coinFilter = 'selected';
           EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: ExchangeRouter.getActive() });
+          render();
+          return;
+        }
+
+        // 1.5) Pagination for Chart Time Window
+        if (e.target.closest('.bsp-time-nav')) {
+          e.stopPropagation(); // Prevent titlebar toggle
+          const dir = parseInt(e.target.closest('.bsp-time-nav').dataset.dir);
+          if (dir === 1 && _chartHourOffset >= 0) return; // Can't go to future
+          _chartHourOffset += dir;
           render();
           return;
         }
@@ -343,16 +354,32 @@ const BotSignalsPanel = (() => {
     let hasChart = false;
     let mainSignals = [];
     let altSignals = [];
+    let chartStartTs = 0;
+    let chartEndTs = 0;
+    let timeRangeText = '';
+
     if (_coinFilter === 'selected' && _selectedSymbol) {
+      const now = new Date();
+      const startHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + _chartHourOffset, 0, 0, 0);
+      const endHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + _chartHourOffset + 1, 0, 0, 0);
+      
+      chartStartTs = startHour.getTime();
+      chartEndTs = endHour.getTime();
+
+      const formatTime = (d) => d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      timeRangeText = `${formatTime(startHour)} - ${formatTime(endHour)}`;
+
+      const filterWindow = (arr) => arr.filter(s => s.timestamp >= chartStartTs && s.timestamp <= chartEndTs);
+
       const mainTracker = window[`frTracker_${mainExchange}`];
       const altTracker = window[`frTracker_${altExchange}`];
 
-      mainSignals = (mainTracker?.getHistory(_selectedSymbol + 'USDT') || [])
-        .map(h => ({ timestamp: h.timestamp, currentFR: h.value }))
+      mainSignals = filterWindow((mainTracker?.getHistory(_selectedSymbol + 'USDT') || [])
+        .map(h => ({ timestamp: h.timestamp, currentFR: h.value })))
         .sort((a, b) => a.timestamp - b.timestamp);
 
-      altSignals = (altTracker?.getHistory(_selectedSymbol + 'USDT') || [])
-        .map(h => ({ timestamp: h.timestamp, currentFR: h.value }))
+      altSignals = filterWindow((altTracker?.getHistory(_selectedSymbol + 'USDT') || [])
+        .map(h => ({ timestamp: h.timestamp, currentFR: h.value })))
         .sort((a, b) => a.timestamp - b.timestamp);
 
       const hasAltData = altSignals.length > 0;
@@ -369,12 +396,18 @@ const BotSignalsPanel = (() => {
             <span style="font-size:10px; font-weight:600; color:var(--text-primary);">
               ${_selectedSymbol} FR — <span style="color:#f0b90b">${mainExchange.toUpperCase()}</span>${hasAltData ? ` <span style="color:var(--text-secondary)">+</span> <span style="color:#7b61ff">${altExchange.toUpperCase()}</span>` : ''}
             </span>
-            <span id="bsp-chart-arrow" style="
-              font-size:10px; color:var(--text-secondary);
-              display:inline-block;
-              transform: ${_chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)'};
-              transition: transform 0.22s ease;
-            ">▼</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="bsp-time-nav" data-dir="-1" style="font-size:10px; padding:2px 6px; background:var(--bg-tertiary); border-radius:3px; color:var(--text-active);">◀</span>
+              <span style="font-size:10px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">[${timeRangeText}]</span>
+              <span class="bsp-time-nav" data-dir="1" style="font-size:10px; padding:2px 6px; background:var(--bg-tertiary); border-radius:3px; color:${_chartHourOffset >= 0 ? 'var(--text-secondary)' : 'var(--text-active)'}; opacity:${_chartHourOffset >= 0 ? 0.3 : 1}; cursor:${_chartHourOffset >= 0 ? 'not-allowed' : 'pointer'};">▶</span>
+              <span id="bsp-chart-arrow" style="
+                margin-left:4px;
+                font-size:10px; color:var(--text-secondary);
+                display:inline-block;
+                transform: ${_chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)'};
+                transition: transform 0.22s ease;
+              ">▼</span>
+            </div>
           </div>
           <div id="bsp-chart-section" style="
             overflow:hidden;
@@ -586,6 +619,8 @@ const BotSignalsPanel = (() => {
             scales: {
               x: {
                 type: 'linear',
+                min: chartStartTs,
+                max: chartEndTs,
                 grid: { color: gridColor },
                 ticks: {
                   callback: (val) => {
@@ -598,9 +633,6 @@ const BotSignalsPanel = (() => {
                   color: textColor,
                   font: { size: 9 },
                 },
-                // Min/max otomatik hesaplansın — tüm datayı göster
-                min: undefined,
-                max: undefined,
               },
               y: {
                 grid: { color: gridColor },
