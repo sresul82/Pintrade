@@ -340,27 +340,7 @@ const BotSignalsPanel = (() => {
     // Only show main exchange signals in the list below to avoid interleaving and confusion
     const allSignals = [...mainListSignals];
 
-    const signals = allSignals.filter(s => {
-      if (s.timestamp < cutoff) return false;
-      
-      if (_coinFilter === 'selected' && _selectedSymbol) {
-        const sigSym = s.symbol.replace(/USDT$/, '');
-        if (sigSym !== _selectedSymbol) return false;
-        // Seçili coin görünümünde normal (0.01), ani (0.02) ve alarm (0.03) hepsi gösterilir.
-        return true;
-      } else if (_coinFilter === 'all') {
-        // Tüm coinler görünümünde sadece alarm (0.03+) seviyesindeki sinyaller gösterilir.
-        if (s.severity !== 'alarm') return false;
-        return true;
-      }
-      
-      return true;
-    });
-
-    // Sort signals based on _sortOrder
-    signals.sort((a, b) => _sortOrder === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
-
-    // ── 4. Mini Chart (only for selected mode on 'fr' bot) ──
+    // ── 4. Mini Chart Variables & Time Window ──
     let hasChart = false;
     let mainSignals = [];
     let altSignals = [];
@@ -378,6 +358,28 @@ const BotSignalsPanel = (() => {
 
       const formatTime = (d) => d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
       timeRangeText = `${formatTime(startHour)} - ${formatTime(endHour)}`;
+    }
+
+    const signals = allSignals.filter(s => {
+      if (_coinFilter === 'selected' && _selectedSymbol) {
+        const sigSym = s.symbol.replace(/USDT$/, '');
+        if (sigSym !== _selectedSymbol) return false;
+        // Seçili coin görünümünde sadece grafikteki saat dilimine ait sinyalleri göster
+        if (s.timestamp < chartStartTs || s.timestamp > chartEndTs) return false;
+        return true;
+      } else if (_coinFilter === 'all') {
+        if (s.timestamp < cutoff) return false;
+        // Tüm coinler görünümünde sadece alarm (0.03+) seviyesindeki sinyaller gösterilir.
+        if (s.severity !== 'alarm') return false;
+        return true;
+      }
+      return true;
+    });
+
+    // Sort signals based on _sortOrder
+    signals.sort((a, b) => _sortOrder === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
+
+    if (_coinFilter === 'selected' && _selectedSymbol) {
 
       const filterWindow = (arr) => arr.filter(s => s.timestamp >= chartStartTs && s.timestamp <= chartEndTs);
 
