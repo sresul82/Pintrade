@@ -439,6 +439,7 @@ const BotSignalsPanel = (() => {
               }
             </div>
           </div>`;
+    }
 
     // ── 5. Column Headers ────────────────────────────
     html += `

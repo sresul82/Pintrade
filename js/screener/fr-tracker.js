@@ -193,10 +193,22 @@ class FRTracker {
             this.maxHistoryLength = Math.max(this.maxHistoryLength, records.length + 200);
 
             let added = 0;
+            const monitor = window[`scalpFRMonitor_${exchange}`] || window.scalpFRMonitor;
+            
+            // Verileri eski tarihten yeniye doğru besle ki monitor düzgün hesaplasın
+            records.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
             for (const r of records) {
                 const ts = new Date(r.timestamp).getTime();
                 if (existingTs.has(ts)) continue;
+                
                 history.push({ value: r.fundingRate, timestamp: ts, interval: 'server' });
+                
+                // Monitor'a (Bot Signals) besle
+                if (monitor) {
+                    monitor.onFRUpdate(symbol, r.fundingRate, ts);
+                }
+                
                 added++;
             }
             // Tarihe göre sırala
