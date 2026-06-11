@@ -8,83 +8,60 @@ class FRTracker {
         // Store 24h ago FR for rank calculation
         this.fr24hAgo = new Map();
 
-        // Pending changes for smart tracking (biriken kucuk degisimler)
-        this.pendingChanges = new Map();
+        // Yeni eşikler (Arayüzdeki Yüzdelik değerlerle uyumlu: 0.01 = %0.01)
+        this.lowThreshold = 0.01;
+        this.rapidChangeThreshold = 0.02;
+        this.globalAlarmThreshold = 0.03;
 
-        // Max history length
-        this.maxHistoryLength = 30;
-
-        // Thresholds for smart tracking (yüzde değerleri direkt)
-        this.lowThreshold = 0.00014;
-        this.mediumThreshold = 0.0002;
-        this.cumulativeThreshold = 0.00015;
-        this.rapidChangeThreshold = 0.0005;
-        this.rapidAlerts = new Map();
-
-        // Kümülatif tracking için
-        this.lastCumulativeTime = new Map();
-        this.cumulativeInterval = 3 * 60 * 1000; // 3 dakika
+        // Baseline (Bekleme Başlangıcı) takibi
+        this.baselineValue = new Map();
+        this.baselineTime = new Map();
     }
 
     // Add FR value to history (Smart Tracking)
     addFRValue(symbol, fundingRate, timestamp = Date.now()) {
         if (!this.frHistory.has(symbol)) {
             this.frHistory.set(symbol, []);
-            this.pendingChanges.set(symbol, 0);
+            this.baselineValue.set(symbol, fundingRate);
+            this.baselineTime.set(symbol, timestamp);
         }
 
         const history = this.frHistory.get(symbol);
 
         if (history.length === 0) {
             this._addEntry(symbol, fundingRate, timestamp);
+            this.baselineValue.set(symbol, fundingRate);
+            this.baselineTime.set(symbol, timestamp);
             return;
         }
 
-        const lastEntry = history[history.length - 1];
-        const change = Math.abs(fundingRate - lastEntry.value);
-        const timeDiff = timestamp - lastEntry.timestamp;
+        const baselineFR = this.baselineValue.get(symbol);
+        const baselineTs = this.baselineTime.get(symbol);
+        const change = Math.abs(fundingRate - baselineFR);
 
-        if (timeDiff >= 4 * 60 * 60 * 1000) {
-            this.pendingChanges.set(symbol, 0);
-            this._addEntry(symbol, fundingRate, timestamp);
-            return;
-        }
-
-        if (change === 0) return;
-
-        if (change >= this.lowThreshold) {
-            const pending = this.pendingChanges.get(symbol) || 0;
-            if (pending > 0) {
-                this._addEntry(symbol, lastEntry.value, lastEntry.timestamp);
+        if (change >= this.lowThreshold) { // >= 0.01
+            // Önceki değeri (baseline) history'ye ekle (eğer son kayıt değilse)
+            const lastEntry = history[history.length - 1];
+            if (lastEntry && lastEntry.timestamp !== baselineTs) {
+                this._addEntry(symbol, baselineFR, baselineTs);
             }
-            this.pendingChanges.set(symbol, 0);
-            this.lastCumulativeTime.set(symbol, timestamp);
+            // Güncel değeri (aşılan noktayı) history'ye ekle
             this._addEntry(symbol, fundingRate, timestamp);
 
-            const prevFR = lastEntry.value;
-            if (change >= 0.0002 && fundingRate < 0 && fundingRate < prevFR) {
-                window.dispatchEvent(new CustomEvent('frRapidChange', {
-                    detail: { symbol, change, fundingRate }
-                }));
-            }
-            if (fundingRate <= -0.0005 && prevFR > -0.0005) {
-                this.rapidAlerts.set(symbol, Date.now());
-            }
-        } else {
-            const pending = (this.pendingChanges.get(symbol) || 0) + change;
-            this.pendingChanges.set(symbol, pending);
+            // Arayüze event fırlat (0.01, 0.02, 0.03 eşiklerini UI'da filtreleyeceğiz)
+            window.dispatchEvent(new CustomEvent('frRapidChange', {
+                detail: { 
+                    symbol, 
+                    change, 
+                    fundingRate, 
+                    previousFR: baselineFR,
+                    timestamp 
+                }
+            }));
 
-            if (!this.lastCumulativeTime.has(symbol)) {
-                this.lastCumulativeTime.set(symbol, timestamp);
-            }
-            const lastCumulativeTime = this.lastCumulativeTime.get(symbol);
-            const timeSinceLastCumulative = timestamp - lastCumulativeTime;
-
-            if (timeSinceLastCumulative >= this.cumulativeInterval) {
-                this._addEntry(symbol, fundingRate, timestamp);
-                this.pendingChanges.set(symbol, 0);
-                this.lastCumulativeTime.set(symbol, timestamp);
-            }
+            // Yeni baseline olarak güncel durumu ayarla
+            this.baselineValue.set(symbol, fundingRate);
+            this.baselineTime.set(symbol, timestamp);
         }
     }
 
@@ -191,6 +168,44 @@ class FRTracker {
         if (this.isConsistentlyPositive(symbol)) return 'positive';
         return 'neutral';
     }
+
+    /**
+     * Sunucudan geçmiş FR verisini çekip history'ye enjekte eder.
+     * Sayfa yeni açılmış olsa bile grafik dolup taşar.
+     */
+    async preloadFromServer(symbol, exchange, hours = 48) {
+        try {
+            const sym = symbol.endsWith('USDT') ? symbol : symbol + 'USDT';
+            const resp = await fetch(`/api/history/fr/${exchange}/${sym}?hours=${hours}`);
+            if (!resp.ok) return;
+            const records = await resp.json(); // [{ timestamp, fundingRate }, ...]
+            if (!Array.isArray(records) || records.length === 0) return;
+
+            // Mevcut history'yi sıfırlama — sadece sunucudan gelen eski verileri ekle
+            if (!this.frHistory.has(sym)) {
+                this.frHistory.set(sym, []);
+                // baseline'ı boş bırakıyoruz, çünkü ilk veri gelince belirlenecek
+            }
+            const history = this.frHistory.get(sym);
+            const existingTs = new Set(history.map(h => h.timestamp));
+
+            // maxHistoryLength kısıtını kaldır — 48 saatlik veri saklansın
+            this.maxHistoryLength = Math.max(this.maxHistoryLength, records.length + 200);
+
+            let added = 0;
+            for (const r of records) {
+                const ts = new Date(r.timestamp).getTime();
+                if (existingTs.has(ts)) continue;
+                history.push({ value: r.fundingRate, timestamp: ts, interval: 'server' });
+                added++;
+            }
+            // Tarihe göre sırala
+            history.sort((a, b) => a.timestamp - b.timestamp);
+            console.log(`[FRTracker] Preload: ${sym}@${exchange} — ${added} kayıt eklendi`);
+        } catch (e) {
+            console.warn('[FRTracker] Sunucu preload hatası:', e.message);
+        }
+    }
 }
 
 // =====================================================================
@@ -207,24 +222,22 @@ class FRTracker {
 
 class ScalpFRMonitor {
 
-    // SCALP_THRESHOLD: Ham veri olarak 0.001 (borsada "0.001%" görünür, % işareti yok)
-    static SCALP_THRESHOLD = 0.001;
-
-    // Pencere süresi: 10 dakika (ms)
-    static WINDOW_MS = 10 * 60 * 1000;
+    // Yeni Eşikler
+    static THRESHOLD_NORMAL = 0.01;
+    static THRESHOLD_RAPID  = 0.02;
+    static THRESHOLD_ALARM  = 0.03;
 
     constructor(exchange = 'binance') {
         this.exchange = exchange;
-        // Her sembol için aktif pencere
-        // Map<symbol, { startFR, startTime, minuteSnapshots: [{fr, ts}] }>
+        // Her sembol için bekleme başlangıcı (baseline)
+        // Map<symbol, { startFR, startTime }>
         this.windows = new Map();
 
         // Kaydedilen sinyaller listesi (screener'a gösterilecek)
-        // Array<ScalpSignal>
         this.signals = [];
 
         // Maksimum kaç sinyal tutulacak
-        this.maxSignals = 200;
+        this.maxSignals = 5000;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -235,76 +248,59 @@ class ScalpFRMonitor {
 
         // Sadece negatif FR'leri izle
         if (fundingRate >= 0) {
-            // Pozitife geçtiyse aktif pencereyi kapat (kırmızı sinyal)
             if (this.windows.has(symbol)) {
                 const win = this.windows.get(symbol);
-                this._recordSignal(symbol, win.startFR, fundingRate, timestamp, 'timeout');
+                const delta = fundingRate - win.startFR;
+                // Eşiği aşmasa bile pozitife geçişte kırmızı sinyal kaydet ve pencereyi kapat
+                if (Math.abs(delta) >= ScalpFRMonitor.THRESHOLD_NORMAL) {
+                    this._recordSignal(symbol, win.startFR, fundingRate, timestamp, 'normal', delta);
+                }
                 this.windows.delete(symbol);
             }
             return;
         }
 
-        // Pencere yoksa yeni pencere aç
+        // Başlangıç noktası (Baseline) yoksa oluştur
         if (!this.windows.has(symbol)) {
             this.windows.set(symbol, {
                 startFR: fundingRate,
-                startTime: timestamp,
-                minuteSnapshots: [{ fr: fundingRate, ts: timestamp }]
+                startTime: timestamp
             });
             return;
         }
 
         const win = this.windows.get(symbol);
+        const delta = fundingRate - win.startFR;
+        const absDelta = Math.abs(delta);
 
-        // Dakikalık snapshot ekle
-        win.minuteSnapshots.push({ fr: fundingRate, ts: timestamp });
+        // ── KURAL: Kümülatif fark eşiği geçtiğinde sinyal üret ve sıfırla ──
+        if (absDelta >= ScalpFRMonitor.THRESHOLD_NORMAL) {
+            
+            let severity = 'normal';
+            if (absDelta >= ScalpFRMonitor.THRESHOLD_ALARM) {
+                severity = 'alarm'; // 0.03+ (Global Alarm)
+            } else if (absDelta >= ScalpFRMonitor.THRESHOLD_RAPID) {
+                severity = 'rapid'; // 0.02+ (Ani Yükseliş)
+            }
 
-        // 1. Dakika bazlı anlık değişim (bir önceki snapshot'a göre)
-        const prev = win.minuteSnapshots[win.minuteSnapshots.length - 2];
-        const instantDelta = fundingRate - prev.fr; // negatif sayı → daha negatif demek
-
-        // 2. Pencere başından toplam değişim
-        const totalDelta = fundingRate - win.startFR;
-
-        const instantAbs = Math.abs(instantDelta);
-        const elapsed = timestamp - win.startTime;
-
-        // ── KURAL 1: Anlık değişim eşiği geçti ──────────────────
-        if (instantAbs >= ScalpFRMonitor.SCALP_THRESHOLD) {
-            this._recordSignal(symbol, win.startFR, fundingRate, timestamp, 'threshold', instantDelta);
-            // Pencereyi sıfırla — bu noktadan yeni pencere başlar
+            this._recordSignal(symbol, win.startFR, fundingRate, timestamp, severity, delta);
+            
+            // Baseline'ı güncelle (yeni bir bekleme periyodu başlar)
             this.windows.set(symbol, {
                 startFR: fundingRate,
-                startTime: timestamp,
-                minuteSnapshots: [{ fr: fundingRate, ts: timestamp }]
-            });
-            return;
-        }
-
-        // ── KURAL 2: 10 dakika doldu, eşik geçilmedi ─────────────
-        if (elapsed >= ScalpFRMonitor.WINDOW_MS) {
-            this._recordSignal(symbol, win.startFR, fundingRate, timestamp, 'timeout', totalDelta);
-            // Yeni pencere başlat
-            this.windows.set(symbol, {
-                startFR: fundingRate,
-                startTime: timestamp,
-                minuteSnapshots: [{ fr: fundingRate, ts: timestamp }]
+                startTime: timestamp
             });
         }
     }
 
     // ─────────────────────────────────────────────────────────────
     // Sinyal kayıt — tüm kayıtlar buradan geçer
-    // triggerType: 'threshold' | 'timeout'
+    // severity: 'normal' | 'rapid' | 'alarm'
     // delta: fundingRate - startFR (negatif = daha negatife gitti)
     // ─────────────────────────────────────────────────────────────
-    _recordSignal(symbol, startFR, currentFR, timestamp, triggerType, delta = null) {
+    _recordSignal(symbol, startFR, currentFR, timestamp, severity, delta = null) {
         const d = delta !== null ? delta : (currentFR - startFR);
 
-        // Yön belirleme:
-        // daha negatif → 'more_negative' → Yeşil (short sıkışıyor, long fırsatı)
-        // daha az negatif veya sıfıra yaklaşıyor → 'less_negative' → Kırmızı
-        // fark = 0 → 'flat'
         let direction;
         if (Math.abs(d) < 0.0000001) {
             direction = 'flat';
@@ -317,14 +313,13 @@ class ScalpFRMonitor {
         const signal = {
             symbol,
             exchange: this.exchange,
-            startFR,           // pencere başlangıç FR (borsadaki % değeri)
-            currentFR,         // tetiklenme anındaki FR
-            delta: d,          // currentFR - startFR
+            startFR,           
+            currentFR,         
+            delta: d,          
             deltaAbs: Math.abs(d),
-            direction,         // 'more_negative' | 'less_negative' | 'flat'
-            triggerType,       // 'threshold' → eşik geçildi | 'timeout' → 10dk doldu
+            direction,         
+            severity, // 'normal' (0.01), 'rapid' (0.02), 'alarm' (0.03)
             timestamp,
-            // Borsada gösterim için formatlanmış değerler
             display: {
                 startFR:    this._fmt(startFR),
                 currentFR:  this._fmt(currentFR),
@@ -333,17 +328,18 @@ class ScalpFRMonitor {
                 colorClass: direction === 'more_negative' ? 'fr-signal-green'
                           : direction === 'less_negative' ? 'fr-signal-red'
                           : 'fr-signal-gray',
-                arrow:      direction === 'more_negative' ? '▼'   // daha negatif
-                          : direction === 'less_negative' ? '▲'   // pozitife dönüş
+                arrow:      direction === 'more_negative' ? '▼'   
+                          : direction === 'less_negative' ? '▲'   
                           : '─',
-                badge:      triggerType === 'threshold' ? '⚡ Eşik' : '⏱ 10dk',
+                badge:      severity === 'alarm' ? '🚨 Alarm' 
+                          : severity === 'rapid' ? '⚡ Ani' 
+                          : 'Sinyal',
             }
         };
 
-        this.signals.unshift(signal); // en yeni başa
+        this.signals.unshift(signal); 
         if (this.signals.length > this.maxSignals) this.signals.pop();
 
-        // EventBus üzerinden screener'a bildir
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('scalp:frSignal', signal);
         }
@@ -388,16 +384,11 @@ class ScalpFRMonitor {
         const win = this.windows.get(symbol);
         const elapsed = Date.now() - win.startTime;
         const elapsedMin = Math.floor(elapsed / 60000);
-        const lastFR = win.minuteSnapshots[win.minuteSnapshots.length - 1].fr;
         return {
             symbol,
             startFR: win.startFR,
-            lastFR,
-            delta: lastFR - win.startFR,
             elapsedMs: elapsed,
-            elapsedMin,
-            remainingMin: Math.max(0, 10 - elapsedMin),
-            snapshotCount: win.minuteSnapshots.length,
+            elapsedMin
         };
     }
 

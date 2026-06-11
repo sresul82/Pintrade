@@ -550,6 +550,16 @@ const DetailPanel = (() => {
     if (nameEl) nameEl.textContent = sym + 'USDT.P';
     const pairSym = sym + 'USDT';
 
+    // ── Sunucudan geçmiş FR verisini preload et (her iki borsa için) ──
+    // Sayfa yeni açılmış olsa bile grafik 48 saatlik geçmiş veriye sahip olur.
+    // Fire-and-forget: UI'yi bloklamaz, arka planda yüklenir.
+    try {
+      const binTr = window['frTracker_binance'];
+      const bbtTr = window['frTracker_bybit'];
+      if (binTr?.preloadFromServer) binTr.preloadFromServer(pairSym, 'binance', 48);
+      if (bbtTr?.preloadFromServer) bbtTr.preloadFromServer(pairSym, 'bybit',   48);
+    } catch {}
+
     try {
       let price = null, changePct = null, vol24h = null;
       let frPct = null, nextFundingTime = null, frIntervalText = '8h';

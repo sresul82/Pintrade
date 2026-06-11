@@ -132,8 +132,21 @@ const ScreenerCore = (() => {
     const frhCls = secsLeft < 15 * 60 ? 'frh-ending' : '';
     const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
 
+    // Sinyal kontrolü (ScalpFRMonitor)
+    const monitor = window[`scalpFRMonitor_${exc}`] || window.scalpFRMonitor;
+    let signalBadge = '';
+    if (monitor) {
+        const lastSig = monitor.getLastSignal(d.sym + 'USDT');
+        // Sinyal son 30 dakika içinde geldiyse göster
+        if (lastSig && (Date.now() - lastSig.timestamp) < 30 * 60 * 1000) {
+            if (lastSig.severity === 'alarm') signalBadge = '<span title="Global Alarm" style="margin-left:2px; font-size:10px">🚨</span>';
+            else if (lastSig.severity === 'rapid') signalBadge = '<span title="Ani Yükseliş" style="margin-left:2px; font-size:10px">⚡</span>';
+            else signalBadge = '<span title="Hareketli" style="margin-left:2px; font-size:10px; color:var(--signal-color-green)">•</span>';
+        }
+    }
+
     row.innerHTML = `
-      <span class="wl-sym">${d.sym}USDT</span>
+      <span class="wl-sym">${d.sym}USDT${signalBadge}</span>
       <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
       <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
       <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
