@@ -273,7 +273,22 @@ class BinanceFeed {
       await _sleep(120); // Binance rate limit: 1200 weight/min
     }
 
-    return stored;
+    // ── YENİ: Boşluk tespiti ve doldurma ──────────────────────
+    const filledStored = await detectAndFillGap(
+      symbol, tf, 'binance', stored,
+      async (startMs, endMs, limit) => {
+        const interval = BINANCE_TF[tf];
+        const url = `${AppConfig.API.binance.restFutures}/fapi/v1/klines` +
+          `?symbol=${symbol.toUpperCase()}&interval=${interval}` +
+          `&limit=${limit}&startTime=${startMs}&endTime=${endMs}`;
+        const res  = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data.map(normBinance) : [];
+      }
+    );
+
+    return filledStored;
   }
 
   // Connect WebSocket for live candle updates
@@ -422,7 +437,23 @@ class BybitFeed {
       await _sleep(100);
     }
 
-    return stored;
+    // ── YENİ: Boşluk tespiti ve doldurma ──────────────────────
+    const filledStored = await detectAndFillGap(
+      symbol, tf, 'bybit', stored,
+      async (startMs, endMs, limit) => {
+        const interval = BYBIT_TF[tf];
+        const url = `https://api.bybit.com/v5/market/kline` +
+          `?category=linear&symbol=${symbol.toUpperCase()}&interval=${interval}` +
+          `&limit=${limit}&start=${startMs}&end=${endMs}`;
+        const res  = await fetch(url);
+        if (!res.ok) return [];
+        const json = await res.json();
+        const data = json.result?.list ?? [];
+        return data.map(normBybit).sort((a, b) => a.time - b.time);
+      }
+    );
+
+    return filledStored;
   }
 
   connectLive(symbol, tf) {
@@ -487,6 +518,20 @@ class BybitFeed {
     ws.onclose = () => {
       clearInterval(pingInterval);
       EventBus.emit('feed:status', { exchange: 'bybit', status: 'closed' });
+
+      // Kasıtlı kapatma değilse (1000 = normal close) yeniden bağlan
+      if (ws._intentionalClose) return;
+
+      console.log(`[BybitFeed] WS kapandı, 3sn sonra yeniden bağlanılıyor: ${symbol} ${tf}`);
+      setTimeout(() => {
+        // Hâlâ aynı pane aktifse reconnect et
+        const stillActive = Object.values(DataFeed._active)
+          .some(a => a.symbol === symbol && a.tf === tf && a.exchange === 'bybit');
+        if (stillActive) {
+          console.log(`[BybitFeed] Reconnecting: ${symbol} ${tf}`);
+          this.connectLive(symbol, tf);
+        }
+      }, 3000);
     };
 
     // Store ping interval ref for cleanup
@@ -497,6 +542,7 @@ class BybitFeed {
     const key = `${symbol}_${tf}`;
     const ws  = this._ws[key];
     if (ws) {
+      ws._intentionalClose = true;  // ← YENİ: reconnect tetiklenmesin
       clearInterval(ws._pingInterval);
       // Null handlers first to prevent stale callbacks
       ws.onmessage = null;
@@ -548,6 +594,22 @@ class DataFeedManager {
       if (!prev.exchange || prev.exchange === 'bybit') this.bybit.disconnectLive(prev.symbol, prev.tf);
     }
     this._active[paneId] = { symbol, tf, exchange: targetExchange };
+
+    // ── YENİ: Karşı exchange'in stale cache'ini temizle ──────
+    // Bybit coini açılınca eski Binance cache'i, Binance coini açılınca eski Bybit cache'i sil
+    if (targetExchange === 'bybit') {
+      const stale = await candleStore.get(symbol, tf, 'binance');
+      if (stale && stale.length > 0) {
+        await candleStore.delete(symbol, tf, 'binance').catch(() => {});
+        console.log(`[DataFeed] Stale Binance cache temizlendi: ${symbol} ${tf}`);
+      }
+    } else if (targetExchange === 'binance') {
+      const stale = await candleStore.get(symbol, tf, 'bybit');
+      if (stale && stale.length > 0) {
+        await candleStore.delete(symbol, tf, 'bybit').catch(() => {});
+        console.log(`[DataFeed] Stale Bybit cache temizlendi: ${symbol} ${tf}`);
+      }
+    }
 
     // Run exchange fetch
     if (!targetExchange || targetExchange === 'binance') {
@@ -662,6 +724,70 @@ class DataFeedManager {
           `https://api.bybit.com/v5/market/kline?category=linear&symbol=${sym.toUpperCase()}&interval=${interval}&limit=${limit}&end=${endMs}`
       );
     }
+  }
+}
+
+/**
+ * Cache'deki mum dizisinde boşluk var mı tespit eder.
+ * Boşluk bulunursa o aralığı exchange'den çeker ve cache'e yazar.
+ *
+ * @param {string} symbol
+ * @param {string} tf
+ * @param {string} exchange   - 'binance' | 'bybit'
+ * @param {Array}  stored     - Mevcut cache dizisi (time: unix saniye)
+ * @param {Function} fetchFn  - (startMs, endMs, limit) → Promise<candle[]>
+ * @returns {Promise<Array>}  - Boşluk doldurulduktan sonraki tam dizi
+ */
+async function detectAndFillGap(symbol, tf, exchange, stored, fetchFn) {
+  if (!stored || stored.length < 2) return stored;
+
+  const tfSec = TF_SECONDS[tf] ?? 3600;
+  const allowedGap = tfSec * 3; // 3 mum = normal kabul edilir (API gecikmesi vs.)
+
+  // Dizide boşluk ara — en büyük boşluğu bul
+  let maxGapStart = null;
+  let maxGapEnd   = null;
+  let maxGapSize  = 0;
+
+  for (let i = 1; i < stored.length; i++) {
+    const gap = stored[i].time - stored[i - 1].time;
+    if (gap > allowedGap && gap > maxGapSize) {
+      maxGapSize  = gap;
+      maxGapStart = stored[i - 1].time * 1000; // ms
+      maxGapEnd   = stored[i].time     * 1000; // ms
+    }
+  }
+
+  // Ayrıca son mumdan şu ana kadar boşluk var mı?
+  const lastTime  = stored[stored.length - 1].time * 1000;
+  const nowMs     = Date.now();
+  const tailGap   = nowMs - lastTime;
+
+  if (tailGap > allowedGap * 1000 && tailGap > maxGapSize * 1000) {
+    maxGapStart = lastTime;
+    maxGapEnd   = nowMs;
+    maxGapSize  = tailGap / 1000;
+  }
+
+  if (!maxGapStart) return stored; // Boşluk yok
+
+  const gapMinutes = Math.round(maxGapSize / 60);
+  console.log(`[GapFill] ${exchange} ${symbol} ${tf}: ${gapMinutes}dk boşluk tespit edildi, dolduruluyor...`);
+
+  // Boşluğu doldur — maksimum 1000 mum
+  const limit = Math.min(1000, Math.ceil(maxGapSize / tfSec) + 5);
+
+  try {
+    const gapCandles = await fetchFn(maxGapStart, maxGapEnd, limit);
+    if (!gapCandles || !gapCandles.length) return stored;
+
+    // Cache'e yaz ve birleştir
+    const merged = await candleStore.mergeHistory(symbol, tf, exchange, gapCandles);
+    console.log(`[GapFill] ${exchange} ${symbol} ${tf}: ${gapCandles.length} mum eklendi, toplam ${merged.length}`);
+    return merged;
+  } catch (e) {
+    console.warn(`[GapFill] ${exchange} ${symbol} ${tf} hata:`, e.message);
+    return stored;
   }
 }
 
