@@ -276,7 +276,7 @@ class ScalpFRMonitor {
                         startFR:   r.startFR,
                         currentFR: r.currentFR,
                         delta:     r.delta,
-                        severity:  r.deltaAbs >= ScalpFRMonitor.THRESHOLD_ALARM ? 'alarm' : r.deltaAbs >= ScalpFRMonitor.THRESHOLD_RAPID ? 'rapid' : 'normal',
+                        severity:  Math.abs(r.delta) >= ScalpFRMonitor.THRESHOLD_ALARM ? 'alarm' : Math.abs(r.delta) >= ScalpFRMonitor.THRESHOLD_RAPID ? 'rapid' : 'normal',
                         // display alanları — bot-signals-panel bunları kullanıyor
                         display: {
                             startFR:   r.startFR?.toFixed(4) + '%',
@@ -289,8 +289,8 @@ class ScalpFRMonitor {
                             arrow:      r.direction === 'more_negative' ? '▼'   
                                       : r.direction === 'less_negative' ? '▲'   
                                       : '─',
-                            badge:      (r.deltaAbs >= ScalpFRMonitor.THRESHOLD_ALARM) ? '🚨 Alarm' 
-                                      : (r.deltaAbs >= ScalpFRMonitor.THRESHOLD_RAPID) ? '⚡ Ani' 
+                            badge:      (Math.abs(r.delta) >= ScalpFRMonitor.THRESHOLD_ALARM) ? '🚨 Alarm' 
+                                      : (Math.abs(r.delta) >= ScalpFRMonitor.THRESHOLD_RAPID) ? '⚡ Ani' 
                                       : 'Sinyal',
                         }
                     });
