@@ -12,9 +12,11 @@
 class BinanceFRPoller {
 
     // Binance Futures tüm semboller (premiumIndex) — simge başına lastFundingRate içerir
-    static ENDPOINT = `${typeof AppConfig !== 'undefined'
+    static ENDPOINT = `${
+      (typeof AppConfig !== 'undefined' && AppConfig.API?.binance?.restFutures)
         ? AppConfig.API.binance.restFutures
-        : 'https://fapi.binance.com'}/fapi/v1/premiumIndex`;
+        : 'https://pintrade.onrender.com/api/binance/futures'
+    }/fapi/v1/premiumIndex`;
 
     // Polling aralığı: 60 saniye (1 dakika)
     static POLL_INTERVAL_MS = 60 * 1000;

@@ -254,12 +254,23 @@ class ScalpFRMonitor {
 
     async preloadSignals(hours = 24) {
         try {
-            const backendUrl = window.AppConfig?.SYNC_API?.replace('/api/sync', '') || '';
+            const backendUrl = (
+              window.AppConfig?.SYNC_API?.replace('/api/sync', '') ||
+              window.AppConfig?.API?.binance?.restFutures?.replace('/api/binance/futures', '') ||
+              'https://pintrade.onrender.com'
+            );
             const url = `${backendUrl}/api/signals/fr?exchange=${this.exchange}&hours=${hours}&limit=500`;
             const res  = await fetch(url);
             if (!res.ok) return;
 
-            const records = await res.json();
+            const text = await res.text();
+            let records;
+            try {
+                records = JSON.parse(text);
+            } catch {
+                console.warn('[ScalpFRMonitor] Preload: Server JSON dönmedi, atlanıyor');
+                return;
+            }
             if (!Array.isArray(records) || records.length === 0) return;
 
             // Bellekteki sinyallere yükle (mevcut olanları koruyarak)
@@ -439,7 +450,11 @@ class ScalpFRMonitor {
             delta: d,
         };
 
-        const backendUrl = window.AppConfig?.SYNC_API?.replace('/api/sync', '') || '';
+        const backendUrl = (
+          window.AppConfig?.SYNC_API?.replace('/api/sync', '') ||
+          window.AppConfig?.API?.binance?.restFutures?.replace('/api/binance/futures', '') ||
+          'https://pintrade.onrender.com'
+        );
         fetch(`${backendUrl}/api/signals/fr`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },

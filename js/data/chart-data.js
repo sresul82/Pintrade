@@ -613,7 +613,9 @@ class DataFeedManager {
         gapCandles = (json.result?.list ?? []).map(normBybit).sort((a, b) => a.time - b.time);
       } else {
         const interval = BINANCE_TF[tf];
-        const url = `https://fapi.binance.com/fapi/v1/klines` +
+        const proxyBase = window.AppConfig?.API?.binance?.restFutures
+          || 'https://pintrade.onrender.com/api/binance/futures';
+        const url = `${proxyBase}/fapi/v1/klines` +
           `?symbol=${symbol}&interval=${interval}&limit=${Math.min(gapBars, 200)}` +
           `&startTime=${lastTime}`;
         const res  = await fetch(url);
