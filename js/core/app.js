@@ -37,20 +37,87 @@ const App = {
     if (window.bybitFRPoller)   bybitFRPoller.start();     // 2. bybit poller
     if (window.binanceFRPoller) binanceFRPoller.start();   // 3. binance poller
 
-    // ── Visibility API — poller'ları arka planda yavaşlat ───────────
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        // Arka plan: FR poller'ları 2 dakikaya düşür
-        window.bybitFRPoller?._setInterval(120000);
-        window.binanceFRPoller?._setInterval(120000);
-      } else {
-        // Ön plan: normal hıza dön + hemen bir poll yap
-        window.bybitFRPoller?._setInterval(60000);
-        window.binanceFRPoller?._setInterval(60000);
-        window.bybitFRPoller?._poll();
-        window.binanceFRPoller?._poll();
+    // ── YENİ: Geçmiş sinyalleri server'dan yükle ─────────────────────
+    setTimeout(async () => {
+      if (window.scalpFRMonitor)       await scalpFRMonitor.preloadSignals(24);
+      if (window.scalpFRMonitor_bybit) await scalpFRMonitor_bybit.preloadSignals(24);
+      console.log('[App] FR sinyal preload tamamlandı');
+    }, 2000); // 2sn bekle — server bağlantısı kurulsun
+
+    // ── Otomatik Mum Boşluk Doldurma (Visibility + Idle Detection) ─────
+    ;(() => {
+      let _hiddenAt   = null;  // Sayfa gizlenme zamanı
+      let _idleTimer  = null;  // Fare hareketsizlik timer'ı
+      const IDLE_MS   = 5 * 60 * 1000; // 5dk hareketsizlik = idle
+
+      function _fillAllPaneGaps() {
+        const pm = window.LayoutManager;
+        if (!pm?.panes) return;
+        pm.panes.forEach(p => {
+          DataFeed.fillGapForPane(`pane_${p.idx}`);
+        });
       }
-    });
+
+      // ── Visibility API ────────────────────────────────────────────
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          _hiddenAt = Date.now();
+        } else {
+          // Sayfa öne geldi
+          if (_hiddenAt) {
+            const awayMs = Date.now() - _hiddenAt;
+            const minTfMs = 60 * 1000; // 1 dakika minimum
+            if (awayMs > minTfMs) {
+              console.log(`[GapFill] ${Math.round(awayMs/60000)}dk sonra döndü — boşluklar dolduruluyor`);
+              setTimeout(_fillAllPaneGaps, 1000); // 1sn bekle — internet bağlansın
+            }
+            _hiddenAt = null;
+          }
+
+          // FR poller'ları da hızlandır
+          window.bybitFRPoller?._setInterval(60000);
+          window.binanceFRPoller?._setInterval(60000);
+          window.bybitFRPoller?._poll();
+          window.binanceFRPoller?._poll();
+        }
+
+        if (document.hidden) {
+          // Arka planda FR poller'ları yavaşlat
+          window.bybitFRPoller?._setInterval(120000);
+          window.binanceFRPoller?._setInterval(120000);
+        }
+      });
+
+      // ── Idle Detection (fare hareketsizliği) ─────────────────────
+      function _resetIdleTimer() {
+        clearTimeout(_idleTimer);
+        _idleTimer = setTimeout(() => {
+          console.log('[GapFill] Idle modu — 5dk hareketsizlik');
+          // Idle başladığında zamanı kaydet
+          _hiddenAt = _hiddenAt || Date.now();
+        }, IDLE_MS);
+      }
+
+      // Fare veya klavye hareketi → idle timer'ı sıfırla
+      ['mousemove', 'keydown', 'click', 'scroll'].forEach(evt => {
+        document.addEventListener(evt, () => {
+          // Idle modundan çıkınca boşlukları doldur
+          if (_hiddenAt && !document.hidden) {
+            const awayMs = Date.now() - _hiddenAt;
+            if (awayMs > 60000) { // 1dk+ idle kaldıysa
+              console.log(`[GapFill] Idle'dan döndü (${Math.round(awayMs/60000)}dk) — boşluklar dolduruluyor`);
+              setTimeout(_fillAllPaneGaps, 500);
+            }
+            _hiddenAt = null;
+          }
+          _resetIdleTimer();
+        }, { passive: true });
+      });
+
+      // İlk kez başlat
+      _resetIdleTimer();
+
+    })();
 
     // Initialize chart if present
     if (window.initChartCore) {

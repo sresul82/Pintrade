@@ -252,6 +252,69 @@ class ScalpFRMonitor {
         this.maxSignals = 5000;
     }
 
+    async preloadSignals(hours = 24) {
+        try {
+            const backendUrl = window.AppConfig?.SYNC_API?.replace('/api/sync', '') || '';
+            const url = `${backendUrl}/api/signals/fr?exchange=${this.exchange}&hours=${hours}&limit=500`;
+            const res  = await fetch(url);
+            if (!res.ok) return;
+
+            const records = await res.json();
+            if (!Array.isArray(records) || records.length === 0) return;
+
+            // Bellekteki sinyallere yükle (mevcut olanları koruyarak)
+            let loaded = 0;
+            records.forEach(r => {
+                // Zaten varsa ekleme (timestamp kontrolü)
+                const exists = this.signals.some(s => Math.abs(s.timestamp - new Date(r.timestamp).getTime()) < 1000 && s.symbol === r.symbol);
+                if (!exists) {
+                    this.signals.push({
+                        symbol:    r.symbol,
+                        exchange:  r.exchange,
+                        timestamp: new Date(r.timestamp).getTime(),
+                        direction: r.direction,
+                        startFR:   r.startFR,
+                        currentFR: r.currentFR,
+                        delta:     r.delta,
+                        severity:  r.deltaAbs >= ScalpFRMonitor.THRESHOLD_ALARM ? 'alarm' : r.deltaAbs >= ScalpFRMonitor.THRESHOLD_RAPID ? 'rapid' : 'normal',
+                        // display alanları — bot-signals-panel bunları kullanıyor
+                        display: {
+                            startFR:   r.startFR?.toFixed(4) + '%',
+                            currentFR: r.currentFR?.toFixed(4) + '%',
+                            delta:     (r.delta >= 0 ? '+' : '') + r.delta?.toFixed(4) + '%',
+                            time:      new Date(r.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            colorClass: r.direction === 'more_negative' ? 'fr-signal-green'
+                                      : r.direction === 'less_negative' ? 'fr-signal-red'
+                                      : 'fr-signal-gray',
+                            arrow:      r.direction === 'more_negative' ? '▼'   
+                                      : r.direction === 'less_negative' ? '▲'   
+                                      : '─',
+                            badge:      (r.deltaAbs >= ScalpFRMonitor.THRESHOLD_ALARM) ? '🚨 Alarm' 
+                                      : (r.deltaAbs >= ScalpFRMonitor.THRESHOLD_RAPID) ? '⚡ Ani' 
+                                      : 'Sinyal',
+                        }
+                    });
+                    loaded++;
+                }
+            });
+
+            // Zaman sırasına göre sırala (unshift edilerek gösteriliyorsa eskiden yeniye sort edilip unshift edilmeli veya en son reverse/sort)
+            this.signals.sort((a, b) => b.timestamp - a.timestamp); // Yeni sinyaller önde olsun
+
+            // maxSignals limitini aş
+            if (this.signals.length > this.maxSignals) {
+                this.signals = this.signals.slice(0, this.maxSignals);
+            }
+
+            console.log(`[ScalpFRMonitor:${this.exchange}] ${loaded} sinyal preload edildi (toplam: ${this.signals.length})`);
+            if (typeof EventBus !== 'undefined') {
+                EventBus.emit('scalp:frSignal', { preloaded: true, count: loaded });
+            }
+        } catch (e) {
+            console.warn(`[ScalpFRMonitor:${this.exchange}] Preload hatası:`, e.message);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Ana giriş noktası — her dakika FR güncellemesi geldiğinde çağrılır
     // fundingRate: ham değer, borsada "-0.2113%" olarak görüneni → -0.2113
@@ -364,6 +427,24 @@ class ScalpFRMonitor {
         console.log(
             `[ScalpFR] ${badge} ${symbol} | Başlangıç: ${signal.display.startFR}% → Şimdi: ${signal.display.currentFR}% | Δ: ${signal.display.delta}% | ${arrow} ${direction}`
         );
+
+        // ── YENİ: Server'a kaydet ─────────────────────────────────────
+        const backendSignal = {
+            exchange:  this.exchange,
+            symbol,
+            timestamp,
+            direction,
+            startFR,
+            currentFR,
+            delta: d,
+        };
+
+        const backendUrl = window.AppConfig?.SYNC_API?.replace('/api/sync', '') || '';
+        fetch(`${backendUrl}/api/signals/fr`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(backendSignal),
+        }).catch(() => {}); // Sessizce geç — offline olabilir
     }
 
     // ─────────────────────────────────────────────────────────────

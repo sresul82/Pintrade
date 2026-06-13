@@ -554,6 +554,39 @@ window.DrawingShapes = (() => {
       ctx.stroke();
     }
 
+/**
+ * Ok başı çizer — `from` noktasından `to` noktasına doğru.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{x:number, y:number}} from  — ok gövdesinin başlangıcı (yön için)
+ * @param {{x:number, y:number}} to    — ok başının ucu
+ */
+function _drawArrowHead(ctx, from, to) {
+  const dx     = to.x - from.x;
+  const dy     = to.y - from.y;
+  const len    = Math.hypot(dx, dy);
+  if (len < 1) return; // Sıfır uzunlukta ok — çizme
+
+  const angle  = Math.atan2(dy, dx);
+  const size   = Math.max(8, (ctx.lineWidth || 1) * 4); // Ok başı boyutu
+  const spread = Math.PI / 6; // 30 derece açıklık
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(
+    to.x - size * Math.cos(angle - spread),
+    to.y - size * Math.sin(angle - spread)
+  );
+  ctx.lineTo(
+    to.x - size * Math.cos(angle + spread),
+    to.y - size * Math.sin(angle + spread)
+  );
+  ctx.closePath();
+  ctx.fillStyle = ctx.strokeStyle || '#0969da';
+  ctx.fill();
+  ctx.restore();
+}
+
   function _drawArrow(ctx, d, pane) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);

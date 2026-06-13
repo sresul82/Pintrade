@@ -579,6 +579,60 @@ class DataFeedManager {
     this._loadIds = {};   // paneId → current loadId counter
   }
 
+  // Belirli bir pane için sadece eksik son mumları çek
+  // Visibility API veya idle detection tarafından çağrılır
+  async fillGapForPane(paneId) {
+    const active = this._active[paneId];
+    if (!active) return;
+
+    const { symbol, tf, exchange } = active;
+    const feed    = exchange === 'bybit' ? this.bybit : this.binance;
+    const stored  = await candleStore.get(symbol, tf, exchange);
+    if (!stored || !stored.length) return; // Cache yok — normal load halleder
+
+    const lastTime  = stored[stored.length - 1].time * 1000; // ms
+    const gapMs     = Date.now() - lastTime;
+    const tfMs      = (TF_SECONDS[tf] ?? 3600) * 1000;
+
+    // 1 TF'den az eksik varsa pas geç
+    if (gapMs < tfMs) return;
+
+    const gapBars = Math.ceil(gapMs / tfMs) + 2; // +2 güvenlik payı
+    console.log(`[DataFeed] Gap fill: ${symbol} ${tf} — ${Math.round(gapMs/60000)}dk eksik (${gapBars} mum)`);
+
+    try {
+      // Sadece eksik kısmı çek
+      let gapCandles;
+      if (exchange === 'bybit') {
+        const interval = BYBIT_TF[tf];
+        const url = `https://api.bybit.com/v5/market/kline?category=linear` +
+          `&symbol=${symbol}&interval=${interval}&limit=${Math.min(gapBars, 200)}` +
+          `&start=${lastTime}`;
+        const res  = await fetch(url);
+        const json = await res.json();
+        gapCandles = (json.result?.list ?? []).map(normBybit).sort((a, b) => a.time - b.time);
+      } else {
+        const interval = BINANCE_TF[tf];
+        const url = `https://fapi.binance.com/fapi/v1/klines` +
+          `?symbol=${symbol}&interval=${interval}&limit=${Math.min(gapBars, 200)}` +
+          `&startTime=${lastTime}`;
+        const res  = await fetch(url);
+        const raw  = await res.json();
+        gapCandles = Array.isArray(raw) ? raw.map(normBinance) : [];
+      }
+
+      if (!gapCandles.length) return;
+
+      // Cache'e ekle ve chart'a emit et
+      const merged = await candleStore.mergeHistory(symbol, tf, exchange, gapCandles);
+      EventBus.emit('feed:candles', { symbol, tf, exchange, candles: merged });
+      console.log(`[DataFeed] Gap fill tamamlandı: ${gapCandles.length} mum eklendi`);
+
+    } catch (e) {
+      console.warn(`[DataFeed] Gap fill hatası: ${symbol} ${tf}`, e.message);
+    }
+  }
+
   // Load history + start live feed for a pane.
   // If called again before previous async chain finishes, previous chain
   // is cancelled via loadId mismatch — no stale WS will be opened.
@@ -632,8 +686,21 @@ class DataFeedManager {
 
     if (this._loadIds[paneId] !== loadId) return;
 
-    // Emit cached data immediately for instant chart render
-    if (stored && stored.length >= 200) {
+    // ── Stale cache kontrolü ─────────────────────────────────────────
+    // Cache'deki son mum 10 dakikadan eskiyse temizle ve taze çek
+    const tfSec     = TF_SECONDS[tf] ?? 3600;
+    const staleMs   = Math.max(10 * 60 * 1000, tfSec * 2 * 1000); // min 10dk, max 2 TF
+    const lastTime  = stored?.length ? stored[stored.length - 1].time * 1000 : 0;
+    const isStale   = !stored || stored.length < 200 || (Date.now() - lastTime) > staleMs;
+
+    if (isStale && stored?.length) {
+      // Cache var ama bayatlamış — sil
+      await candleStore.delete(symbol, tf, exchange).catch(() => {});
+      console.log(`[DataFeed] Stale cache temizlendi: ${symbol} ${tf} ${exchange} (${Math.round((Date.now()-lastTime)/60000)}dk eski)`);
+    }
+
+    // Cache taze ise anında göster
+    if (!isStale && stored && stored.length >= 200) {
       EventBus.emit('feed:candles', { symbol, tf, exchange, candles: stored });
     }
 

@@ -350,6 +350,9 @@ const ScreenerCore = (() => {
         });
       }
       _applyFilterSort(); // OI ile yeniden render
+      if (typeof EventBus !== 'undefined') {
+        EventBus.emit('screener:loaded');
+      }
 
 
     } catch(e) {
@@ -443,6 +446,9 @@ const ScreenerCore = (() => {
         });
       }
       _applyFilterSort(); // oiDir ile yeniden render
+      if (typeof EventBus !== 'undefined') {
+        EventBus.emit('screener:loaded');
+      }
 
     } catch(e) {
       console.error('[ScreenerCore] BB Screener error:', e);
@@ -647,6 +653,9 @@ const ScreenerCore = (() => {
 
     if (tab.startsWith('bn')) _pollBinancePrices();
     if (tab.startsWith('bb')) _pollBybitPrices();
+
+    // ── YENİ: Sekme değişince görünen coinleri preload et ────────
+    setTimeout(_preloadVisibleCoins, 1500); // Yeni sekme yüklensin
   }
 
   /* ── Init ─────────────────────────────────────────── */
@@ -689,6 +698,39 @@ const ScreenerCore = (() => {
 
     _setTab('bn-screener');
     console.log('[ScreenerCore] Initialized ✓');
+
+    // Screener ilk yüklenince tüm görünen coinler için FR geçmişini preload et
+    async function _preloadVisibleCoins() {
+      const exchange = ExchangeRouter.getActive();
+      const monitor  = ExchangeRouter.getMonitor(exchange);
+      if (!monitor?.preloadFromServer) return;
+
+      const isAllTab = _activeTab.endsWith('-all');
+
+      let coins;
+      if (isAllTab) {
+        // All sekmesinde sadece aktif seçili coini preload et
+        // (tüm borsayı preload etmek anlamsız ve yavaş)
+        const activeSym = window.State?.get('activeSymbol');
+        coins = activeSym ? [activeSym] : [];
+      } else {
+        // BN Screener / BB Screener — görünen negatif FR listesi
+        // _rows zaten sıralanmış ve filtrelenmiş (negatif FR'ye göre)
+        coins = _rows.map(r => r.sym + 'USDT');
+      }
+
+      if (coins.length === 0) return;
+
+      for (const symbol of coins) {
+        await monitor.preloadFromServer(symbol, exchange, 2); // Son 2 saat
+        await new Promise(r => setTimeout(r, 100)); // Rate limit koruması
+      }
+      console.log(`[ScreenerCore] ${coins.length} coin FR preload edildi (${_activeTab})`);
+    }
+
+    EventBus.on('screener:loaded', () => {
+      setTimeout(_preloadVisibleCoins, 3000); // Screener yüklendikten 3sn sonra
+    });
   }
 
 

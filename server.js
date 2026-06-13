@@ -59,6 +59,21 @@ marketDataSchema.index({ exchange: 1, symbol: 1, timestamp: -1 });
 marketDataSchema.index({ createdAt: 1 }, { expireAfterSeconds: 48 * 60 * 60 });
 const MarketData = mongoose.model('MarketData', marketDataSchema);
 
+// ── FR Sinyalleri (Kalıcı — 7 günlük TTL) ──────────────────────────
+const frSignalSchema = new mongoose.Schema({
+  exchange:    { type: String, required: true },   // 'binance' | 'bybit'
+  symbol:      { type: String, required: true },   // 'HOMEUSDT'
+  timestamp:   { type: Date,   required: true },   // Sinyal zamanı
+  direction:   { type: String },                   // 'more_negative' | 'less_negative'
+  startFR:     { type: Number },                   // Pencere başlangıç FR
+  currentFR:   { type: Number },                   // Sinyal anındaki FR
+  delta:       { type: Number },                   // currentFR - startFR
+  createdAt:   { type: Date, default: Date.now }
+});
+frSignalSchema.index({ exchange: 1, symbol: 1, timestamp: -1 });
+frSignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }); // 7 gün TTL
+const FRSignal = mongoose.model('FRSignal', frSignalSchema);
+
 // ── Mum Verisi (Kalıcı — indikatörler için) ─────────────────────────
 const candleSchema = new mongoose.Schema({
   exchange:  { type: String, required: true },
@@ -79,11 +94,19 @@ const Candle = mongoose.model('Candle', candleSchema);
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
 // ==========================================
 
-// ── Binance: FR + OI + Volume (her 5dk) ─────────────────────────────
+// ── FR Sinyal Eşiği ──────────────────────────────────────────────────
+const FR_SIGNAL_THRESHOLD = 0.001; // % — bu değeri aşan değişim sinyal üretir
+
+// Önceki FR değerlerini bellekte tut (değişim tespiti için)
+const _prevFR = {
+  binance: new Map(), // symbol → fr değeri
+  bybit:   new Map(),
+};
+
+// ── Binance: FR + OI + Volume (her 1dk) ─────────────────────────────
 async function collectBinanceData() {
-  if (mongoose.connection.readyState !== 1) return; // DB bağlı değilse atla
+  if (mongoose.connection.readyState !== 1) return;
   try {
-    // Tüm USDT perpetual futuresları tek istekte çek
     const [frResp, tkResp] = await Promise.all([
       fetchJson('fapi.binance.com', '/fapi/v1/premiumIndex'),
       fetchJson('fapi.binance.com', '/fapi/v1/ticker/24hr')
@@ -93,35 +116,72 @@ async function collectBinanceData() {
     const tkMap = {};
     tkResp.forEach(t => { tkMap[t.symbol] = t; });
 
-    const now = new Date();
-    const docs = frResp
+    const now       = new Date();
+    const histDocs  = []; // MarketData'ya yazılacaklar (FR değişenler)
+    const signalDocs = []; // FRSignal'e yazılacaklar (eşiği aşanlar)
+
+    frResp
       .filter(f => f.symbol.endsWith('USDT'))
-      .map(f => {
-        const tk = tkMap[f.symbol] || {};
-        const price = parseFloat(f.markPrice) || 0;
-        const oi    = parseFloat(f.openInterest) || 0;
-        return {
+      .forEach(f => {
+        const tk      = tkMap[f.symbol] || {};
+        const price   = parseFloat(f.markPrice) || 0;
+        const oi      = parseFloat(f.openInterest) || 0;
+        const fr      = parseFloat(f.lastFundingRate) * 100;
+
+        const prevFR  = _prevFR.binance.get(f.symbol);
+        const changed = prevFR === undefined || fr !== prevFR;
+
+        if (!changed) return; // FR değişmemişse atla
+
+        _prevFR.binance.set(f.symbol, fr);
+
+        // History için yaz
+        histDocs.push({
           exchange:     'binance',
           symbol:       f.symbol,
           timestamp:    now,
-          price:        price,
-          fundingRate:  parseFloat(f.lastFundingRate) * 100,
-          openInterest: oi * price,       // Kontrat adeti → USD
+          price,
+          fundingRate:  fr,
+          openInterest: oi * price,
           volume24h:    tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
           createdAt:    now
-        };
+        });
+
+        // Eşik kontrolü — sinyal üret
+        if (prevFR !== undefined) {
+          const delta = fr - prevFR;
+          if (Math.abs(delta) >= FR_SIGNAL_THRESHOLD) {
+            signalDocs.push({
+              exchange:  'binance',
+              symbol:    f.symbol,
+              timestamp: now,
+              direction: delta < 0 ? 'more_negative' : 'less_negative',
+              startFR:   prevFR,
+              currentFR: fr,
+              delta,
+            });
+          }
+        }
       });
 
-    if (docs.length > 0) {
-      await MarketData.insertMany(docs, { ordered: false }).catch(() => {}); // Duplicate'leri yoksay
-      console.log(`[Collector] Binance: ${docs.length} kayıt yazıldı (${now.toISOString()})`);
+    // MarketData — sadece değişenler
+    if (histDocs.length > 0) {
+      await MarketData.insertMany(histDocs, { ordered: false }).catch(() => {});
     }
+
+    // FRSignal — sadece eşiği aşanlar
+    if (signalDocs.length > 0) {
+      await FRSignal.insertMany(signalDocs, { ordered: false }).catch(() => {});
+    }
+
+    console.log(`[Collector] Binance: ${histDocs.length} FR değişti, ${signalDocs.length} sinyal üretildi`);
+
   } catch (e) {
     console.error('[Collector] Binance hatası:', e.message);
   }
 }
 
-// ── Bybit: FR + OI + Volume (her 5dk) ──────────────────────────────
+// ── Bybit: FR + OI + Volume (her 1dk) ──────────────────────────────
 async function collectBybitData() {
   if (mongoose.connection.readyState !== 1) return;
   try {
@@ -129,24 +189,58 @@ async function collectBybitData() {
     const list = data?.result?.list;
     if (!Array.isArray(list)) return;
 
-    const now  = new Date();
-    const docs = list
-      .filter(t => t.symbol.endsWith('USDT'))
-      .map(t => ({
-        exchange:     'bybit',
-        symbol:       t.symbol,
-        timestamp:    now,
-        price:        parseFloat(t.lastPrice) || 0,
-        fundingRate:  parseFloat(t.fundingRate) * 100,
-        openInterest: parseFloat(t.openInterestValue) || null,
-        volume24h:    parseFloat(t.turnover24h)        || null,
-        createdAt:    now
-      }));
+    const now        = new Date();
+    const histDocs   = [];
+    const signalDocs = [];
 
-    if (docs.length > 0) {
-      await MarketData.insertMany(docs, { ordered: false }).catch(() => {});
-      console.log(`[Collector] Bybit: ${docs.length} kayıt yazıldı (${now.toISOString()})`);
+    list
+      .filter(t => t.symbol.endsWith('USDT'))
+      .forEach(t => {
+        const fr     = parseFloat(t.fundingRate) * 100;
+        const prevFR = _prevFR.bybit.get(t.symbol);
+        const changed = prevFR === undefined || fr !== prevFR;
+
+        if (!changed) return;
+
+        _prevFR.bybit.set(t.symbol, fr);
+
+        histDocs.push({
+          exchange:     'bybit',
+          symbol:       t.symbol,
+          timestamp:    now,
+          price:        parseFloat(t.lastPrice) || 0,
+          fundingRate:  fr,
+          openInterest: parseFloat(t.openInterestValue) || null,
+          volume24h:    parseFloat(t.turnover24h) || null,
+          createdAt:    now
+        });
+
+        if (prevFR !== undefined) {
+          const delta = fr - prevFR;
+          if (Math.abs(delta) >= FR_SIGNAL_THRESHOLD) {
+            signalDocs.push({
+              exchange:  'bybit',
+              symbol:    t.symbol,
+              timestamp: now,
+              direction: delta < 0 ? 'more_negative' : 'less_negative',
+              startFR:   prevFR,
+              currentFR: fr,
+              delta,
+            });
+          }
+        }
+      });
+
+    if (histDocs.length > 0) {
+      await MarketData.insertMany(histDocs, { ordered: false }).catch(() => {});
     }
+
+    if (signalDocs.length > 0) {
+      await FRSignal.insertMany(signalDocs, { ordered: false }).catch(() => {});
+    }
+
+    console.log(`[Collector] Bybit: ${histDocs.length} FR değişti, ${signalDocs.length} sinyal üretildi`);
+
   } catch (e) {
     console.error('[Collector] Bybit hatası:', e.message);
   }
@@ -204,10 +298,10 @@ mongoose.connection.once('open', () => {
   collectBybitData();
   collectBinanceCandles();
 
-  // Her 5 dakikada bir tekrarla
-  setInterval(collectBinanceData,   5 * 60 * 1000);
-  setInterval(collectBybitData,     5 * 60 * 1000);
-  setInterval(collectBinanceCandles, 5 * 60 * 1000);
+  // Her 1 veya 5 dakikada bir tekrarla
+  setInterval(collectBinanceData,   1 * 60 * 1000); // 1 dakika — bot sinyalleri için
+  setInterval(collectBybitData,     1 * 60 * 1000); // 1 dakika
+  setInterval(collectBinanceCandles, 5 * 60 * 1000); // Mumlar 5dk yeterli
 });
 
 // ==========================================
@@ -250,6 +344,47 @@ app.get('/api/history/fr/:exchange/:symbol', async (req, res) => {
     ).sort({ timestamp: 1 }).lean();
 
     res.json(records);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── FR Sinyalleri: Kaydet ────────────────────────────────────────────
+// POST /api/signals/fr
+app.post('/api/signals/fr', async (req, res) => {
+  try {
+    const { exchange, symbol, timestamp, direction, startFR, currentFR, delta } = req.body;
+    if (!exchange || !symbol) return res.status(400).json({ error: 'Eksik parametre' });
+
+    await FRSignal.create({
+      exchange, symbol,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      direction, startFR, currentFR, delta
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── FR Sinyalleri: Son N sinyali getir ──────────────────────────────
+// GET /api/signals/fr?exchange=binance&limit=200&hours=24
+app.get('/api/signals/fr', async (req, res) => {
+  try {
+    const exchange = req.query.exchange; // opsiyonel — yoksa her iki borsa
+    const limit    = Math.min(parseInt(req.query.limit) || 200, 1000);
+    const hours    = Math.min(parseInt(req.query.hours)  || 24,  168); // max 7 gün
+    const since    = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const filter = { timestamp: { $gte: since } };
+    if (exchange) filter.exchange = exchange;
+
+    const records = await FRSignal.find(filter)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(records.reverse()); // Eskiden yeniye sırala
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
