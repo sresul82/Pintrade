@@ -536,52 +536,55 @@ const ScreenerCore = (() => {
     _renderTimer = setTimeout(() => { _applyFilterSort(); _renderTimer = null; }, 1000);
   }
 
-  let _bnPollTimer = null;
+  // ── MarketDataStore'dan Binance anlık güncellemelerini dinle ──
+  // Artık 5 saniyelik REST poll yok — MDS WebSocket'ten her 1-3sn'de push eder.
+  function _startMDSListeners() {
+    // Fiyat + hacim güncellemesi
+    EventBus.on('mds:tick', ({ symbol, price, pct24h, volume24h }) => {
+      if (!_activeTab.startsWith('bn')) return;
+      const sym = symbol.replace(/USDT$/, '');
+      _priceMap.set(sym, price);
 
-  function _startBinancePolling() {
-    if (_bnPollTimer) clearInterval(_bnPollTimer);
-    _pollBinancePrices();
-    _bnPollTimer = setInterval(_pollBinancePrices, 5000);
+      const row = _rows.find(r => r.sym === sym);
+      if (row) {
+        row.price = price;
+        row.pct   = pct24h;
+        row.vol   = volume24h;
+        _throttledRender();
+      }
+    });
+
+    // Funding Rate güncellemesi
+    EventBus.on('mds:fr', ({ symbol, rate, nextFundingTime }) => {
+      if (!_activeTab.startsWith('bn')) return;
+      const sym = symbol.replace(/USDT$/, '');
+
+      // FRTracker'a besle
+      if (_frTracker) _frTracker.addFRValue(symbol, rate);
+
+      const row = _rows.find(r => r.sym === sym);
+      if (row) {
+        row.fr = rate / 100; // screener ham değer bekliyor (0.0001 formatı)
+        row.nextFundingTime = nextFundingTime;
+        row.frh = _frInterval(nextFundingTime);
+        _throttledRender();
+      }
+    });
+
+    // OI güncellemesi
+    EventBus.on('mds:oi', ({ symbol, value, dir }) => {
+      if (!_activeTab.startsWith('bn')) return;
+      const sym = symbol.replace(/USDT$/, '');
+      const row = _rows.find(r => r.sym === sym);
+      if (row) {
+        row.oi    = value;
+        row.oiDir = dir;
+        _throttledRender();
+      }
+    });
   }
 
-  async function _pollBinancePrices() {
-    if (!_activeTab.startsWith('bn')) return;
-
-    try {
-      const res = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?_t=${Date.now()}`);
-      if (!res.ok) return;
-      const arr = await res.json();
-      if (!Array.isArray(arr)) return;
-
-      let changed = false;
-      arr.forEach(d => {
-        if (!d.symbol.endsWith('USDT')) return;
-        const sym   = d.symbol.replace(/USDT$/, '');
-        const price = parseFloat(d.markPrice);
-        const fr    = parseFloat(d.lastFundingRate);
-
-        _priceMap.set(sym, price);
-
-        if (_frTracker) _frTracker.addFRValue(d.symbol, fr * 100);
-        if (window.FRDataBridge) {
-          FRDataBridge.feed('binance', d.symbol, fr * 100, Date.now());
-        }
-
-        const row = _rows.find(r => r.sym === sym);
-        if (row) {
-          row.price = price;
-          row.fr    = fr;
-          changed   = true;
-        }
-      });
-
-      if (changed) _throttledRender();
-
-    } catch (e) {
-      console.warn('[ScreenerCore] Binance poll error:', e);
-    }
-  }
-
+  // Bybit polling — Bybit ban riski düşük, REST kullanmaya devam
   let _bbPollTimer = null;
 
   function _startBybitPolling() {
@@ -718,7 +721,12 @@ const ScreenerCore = (() => {
       window.frTrackerInstance = _frTracker;
     }
     if (window.OIManager) _oiManager = new OIManager();
-    _startBinancePolling();
+    // MarketDataStore başlat (tek WS bağlantısı — Binance IP ban riski ortadan kalkar)
+    if (typeof MarketDataStore !== 'undefined') {
+      MarketDataStore.start();
+      _startMDSListeners();
+    }
+    // Bybit: ban riski düşük, REST poll devam ediyor
     _startBybitPolling();
     setInterval(() => {
       if (_activeTab === 'bn-screener') _loadBinanceScreener();

@@ -102,10 +102,11 @@ const DetailPanel = (() => {
   // tf: '1m' | '5m' | '1h'
   async function _fetchRsiForTf(tf) {
     if (!_currentSym) return;
-    const pairSym = _currentSym + 'USDT';
+    const pairSym  = _currentSym + 'USDT';
     const exchange = _currentExchange;
     try {
       if (exchange === 'bybit') {
+        // Bybit: REST devam ediyor (ban riski düşük)
         const tfMap = { '1m': '1', '5m': '5', '1h': '60' };
         const interval = tfMap[tf];
         if (!interval) return;
@@ -116,10 +117,33 @@ const DetailPanel = (() => {
           _setRsi(tf, _calcRsi(closes));
         }
       } else {
-        const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/klines?symbol=${pairSym}&interval=${tf}&limit=100`);
-        if (resp.ok) {
-          const data = await resp.json();
-          _setRsi(tf, _calcRsi(data.map(k => parseFloat(k[4]))));
+        // Binance: Önce MarketDataStore klines cache'ine bak
+        const mdsKlines = typeof MarketDataStore !== 'undefined'
+          ? MarketDataStore.getKlines(pairSym, tf) : null;
+
+        if (mdsKlines && mdsKlines.length >= 20) {
+          // Cache'den hesapla — REST atmaya gerek yok
+          const closes = mdsKlines.map(k => k.close);
+          _setRsi(tf, _calcRsi(closes));
+        } else {
+          // Cache yok/yetersiz — tek seferlik REST, sonucu Store'a kaydet
+          const resp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/klines?symbol=${pairSym}&interval=${tf}&limit=100`);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (typeof MarketDataStore !== 'undefined') {
+              // Normalize edip Store'a kaydet — bir daha REST atmaz
+              const candles = data.map(k => ({
+                time:   Math.floor(k[0] / 1000),
+                open:   parseFloat(k[1]),
+                high:   parseFloat(k[2]),
+                low:    parseFloat(k[3]),
+                close:  parseFloat(k[4]),
+                volume: parseFloat(k[5]),
+              }));
+              MarketDataStore.setKlines(pairSym, tf, candles);
+            }
+            _setRsi(tf, _calcRsi(data.map(k => parseFloat(k[4]))));
+          }
         }
       }
     } catch {}
@@ -420,13 +444,17 @@ const DetailPanel = (() => {
         }
 
       } else {
-        // ── BINANCE ──
-        const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
-        if (tk.ok) {
-          const d = await tk.json();
-          const price     = parseFloat(d.lastPrice);
-          const changePct = parseFloat(d.priceChangePercent);
-          const vol24h    = parseFloat(d.quoteVolume);
+        // ── BİNANCE — Ticker ve FR: MarketDataStore'dan oku (REST atmaz) ──
+        const mdsTicker = typeof MarketDataStore !== 'undefined'
+          ? MarketDataStore.getTicker(pairSym) : null;
+        const mdsFR     = typeof MarketDataStore !== 'undefined'
+          ? MarketDataStore.getFR(pairSym)     : null;
+
+        // ─ Ticker (fiyat, değişim, hacim) ─
+        if (mdsTicker) {
+          const price     = mdsTicker.price;
+          const changePct = mdsTicker.pct24h;
+          const vol24h    = mdsTicker.volume24h;
 
           const pfEl = document.getElementById('dp-price-futures');
           if (pfEl) pfEl.textContent = _fmt(price);
@@ -445,29 +473,54 @@ const DetailPanel = (() => {
             volEl.innerHTML = `${Math.floor(vol24h).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${arrow}</span>`;
           }
 
-          // Bridge'e besle + karşı borsa volume göster
           window.FRDataBridge?.feedVol('binance', pairSym, vol24h);
           const altVol = window.FRDataBridge?.getLastVol('bybit', pairSym);
           const altVolEl = document.getElementById('dp-vol-alt');
-          if (altVolEl) {
-            altVolEl.textContent = altVol ? `BY: ${_fmtOI(altVol.value)}` : '';
+          if (altVolEl) altVolEl.textContent = altVol ? `BY: ${_fmtOI(altVol.value)}` : '';
+        } else {
+          // MDS henüz hazır değilse (sayfa ilk yüklenmesi) — tek seferlik REST fallback
+          const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
+          if (tk.ok) {
+            const d = await tk.json();
+            const pfEl = document.getElementById('dp-price-futures');
+            if (pfEl) pfEl.textContent = _fmt(parseFloat(d.lastPrice));
+            const pcEl = document.getElementById('dp-price-change');
+            if (pcEl) {
+              const c = parseFloat(d.priceChangePercent);
+              pcEl.textContent = (c >= 0 ? '+' : '') + c.toFixed(2) + '%';
+              pcEl.className = 'dp-price-change ' + (c >= 0 ? 'pos-chg' : 'neg-chg');
+            }
           }
         }
 
-        const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
-        if (fr.ok) {
-          const d = await fr.json();
-          const rawFR = window.FRDataBridge?.getLastFR('binance', pairSym);
-          const frPct = rawFR !== null && rawFR !== undefined ? rawFR : parseFloat(d.lastFundingRate || 0) * 100;
+        // ─ Funding Rate ─
+        if (mdsFR) {
+          const frPct = mdsFR.rate; // MarketDataStore zaten % cinsinden tutuyor
           const frEl = document.getElementById('dp-funding');
           if (frEl) {
             frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
             frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
           }
-          const nextFT = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+          const nextFT = mdsFR.nextFundingTime ||
+            ExchangeRouter.getNextFundingTime(pairSym, 'binance');
           if (nextFT) _startFrTimer(nextFT);
+        } else {
+          // MDS hazir degilse fallback REST
+          const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
+          if (fr.ok) {
+            const d = await fr.json();
+            const frPct = parseFloat(d.lastFundingRate || 0) * 100;
+            const frEl = document.getElementById('dp-funding');
+            if (frEl) {
+              frEl.textContent = (frPct >= 0 ? '+' : '') + frPct.toFixed(4) + '%';
+              frEl.className = 'dp-info-value ' + (frPct >= 0 ? 'green' : 'red');
+            }
+            const nextFT = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+            if (nextFT) _startFrTimer(nextFT);
+          }
         }
 
+        // ─ OI Tarihi — WebSocket yok, REST zorunlu ─
         const oiResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/openInterestHist?symbol=${pairSym}&period=5m&limit=8`);
         if (oiResp.ok) {
           const arr = await oiResp.json();
@@ -475,28 +528,20 @@ const DetailPanel = (() => {
           if (oiHistory.length) {
             const oi = oiHistory[oiHistory.length - 1];
             const isOiUp = oiHistory.length > 1 ? oiHistory[oiHistory.length - 1] >= oiHistory[oiHistory.length - 2] : true;
-
-            // Bridge'e besle
             window.FRDataBridge?.feedOI('binance', pairSym, oi);
-
-            // Ana OI göster
             const oiEl = document.getElementById('dp-oi-val');
             if (oiEl) {
               oiEl.style.color = isOiUp ? 'var(--dp-green)' : 'var(--dp-red)';
               oiEl.innerHTML = `${Math.floor(oi).toLocaleString('en-US')}<span style="font-size:11px;margin-left:3px;font-weight:bold;">${isOiUp ? '↗' : '↘'}</span>`;
             }
-
-            // Karşı borsa OI (Bybit) — cache'den oku
             const altOI = window.FRDataBridge?.getLastOI('bybit', pairSym);
             const altOIEl = document.getElementById('dp-oi-alt');
-            if (altOIEl) {
-              altOIEl.textContent = altOI ? `BY: ${_fmtOI(altOI.value)}` : '';
-            }
-
+            if (altOIEl) altOIEl.textContent = altOI ? `BY: ${_fmtOI(altOI.value)}` : '';
             _buildOiBars(oiHistory);
           }
         }
 
+        // ─ Long/Short Ratio — WebSocket yok, REST zorunlu ─
         const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
         if (lsResp.ok) {
           const arr = await lsResp.json();
