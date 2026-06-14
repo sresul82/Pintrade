@@ -17,11 +17,11 @@ const FloatingPanel = (() => {
     div.id = 'floating-detail-panel';
     div.setAttribute('role', 'dialog');
     div.setAttribute('aria-label', 'Detay Paneli - Taşınabilir Pencere');
-    div.style.cssText = \
+    div.style.cssText = `
       position: fixed;
       top: 60px;
       right: 440px;
-      width: \px;
+      width: ${PANEL_WIDTH}px;
       max-height: 90vh;
       overflow: hidden;
       display: flex;
@@ -32,12 +32,12 @@ const FloatingPanel = (() => {
       box-shadow: 0 8px 32px rgba(0,0,0,0.45);
       z-index: 9999;
       user-select: none;
-    \;
+    `;
 
     // Titlebar (sürükleme tutacağı)
     const titlebar = document.createElement('div');
     titlebar.id = 'floating-panel-titlebar';
-    titlebar.style.cssText = \
+    titlebar.style.cssText = `
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -47,8 +47,8 @@ const FloatingPanel = (() => {
       cursor: grab;
       border-radius: 8px 8px 0 0;
       flex-shrink: 0;
-    \;
-    titlebar.innerHTML = \
+    `;
+    titlebar.innerHTML = `
       <span style="font-size:11px; font-weight:600; color:var(--text-primary);">
         ⠿ Detay Paneli
       </span>
@@ -61,16 +61,16 @@ const FloatingPanel = (() => {
         line-height: 1;
         padding: 0 2px;
       ">✕</button>
-    \;
+    `;
 
     // Content area — mevcut dp-signals-tab içeriğini yansıtır
     const content = document.createElement('div');
     content.id = 'floating-panel-content';
-    content.style.cssText = \
+    content.style.cssText = `
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-    \;
+    `;
 
     div.appendChild(titlebar);
     div.appendChild(content);

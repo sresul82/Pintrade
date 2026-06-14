@@ -73,7 +73,6 @@ const App = {
             }
             _hiddenAt = null;
           }
-          }
 
           // FR poller'ları için eski _setInterval çağrıları kaldırıldı,
           // artık MarketDataStore websocket kullanılıyor.
