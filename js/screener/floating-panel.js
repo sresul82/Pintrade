@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FloatingPanel
  * DetailPanel içeriğini sürüklenebilir bir overlay penceresinde gösterir.
  */
