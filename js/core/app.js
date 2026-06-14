@@ -73,18 +73,14 @@ const App = {
             }
             _hiddenAt = null;
           }
+          }
 
-          // FR poller'ları da hızlandır
-          window.bybitFRPoller?._setInterval(60000);
-          window.binanceFRPoller?._setInterval(60000);
-          window.bybitFRPoller?._poll();
-          window.binanceFRPoller?._poll();
+          // FR poller'ları için eski _setInterval çağrıları kaldırıldı,
+          // artık MarketDataStore websocket kullanılıyor.
         }
 
         if (document.hidden) {
-          // Arka planda FR poller'ları yavaşlat
-          window.bybitFRPoller?._setInterval(120000);
-          window.binanceFRPoller?._setInterval(120000);
+          // Arka planda FR poller'ları yavaşlatma kodu kaldırıldı.
         }
       });
 
