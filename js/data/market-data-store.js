@@ -317,3 +317,5 @@ const MarketDataStore = (() => {
     getKlines,
   };
 })();
+
+window.MarketDataStore = MarketDataStore;
