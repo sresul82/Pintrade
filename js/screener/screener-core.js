@@ -654,9 +654,6 @@ const ScreenerCore = (() => {
     else if (tab === 'bn-all')  _loadBinanceAll();
     else if (tab === 'bb-all')  _loadBybitAll();
 
-    if (tab.startsWith('bn')) _pollBinancePrices();
-    if (tab.startsWith('bb')) _pollBybitPrices();
-
     // ── YENİ: Sekme değişince görünen coinleri preload et ────────
     setTimeout(_preloadVisibleCoins, 1500); // Yeni sekme yüklensin
   }
