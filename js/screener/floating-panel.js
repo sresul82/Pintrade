@@ -155,7 +155,7 @@ const FloatingPanel = (() => {
     if (_visible) _syncContent();
   }
 
-  return { show, hide, toggle, onPanelRender };
+  return { show, hide, toggle, onPanelRender, syncAll: onPanelRender };
 })();
 
 window.FloatingPanel = FloatingPanel;
