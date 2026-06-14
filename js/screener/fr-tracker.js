@@ -215,7 +215,11 @@ class FRTracker {
             history.sort((a, b) => a.timestamp - b.timestamp);
             console.log(`[FRTracker] Preload: ${sym}@${exchange} — ${added} kayıt eklendi`);
         } catch (e) {
-            console.warn('[FRTracker] Sunucu preload hatası:', e.message);
+            if (e instanceof SyntaxError) {
+                console.warn('[FRTracker] Preload: Server JSON dönmedi, atlanıyor');
+            } else {
+                console.warn('[FRTracker] Sunucu preload hatası:', e.message);
+            }
         }
     }
 }

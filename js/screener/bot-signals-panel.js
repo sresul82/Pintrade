@@ -247,6 +247,45 @@ const BotSignalsPanel = (() => {
     render();
   }
 
+  // Floating panel container için event delegation — addContainer() tarafından çağrılır
+  function _attachDelegation(el) {
+    el.addEventListener('click', (e) => {
+      const tickerLink = e.target.closest('.bsp-ticker-link');
+      if (tickerLink) {
+        const sym = tickerLink.dataset.symbol;
+        _selectedSymbol = sym;
+        _coinFilter = 'selected';
+        EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: ExchangeRouter.getActive() });
+        render();
+        return;
+      }
+      if (e.target.closest('.bsp-time-nav')) {
+        e.stopPropagation();
+        const navEl = e.target.closest('.bsp-time-nav');
+        const dir = parseInt(navEl.dataset.dir);
+        if (dir === 1 && _chartHourOffset >= 0) return;
+        if (dir === -1 && navEl.style.opacity === '0.3') return;
+        _chartHourOffset += dir;
+        render();
+        return;
+      }
+      if (e.target.closest('#bsp-chart-titlebar')) {
+        _chartOpen = !_chartOpen;
+        const section = document.getElementById('bsp-chart-section');
+        const arrow   = document.getElementById('bsp-chart-arrow');
+        if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
+        if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+        return;
+      }
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      if (btn.classList.contains('bsp-tab-btn'))        { _activeBot    = btn.dataset.bot;    render(); }
+      else if (btn.classList.contains('bsp-filter-btn-time')) { _activeFilter = btn.dataset.filter; render(); }
+      else if (btn.classList.contains('bsp-filter-btn-coin')) { _coinFilter   = btn.dataset.filter; render(); }
+      else if (btn.classList.contains('bsp-sort-btn'))  { _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc'; render(); }
+    });
+  }
+
   let _renderTimer = null;
   function render() {
     if (_renderTimer) clearTimeout(_renderTimer);
@@ -686,10 +725,10 @@ const BotSignalsPanel = (() => {
   }
 
   function addContainer(el) {
-    if (el && !_extraContainers.includes(el)) {
-      _extraContainers.push(el);
-      render(); // Hemen guncelle
-    }
+    if (!el || _extraContainers.includes(el)) return;
+    _extraContainers.push(el);
+    _attachDelegation(el); // Event delegation ekle
+    render(); // Hemen render et
   }
 
   function removeContainer(el) {
