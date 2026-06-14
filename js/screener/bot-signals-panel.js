@@ -13,6 +13,7 @@ const BotSignalsPanel = (() => {
   let _chartOpen = true;          // grafik baslangicta acik
   let _chartHourOffset = 0;       // 0 = now, -1 = 1 hour ago
   let _extraContainers = [];      // Floating panel gibi ek render hedefleri
+  let _allContainers = [];        // Tüm render hedef container'ları
 
   const BOT_TABS = [
     { id: 'fr',        label: 'FR' },
@@ -38,60 +39,7 @@ const BotSignalsPanel = (() => {
 
     // Event delegation for our control buttons in the signals tab container
     const container = document.getElementById('dp-signals-tab');
-    if (container) {
-      container.addEventListener('click', (e) => {
-        // Ticker link click → select coin, open chart, switch to Seçili Coin
-        const tickerLink = e.target.closest('.bsp-ticker-link');
-        if (tickerLink) {
-          const sym = tickerLink.dataset.symbol; // e.g. 'BABY'
-          _selectedSymbol = sym;
-          _coinFilter = 'selected';
-          EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: ExchangeRouter.getActive() });
-          render();
-          return;
-        }
-
-        // 1.5) Pagination for Chart Time Window
-        if (e.target.closest('.bsp-time-nav')) {
-          e.stopPropagation();
-          const navEl = e.target.closest('.bsp-time-nav');
-          const dir = parseInt(navEl.dataset.dir);
-          if (dir === 1 && _chartHourOffset >= 0) return;
-          if (dir === -1 && navEl.style.opacity === '0.3') return; // canGoBack=false
-          _chartHourOffset += dir;
-          render();
-          return;
-        }
-
-        // 2) Chart titlebar toggle
-        if (e.target.closest('#bsp-chart-titlebar')) {
-          _chartOpen = !_chartOpen;
-          const section = document.getElementById('bsp-chart-section');
-          const arrow   = document.getElementById('bsp-chart-arrow');
-          if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
-          if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
-          return; // render() cagirma - sadece DOM guncelle
-        }
-
-        // 3) Button clickleri
-        const btn = e.target.closest('button');
-        if (!btn) return;
-
-        if (btn.classList.contains('bsp-tab-btn')) {
-          _activeBot = btn.dataset.bot;
-          render();
-        } else if (btn.classList.contains('bsp-filter-btn-time')) {
-          _activeFilter = btn.dataset.filter;
-          render();
-        } else if (btn.classList.contains('bsp-filter-btn-coin')) {
-          _coinFilter = btn.dataset.filter;
-          render();
-        } else if (btn.classList.contains('bsp-sort-btn')) {
-          _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc';
-          render();
-        }
-      });
-    }
+    if (container) _attachDelegation(container);
 
     // Increase max signals limit from default 200 to 5000 to keep all 24h signals
     if (typeof scalpFRMonitor !== 'undefined') {
@@ -271,10 +219,12 @@ const BotSignalsPanel = (() => {
       }
       if (e.target.closest('#bsp-chart-titlebar')) {
         _chartOpen = !_chartOpen;
-        const section = document.getElementById('bsp-chart-section');
-        const arrow   = document.getElementById('bsp-chart-arrow');
-        if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
-        if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+        _allContainers.forEach(c => {
+          const section = c.querySelector('#bsp-chart-section');
+          const arrow   = c.querySelector('#bsp-chart-arrow');
+          if (section) section.style.maxHeight = _chartOpen ? '200px' : '0';
+          if (arrow)   arrow.style.transform   = _chartOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+        });
         return;
       }
       const btn = e.target.closest('button');
@@ -294,7 +244,7 @@ const BotSignalsPanel = (() => {
 
   function _renderSync() {
     // Tum hedef container'lari topla
-    const _allContainers = [
+    _allContainers = [
       document.getElementById('dp-signals-tab'),
       ..._extraContainers
     ].filter(Boolean);
@@ -303,7 +253,11 @@ const BotSignalsPanel = (() => {
 
     // Clean up previous chart instance
     if (_chartInstance) {
-      _chartInstance.destroy();
+      if (Array.isArray(_chartInstance)) {
+        _chartInstance.forEach(c => c?.destroy());
+      } else {
+        _chartInstance.destroy();
+      }
       _chartInstance = null;
     }
 
@@ -580,14 +534,16 @@ const BotSignalsPanel = (() => {
     // Her hedef container'a ayni HTML'i yaz
     _allContainers.forEach(c => { c.innerHTML = html; });
 
-    // Chart sadece birinciye render edilir (ana panel)
-    const container = _allContainers[0];
+    // Önceki chart instance'larını temizleyip dizi olarak yeniden başlatalım
+    _chartInstance = [];
 
     // ── 7. Render Mini Chart ─────────────────────────
     if (hasChart) {
-      const canvas = container.querySelector('#bsp-mini-chart');
-      const ctx = canvas?.getContext('2d');
-      if (ctx) {
+      _allContainers.forEach((container) => {
+        const canvas = container.querySelector('#bsp-mini-chart');
+        const ctx = canvas?.getContext('2d');
+        if (!ctx) return;
+
         // Determine theme variables for chart
         const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-primary').trim() || '#2a2e39';
         const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#787b86';
@@ -603,14 +559,12 @@ const BotSignalsPanel = (() => {
             borderColor:          '#f0b90b',   // sarı — ana
             backgroundColor:      'transparent',
             borderWidth:          1.5,
-            pointBackgroundColor: mainSignals.map((s, i) => {
-              if (i === 0) return signalGreen;
-              return (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
-            }),
-            pointBorderColor: mainSignals.map((s, i) => {
-              if (i === 0) return signalGreen;
-              return (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
-            }),
+            pointBackgroundColor: mainSignals.map((s, i) =>
+              i === 0 ? signalGreen : (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointBorderColor: mainSignals.map((s, i) =>
+              i === 0 ? signalGreen : (mainSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
             pointStyle:  'triangle',
             pointRadius: 4,
             tension:     0.2,
@@ -629,14 +583,12 @@ const BotSignalsPanel = (() => {
             segment: {
               borderDash: () => [4, 3],        // Chart.js 3.x için fallback
             },
-            pointBackgroundColor: altSignals.map((s, i) => {
-              if (i === 0) return signalGreen;
-              return (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
-            }),
-            pointBorderColor: altSignals.map((s, i) => {
-              if (i === 0) return signalGreen;
-              return (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed;
-            }),
+            pointBackgroundColor: altSignals.map((s, i) =>
+              i === 0 ? signalGreen : (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
+            pointBorderColor: altSignals.map((s, i) =>
+              i === 0 ? signalGreen : (altSignals[i-1].currentFR - s.currentFR) > 0 ? signalGreen : signalRed
+            ),
             pointStyle:  'circle',
             pointRadius: 3,
             tension:     0.2,
@@ -644,7 +596,7 @@ const BotSignalsPanel = (() => {
           });
         }
 
-        _chartInstance = new Chart(ctx, {
+        const instance = new Chart(ctx, {
           type: 'line',
           data: {
             datasets
@@ -705,7 +657,9 @@ const BotSignalsPanel = (() => {
             }
           }
         });
-      }
+
+        _chartInstance.push(instance);
+      });
     }
 
     // Auto-scroll logic based on _sortOrder
