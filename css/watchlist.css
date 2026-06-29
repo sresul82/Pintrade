@@ -803,6 +803,7 @@
   padding: 0;
 }
 #wl-list {
-  min-height: 426px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
