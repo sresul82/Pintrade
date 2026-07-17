@@ -841,6 +841,7 @@ const DetailPanel = (() => {
     // ── ScalpFR Signals Tab ───────────────────────────────────────────
     if (typeof BotSignalsPanel !== 'undefined') {
       BotSignalsPanel.init();
+      if (window.M1HammerScanner) M1HammerScanner.start();
     }
 
     // New signal arrived → re-render

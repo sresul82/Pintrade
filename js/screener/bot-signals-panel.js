@@ -188,6 +188,26 @@ const BotSignalsPanel = (() => {
           color: var(--text-active);
           border-color: var(--accent-blue, #3b82f6);
         }
+        .bsp-chip {
+          background: var(--bg-tertiary);
+          border: 0.5px solid var(--border-primary);
+          border-radius: 3px;
+          padding: 1px 5px;
+          font-size: 10px;
+          display: flex;
+          gap: 2px;
+          align-items: center;
+        }
+        .bsp-tf {
+          color: var(--text-secondary);
+          font-size: 9px;
+        }
+        .bsp-row-label {
+          font-size: 9px;
+          color: var(--text-secondary);
+          width: 28px;
+          flex-shrink: 0;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -240,6 +260,139 @@ const BotSignalsPanel = (() => {
   function render() {
     if (_renderTimer) clearTimeout(_renderTimer);
     _renderTimer = setTimeout(_renderSync, 50);
+  }
+
+  function _buildM1HammerHTML() {
+    const signals = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
+
+    if (!signals.length) {
+      return `<div class="bsp-empty">M1 Hammer sinyali bekleniyor...</div>`;
+    }
+
+    const filtered = _coinFilter === 'selected' && _selectedSymbol
+      ? signals.filter(s => s.symbol.replace(/USDT$/, '') === _selectedSymbol)
+      : signals;
+
+    if (!filtered.length) {
+      return `<div class="bsp-empty">Seçili coin için sinyal yok.</div>`;
+    }
+
+    const sorted = [...filtered].sort((a, b) =>
+      _sortOrder === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp
+    );
+
+    // Yıldız hesaplama: Boost value'ya göre
+    function getStars(boost) {
+      const b = Math.abs(boost || 0);
+      if (b >= 4) return '⭐⭐⭐';
+      if (b >= 2) return '⭐⭐';
+      if (b >= 1) return '⭐';
+      return '';
+    }
+
+    // RSI renk: <30 yeşil, >70 kırmızı
+    const rsiColor = v => v < 30 ? '#16a34a' : v > 70 ? '#dc2626' : 'var(--text-primary)';
+    // SRSI renk: <20 yeşil, >80 kırmızı
+    const srsiColor = v => v < 20 ? '#16a34a' : v > 80 ? '#dc2626' : 'var(--text-primary)';
+
+    // WT chip: sadece cross olan timeframe gösterilir
+    // bull: -53/-60 arası → yeşil, -60 altı → yeşil + 🟢
+    // bear: +53/+60 arası → kırmızı, +60 üstü → kırmızı + 🔴
+    // -53/+53 arası → nötr (beyaz)
+    // cross yoksa (null) → chip hiç render edilmez
+    function wtChip(tf, val, dir) {
+      if (val == null) return '';
+      let color = 'var(--text-primary)';
+      let dot = '';
+      if (dir === 'bull') {
+        if (val <= -53) {
+          color = '#16a34a';
+          if (val < -60) dot = '🟢';
+        }
+      } else if (dir === 'bear') {
+        if (val >= 53) {
+          color = '#dc2626';
+          if (val > 60) dot = '🔴';
+        }
+      }
+      return `<div class="bsp-chip"><span class="bsp-tf">${tf}</span><span style="color:${color};font-weight:500;">${val}${dot}</span></div>`;
+    }
+
+    let html = `<div id="bsp-signals-list" style="overflow-y:auto; flex:1; padding:6px 8px; display:flex; flex-direction:column; gap:6px;">`;
+
+    sorted.forEach(sig => {
+      const wtBull = sig.wtDirection === 'bull';
+      const borderColor = wtBull ? '#16a34a' : '#dc2626';
+
+      const priceColor = sig.currentPrice > sig.prevPrice ? '#16a34a'
+                       : sig.currentPrice < sig.prevPrice ? '#dc2626'
+                       : 'var(--text-primary)';
+
+      const frVal = sig.fr != null ? Number(sig.fr).toFixed(4) + '%' : '—';
+      const frColor = Math.abs(sig.fr || 0) > 0.1 ? '#f59e0b' : 'var(--text-primary)';
+      const frWarn = Math.abs(sig.fr || 0) > 0.1 ? ' ⚠' : '';
+
+      const stars = getStars(sig.boostValue);
+
+      // WT chip'lerini oluştur — sadece cross olan timeframe'ler
+      const wtChips = [
+        wtChip('5m',  sig.wt5m,  sig.wtDirection),
+        wtChip('15m', sig.wt15m, sig.wtDirection),
+        wtChip('1h',  sig.wt1h,  sig.wtDirection),
+        wtChip('4h',  sig.wt4h,  sig.wtDirection),
+        wtChip('1D',  sig.wt1d,  sig.wtDirection),
+      ].filter(Boolean).join('');
+
+      // 1D RSI uyarısı
+      const dailyWarn = (sig.rsi1d != null && (sig.rsi1d < 30 || sig.rsi1d > 70))
+        ? `<div style="margin-top:6px; padding:3px 6px; background:rgba(245,158,11,0.1); border:0.5px solid rgba(245,158,11,0.3); border-radius:4px; font-size:9px; color:#f59e0b;">
+             ⚠ 1D RSI ${sig.rsi1d < 30 ? 'oversold' : 'overbought'} bölgesinde (${sig.rsi1d})
+           </div>`
+        : '';
+
+      html += `
+        <div style="background:var(--bg-secondary); border:0.5px solid var(--border-primary); border-radius:8px; padding:8px 10px; border-left:3px solid ${borderColor};">
+          
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span class="bsp-ticker-link" data-symbol="${sig.symbol.replace(/USDT$/, '')}"
+              style="font-weight:500; font-size:13px; color:var(--text-primary); cursor:pointer; text-decoration:underline; text-underline-offset:2px; text-decoration-color:rgba(255,255,255,0.25);">
+              #${sig.symbol} ${stars}
+            </span>
+            <span style="font-size:12px; font-weight:500; color:${sig.boostValue >= 0 ? '#16a34a' : '#dc2626'};">
+              ${sig.boostValue >= 0 ? '+' : ''}${Number(sig.boostValue).toFixed(2)}%
+            </span>
+          </div>
+
+          <div style="display:flex; gap:10px; font-size:10px; margin-bottom:6px;">
+            <span style="color:var(--text-secondary);">Current:<span style="color:${priceColor}; font-weight:500; margin-left:3px;">${sig.currentPrice}</span></span>
+            <span style="color:var(--text-secondary);">Prev:<span style="color:var(--text-primary); font-weight:500; margin-left:3px;">${sig.prevPrice}</span></span>
+            <span style="color:var(--text-secondary);">FR:<span style="color:${frColor}; font-weight:500; margin-left:3px;">${frVal}${frWarn}</span></span>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span class="bsp-row-label">RSI</span>
+              <div class="bsp-chip"><span class="bsp-tf">5m</span><span style="color:${rsiColor(sig.rsi5m)};font-weight:500;">${sig.rsi5m ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">15m</span><span style="color:${rsiColor(sig.rsi15m)};font-weight:500;">${sig.rsi15m ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">1h</span><span style="color:${rsiColor(sig.rsi1h)};font-weight:500;">${sig.rsi1h ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">4h</span><span style="color:${rsiColor(sig.rsi4h)};font-weight:500;">${sig.rsi4h ?? '—'}</span></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span class="bsp-row-label">SRSI</span>
+              <div class="bsp-chip"><span class="bsp-tf">5m</span><span style="color:${srsiColor(sig.srsi5m)};font-weight:500;">${sig.srsi5m ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">15m</span><span style="color:${srsiColor(sig.srsi15m)};font-weight:500;">${sig.srsi15m ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">1h</span><span style="color:${srsiColor(sig.srsi1h)};font-weight:500;">${sig.srsi1h ?? '—'}</span></div>
+              <div class="bsp-chip"><span class="bsp-tf">4h</span><span style="color:${srsiColor(sig.srsi4h)};font-weight:500;">${sig.srsi4h ?? '—'}</span></div>
+            </div>
+            ${wtChips ? `<div style="display:flex; align-items:center; gap:4px;"><span class="bsp-row-label">WT</span>${wtChips}</div>` : ''}
+          </div>
+
+          ${dailyWarn}
+        </div>`;
+    });
+
+    html += `</div>`;
+    return html;
   }
 
   function _renderSync() {
@@ -309,6 +462,13 @@ const BotSignalsPanel = (() => {
 
 
     // ── 3. Content Area ──────────────────────────────
+    if (_activeBot === 'm1hammer') {
+      html += _buildM1HammerHTML();
+      html += `</div>`;
+      _allContainers.forEach(c => { c.innerHTML = html; });
+      return;
+    }
+
     if (_activeBot !== 'fr') {
       html += `<div class="bsp-empty">Bu bot tipi henüz aktif değil.</div>`;
       html += `</div>`;
