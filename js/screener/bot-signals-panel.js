@@ -14,6 +14,7 @@ const BotSignalsPanel = (() => {
   let _chartHourOffset = 0;       // 0 = now, -1 = 1 hour ago
   let _extraContainers = [];      // Floating panel gibi ek render hedefleri
   let _allContainers = [];        // Tüm render hedef container'ları
+  let _exchangeFilter = 'bn';     // 'bn' | 'bb' — FR dışı botlar için
 
   const BOT_TABS = [
     { id: 'fr',        label: 'FR' },
@@ -252,7 +253,8 @@ const BotSignalsPanel = (() => {
       if (btn.classList.contains('bsp-tab-btn'))        { _activeBot    = btn.dataset.bot;    render(); }
       else if (btn.classList.contains('bsp-filter-btn-time')) { _activeFilter = btn.dataset.filter; render(); }
       else if (btn.classList.contains('bsp-filter-btn-coin')) { _coinFilter   = btn.dataset.filter; render(); }
-      else if (btn.classList.contains('bsp-sort-btn'))  { _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc'; render(); }
+      else if (btn.classList.contains('bsp-sort-btn'))      { _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc'; render(); }
+      else if (btn.classList.contains('bsp-exchange-btn'))  { _exchangeFilter = btn.dataset.exchange; render(); }
     });
   }
 
@@ -263,7 +265,8 @@ const BotSignalsPanel = (() => {
   }
 
   function _buildM1HammerHTML() {
-    const signals = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
+    const allSignals = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
+    const signals = allSignals.filter(s => s.exchange === _exchangeFilter);
 
     if (!signals.length) {
       return `<div class="bsp-empty">M1 Hammer sinyali bekleniyor...</div>`;
@@ -302,19 +305,14 @@ const BotSignalsPanel = (() => {
     // cross yoksa (null) → chip hiç render edilmez
     function wtChip(tf, val, dir) {
       if (val == null) return '';
-      let color = 'var(--text-primary)';
+      // Eşik dışı (nötr bölge) ise chip hiç render edilmez
+      const inBullZone = dir === 'bull' && val <= -53;
+      const inBearZone = dir === 'bear' && val >= 53;
+      if (!inBullZone && !inBearZone) return '';
+      let color = inBullZone ? '#16a34a' : '#dc2626';
       let dot = '';
-      if (dir === 'bull') {
-        if (val <= -53) {
-          color = '#16a34a';
-          if (val < -60) dot = '🟢';
-        }
-      } else if (dir === 'bear') {
-        if (val >= 53) {
-          color = '#dc2626';
-          if (val > 60) dot = '🔴';
-        }
-      }
+      if (inBullZone && val < -60) dot = '🟢';
+      if (inBearZone && val > 60) dot = '🔴';
       return `<div class="bsp-chip"><span class="bsp-tf">${tf}</span><span style="color:${color};font-weight:500;">${val}${dot}</span></div>`;
     }
 
@@ -445,6 +443,16 @@ const BotSignalsPanel = (() => {
     const sortArrow = _sortOrder === 'desc' ? '↑' : '↓';
     const sortTitle = _sortOrder === 'desc' ? 'Yeni sinyaller yukarıda' : 'Yeni sinyaller aşağıda';
     html += `<button class="bsp-sort-btn" title="${sortTitle}">${sortArrow}</button>`;
+
+    // BN/BB Exchange Filter — sadece FR dışı botlarda göster
+    if (_activeBot !== 'fr') {
+      html += `<div style="display:flex; gap:3px; margin-left:4px;">`;
+      [{ id: 'bn', label: 'BN' }, { id: 'bb', label: 'BB' }].forEach(ex => {
+        const activeClass = _exchangeFilter === ex.id ? 'active' : '';
+        html += `<button class="bsp-stacked-btn bsp-exchange-btn ${activeClass}" data-exchange="${ex.id}">${ex.label}</button>`;
+      });
+      html += `</div>`;
+    }
 
     // Stacked Coin Filters
     html += `<div class="bsp-stacked-filters">`;

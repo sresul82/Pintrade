@@ -183,6 +183,7 @@ const M1HammerScanner = (() => {
 
     return {
       symbol,
+      exchange: 'bn',
       boostValue,
       currentPrice,
       prevPrice,
