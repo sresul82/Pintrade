@@ -247,6 +247,45 @@ const DetailPanel = (() => {
   let _currentExchange = 'binance';
   let _pollCount = 0; // Her 10sn artir, RSI kadansini kontrol etmek icin
 
+  // ── L/S kartı — LSDataStore üzerinden (kendi fetch'ini atmaz) ─────
+  // Sadece Binance için (LSDataStore şu an tek borsayı destekliyor, bkz.
+  // js/data/ls-data-store.js). Bybit L/S hâlâ kendi doğrudan fetch'ini
+  // kullanıyor (ayrı görev, faz 2).
+  let _lsSub = null; // { symbol, callback } — sembol değişince eski abonelik bırakılır
+
+  function _applyLsMetrics(metrics) {
+    const lsRatio = metrics?.global?.ratio;
+    if (lsRatio == null || !isFinite(lsRatio)) return;
+    const lsPct = (lsRatio / (1 + lsRatio)) * 100;
+    const lsBuyEl  = document.getElementById('dp-ls-buy');
+    const lsSellEl = document.getElementById('dp-ls-sell');
+    if (lsBuyEl && lsSellEl) {
+      lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
+      lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
+      document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
+      document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
+    }
+    const lsRatioEl = document.getElementById('dp-ls-ratio');
+    if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
+    const lsDomEl = document.getElementById('dp-ls-dom');
+    if (lsDomEl) lsDomEl.textContent = lsPct > 50 ? 'Uzun hakimiyeti' : 'Kısa hakimiyeti';
+  }
+
+  function _lsUnsubscribe() {
+    if (_lsSub && typeof LSDataStore !== 'undefined') {
+      LSDataStore.unsubscribe(_lsSub.symbol, _lsSub.callback);
+    }
+    _lsSub = null;
+  }
+
+  function _lsSubscribe(pairSym) {
+    _lsUnsubscribe();
+    if (typeof LSDataStore === 'undefined') return;
+    const callback = (metrics) => _applyLsMetrics(metrics);
+    _lsSub = { symbol: pairSym, callback };
+    LSDataStore.subscribe(pairSym, callback);
+  }
+
   // ── loadSymbol çakışma koruması ───────────────────────────────────
   // loadSymbol() birbirinden bağımsız 3 yerden tetikleniyor: init(),
   // 'funding:loaded' ve 'symbol:change' event'leri. Fonksiyon async
@@ -726,23 +765,9 @@ const DetailPanel = (() => {
           }
         }
 
-        // ─ Long/Short Ratio — WebSocket yok, REST zorunlu ─
-        const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
-        if (lsResp.ok) {
-          const arr = await lsResp.json();
-          const lsRatio = parseFloat(arr[0]?.longShortRatio || 1);
-          const lsPct = (lsRatio / (1 + lsRatio)) * 100;
-          const lsBuyEl  = document.getElementById('dp-ls-buy');
-          const lsSellEl = document.getElementById('dp-ls-sell');
-          if (lsBuyEl && lsSellEl) {
-            lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
-            lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
-            document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
-            document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
-          }
-          const lsRatioEl = document.getElementById('dp-ls-ratio');
-          if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
-        }
+        // L/S artık burada ayrıca çekilmiyor — loadSymbol() içinde kurulan
+        // LSDataStore aboneliği (_lsSubscribe) kendi 30sn döngüsüyle
+        // _applyLsMetrics'i tetikleyip DOM'u zaten canlı tutuyor.
       }
     } catch (e) {
       console.warn('[DetailPanel] Poll error:', e);
@@ -808,6 +833,11 @@ const DetailPanel = (() => {
       let rsiData = {};
 
       if (exchange === 'bybit') {
+        // LSDataStore şu an sadece Binance'i destekliyor — Bybit'e geçerken
+        // eski (Binance) aboneliği bırak, Bybit tarafı kendi doğrudan
+        // fetch'ini kullanmaya devam eder (faz 2'de LSDataStore'a taşınacak).
+        _lsUnsubscribe();
+
         // ── Ticker (fiyat, chg, vol, funding) ──
         try {
           const tk = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${pairSym}`);
@@ -960,9 +990,13 @@ const DetailPanel = (() => {
           tfs.forEach((tf, i) => rsiData[tf] = results[i]);
         } catch {}
 
+        // L/S — LSDataStore'dan (kendi fetch'ini atmaz, BotEngine kuyruğu üzerinden
+        // gider). Önbellekte varsa anında kullan, yoksa subscribe kendi backfill'ini
+        // tetikleyip _applyLsMetrics üzerinden DOM'u ayrıca güncelleyecek.
         try {
-          const lsResp = await fetch(`${AppConfig.API.binance.restFutures}/futures/data/globalLongShortAccountRatio?symbol=${pairSym}&period=5m&limit=1`);
-          if (lsResp.ok) { const arr = await lsResp.json(); lsRatio = parseFloat(arr[0]?.longShortRatio || 1); }
+          const cached = typeof LSDataStore !== 'undefined' ? LSDataStore.get(pairSym) : null;
+          if (cached?.global?.ratio != null) lsRatio = cached.global.ratio;
+          _lsSubscribe(pairSym);
         } catch {}
       }
 

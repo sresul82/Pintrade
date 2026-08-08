@@ -52,7 +52,9 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 
 ---
 
-## [ ] Görev 2 — L/S verisini görsel arayüze bağlama
+## [x] Görev 2 — L/S verisini görsel arayüze bağlama
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev2-ls-detail-panel-entegrasyonu.md`
 
 **Kapsam:** Coin Detail panelindeki mevcut L/S kartını, artık gerçek veri sağlayan `/api/history/ls/:exchange/:symbol` endpoint'inden (ve/veya canlı `LSDataStore.subscribe()`'dan) besle. **Sadece görüntüleme** — yeni hesaplama/mantık ekleme, mevcut kartın tasarımını/yerleşimini değiştirme.
 
@@ -66,7 +68,7 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 - Panel kapatılıp açıldığında (veya sembol değiştiğinde) `LSDataStore.subscribe`/`unsubscribe` doğru tetikleniyor mu (bellek sızıntısı / birikmiş abonelik yok)?
 - Konsol hatası yok mu?
 
-**Rapor:** `2026-XX-XX-ls-detail-panel-entegrasyonu.md`
+**Rapor:** `2026-08-08-gorev2-ls-detail-panel-entegrasyonu.md`
 
 ---
 
