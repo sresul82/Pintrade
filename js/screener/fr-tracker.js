@@ -261,7 +261,7 @@ class ScalpFRMonitor {
             const backendUrl = (
               window.AppConfig?.SYNC_API?.replace('/api/sync', '') ||
               window.AppConfig?.API?.binance?.restFutures?.replace('/api/binance/futures', '') ||
-              'https://pintrade.onrender.com'
+              'https://pintrade-uwg9.onrender.com'
             );
             const url = `${backendUrl}/api/signals/fr?exchange=${this.exchange}&hours=${hours}&limit=500`;
             const res  = await fetch(url);
@@ -457,7 +457,7 @@ class ScalpFRMonitor {
         const backendUrl = (
           window.AppConfig?.SYNC_API?.replace('/api/sync', '') ||
           window.AppConfig?.API?.binance?.restFutures?.replace('/api/binance/futures', '') ||
-          'https://pintrade.onrender.com'
+          'https://pintrade-uwg9.onrender.com'
         );
         fetch(`${backendUrl}/api/signals/fr`, {
             method:  'POST',

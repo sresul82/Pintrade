@@ -614,7 +614,7 @@ class DataFeedManager {
       } else {
         const interval = BINANCE_TF[tf];
         const proxyBase = window.AppConfig?.API?.binance?.restFutures
-          || 'https://pintrade.onrender.com/api/binance/futures';
+          || 'https://pintrade-uwg9.onrender.com/api/binance/futures';
         const url = `${proxyBase}/fapi/v1/klines` +
           `?symbol=${symbol}&interval=${interval}&limit=${Math.min(gapBars, 200)}` +
           `&startTime=${lastTime}`;

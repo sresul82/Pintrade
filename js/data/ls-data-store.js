@@ -91,7 +91,7 @@ const LSDataStore = (() => {
   function _restBase(exchange) {
     if (exchange === 'binance') {
       return AppConfig?.API?.binance?.restFutures
-        || 'https://pintrade.onrender.com/api/binance/futures';
+        || 'https://pintrade-uwg9.onrender.com/api/binance/futures';
     }
     if (exchange === 'bybit') {
       return AppConfig?.API?.bybit?.rest || 'https://api.bybit.com';

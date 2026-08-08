@@ -102,7 +102,9 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 
 ---
 
-## [ ] Görev 4 — fr-tracker.js'in yanlış backend'e gitmesi (bug, düşük öncelik ama gerçek)
+## [x] Görev 4 — fr-tracker.js'in yanlış backend'e gitmesi (bug, düşük öncelik ama gerçek)
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev4-fr-tracker-backend-duzeltmesi.md`
 
 **Sebep:** `fr-tracker.js`'in bazı istekleri `AppConfig.BACKEND_URL` yerine doğrudan eski/hardcoded `pintrade.onrender.com` adresine gidiyor, bu da CORS hatasına yol açıyor. Backend adresi `pintrade-uwg9`'a güncellendiği için (bkz. `js/core/app-config.js`, 2026-08-08 düzeltmesi) bu URL'in de tamamen `AppConfig.BACKEND_URL`'e (veya `AppConfig.API.binance.restFutures`'e, bağlama göre) bağlanması gerekiyor.
 
@@ -117,7 +119,7 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 - CORS hatası konsolda görünmüyor mu?
 - FR tracker normal çalışıyor mu (sinyaller, geçmiş)?
 
-**Rapor:** `2026-XX-XX-fr-tracker-backend-duzeltmesi.md`
+**Rapor:** `2026-08-08-gorev4-fr-tracker-backend-duzeltmesi.md`
 
 ---
 

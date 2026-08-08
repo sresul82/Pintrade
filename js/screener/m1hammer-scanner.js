@@ -151,7 +151,7 @@ const M1HammerScanner = (() => {
   // (server.js CORS proxy'si — doğrudan fapi.binance.com'a gitmiyoruz).
   async function fetchKlines(symbol, interval, limit) {
     const base = (typeof AppConfig !== 'undefined' && AppConfig?.API?.binance?.restFutures)
-      || 'https://fapi.binance.com/api/binance/futures';
+      || 'https://pintrade-uwg9.onrender.com/api/binance/futures';
     const url = `${base}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}&_t=${Date.now()}`;
     const res = await fetch(url);
     if (res.status === 429 || res.status === 418) {

@@ -166,7 +166,7 @@ const MarketDataStore = (() => {
     if (symbols.length === 0) return;
 
     const base = AppConfig?.API?.binance?.restFutures
-      || 'https://pintrade.onrender.com/api/binance/futures';
+      || 'https://pintrade-uwg9.onrender.com/api/binance/futures';
 
     const BATCH = 5;
     for (let i = 0; i < symbols.length; i += BATCH) {
