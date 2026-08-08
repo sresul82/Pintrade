@@ -4,3 +4,4 @@ node_modules/
 out.txt
 tmp/
 graphify-out/
+.claude/scheduled_tasks.lock

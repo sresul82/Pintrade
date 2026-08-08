@@ -391,6 +391,66 @@ const ScreenerCore = (() => {
     _computeTopGainers(arr);
     _filtered = arr;
     _renderList();
+    _renderTicker(arr);
+  }
+
+  /* ── Grafik altı kayan bant (ticker/marquee) — Görev 8 ────────────
+     Watchlist filtresine EK olarak (kullanıcı isteği, 2026-08-08):
+     seçili kategorinin coinlerini sağdan sola sürekli kayan bir şerit
+     olarak da gösterir. _previewFilter === 'none' iken tamamen gizli. */
+  function _renderTicker(arr) {
+    const wrap  = document.getElementById('cbb-ticker');
+    const track = document.getElementById('cbb-ticker-track');
+    const spacer = document.getElementById('cbb-spacer');
+    if (!wrap || !track) return;
+
+    if (_previewFilter === 'none') {
+      wrap.classList.remove('active');
+      if (spacer) spacer.style.display = '';
+      track.innerHTML = '';
+      return;
+    }
+
+    wrap.classList.add('active');
+    if (spacer) spacer.style.display = 'none';
+
+    if (arr.length === 0) {
+      track.style.animation = 'none';
+      track.innerHTML = `<span class="cbb-ticker-empty">${
+        _exchange !== 'binance' && _previewFilter !== 'gainers'
+          ? 'Not available for Bybit yet'
+          : 'No coins right now'
+      }</span>`;
+      return;
+    }
+
+    // Banda en fazla TICKER_MAX öğe basılır — hepsi (bazen 100+) basılırsa
+    // tur süresi dakikalarca sürüp bant pratikte akmaz gibi görünür. arr
+    // zaten kategoriye göre anlamlı sırada (gainers: en yükselenden).
+    const TICKER_MAX = 30;
+    const list = arr.slice(0, TICKER_MAX);
+
+    const itemHtml = list.map(d => {
+      const pctCls = _pctCls(d.pct);
+      let badge = '';
+      if (_previewFilter === 'delistings') {
+        badge = '<span class="cbb-ti-badge" style="background:rgba(249,115,22,0.15);color:#f97316;">DELIST</span>';
+      } else if (_previewFilter === 'new') {
+        badge = '<span class="cbb-ti-badge" style="background:rgba(34,197,94,0.15);color:#22c55e;">NEW</span>';
+      }
+      return `<span class="cbb-ticker-item"><span class="cbb-ti-sym">${d.sym}USDT</span>${badge}<span class="cbb-ti-pct ${pctCls}">${_fmtPct(d.pct)}</span></span>`;
+    }).join('');
+
+    // İçerik iki kez tekrarlanır — translateX(-50%) döngüsü dikişsiz olsun diye.
+    track.innerHTML = itemHtml + itemHtml;
+    // Hız, öğe sayısıyla orantılı (kabaca sabit piksel/sn hızı hedefler) —
+    // TICKER_MAX ile sınırlı olduğu için artık çok uzun sürmüyor.
+    const duration = Math.max(12, list.length * 1.2);
+    track.style.animation = 'none';
+    // Reflow'u zorla — animasyonu 'none'dan tekrar başlatmak için (aksi halde
+    // aynı süreyle tekrar oynatma bazı tarayıcılarda no-op kalabilir).
+    void track.offsetWidth;
+    track.style.animation = `cbb-marquee ${duration}s linear infinite`;
   }
 
   // OI çek

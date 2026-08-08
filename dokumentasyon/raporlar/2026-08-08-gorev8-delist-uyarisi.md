@@ -2,6 +2,34 @@
 
 **Tarih:** 2026-08-08
 
+## Ek (kullanıcı isteğiyle, aynı gün): kayan bant (ticker/marquee)
+
+İlk teslimde grafik altı bant dropdown'ı sadece Watchlist listesini
+filtreliyordu. Kullanıcı ekran görüntüsüyle asıl beklediğinin **o bandın
+kendisinde sağdan sola sürekli kayan bir coin şeridi** olduğunu belirtti —
+Watchlist filtresine EK olarak istendi, onun yerine değil.
+
+Eklenenler:
+- `index.html` — `.cbb-spacer`'ın yanına `#cbb-ticker`/`#cbb-ticker-track`,
+  CSS `@keyframes cbb-marquee` (`translateX(0)→translateX(-50%)`, içerik
+  iki kez tekrarlanarak dikişsiz döngü).
+- `js/screener/screener-core.js` — `_renderTicker(arr)`, `_applyFilterSort()`
+  sonunda çağrılıyor. `_previewFilter==='none'` iken tamamen gizli (spacer
+  geri gelir). En fazla **30 öğe** basılır (`TICKER_MAX`) — ilk denemede
+  tüm listeyi (182 gainer) basınca tur süresi 455 saniyeye çıkıp bant
+  pratikte donmuş gibi görünüyordu, test sırasında bulunup düzeltildi;
+  süre artık öğe sayısıyla orantılı ama makul bir çarpanla (`1.2s/öğe`,
+  min 12s).
+
+**Doğrulama:** Ekran görüntüsü ile görsel olarak doğrulandı — bant gerçek
+coinleri doğru renklerle gösteriyor, birkaç saniye arayla alınan iki
+ekran görüntüsünde içerik gerçekten kaymış (yeni coin sağdan girmiş,
+eskiler sola kaymış). `getComputedStyle().transform` ile otomasyon
+üzerinden ölçüm hareketi yakalayamadı (muhtemelen headless ortamın CSS
+animasyon render zamanlamasıyla ilgili, gerçek tarayıcıda sorun değil) —
+ekran görüntüsü kanıtı yeterli görüldü. "None"a dönünce bant tamamen
+gizleniyor, spacer geri geliyor, konsol hatasız.
+
 ## Çakışma kontrolü (görev talimatı gereği)
 
 Görev talimatı, grafik altı banttaki boş "No Preview ▾" liste yer

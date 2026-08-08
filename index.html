@@ -161,6 +161,44 @@
     .cbb-list-item:hover { background: var(--bg-hover); color: var(--text-primary); }
     .cbb-list-item.active { color: var(--accent-blue); }
     .cbb-spacer { flex: 1; }
+    /* ── Kayan coin bandı (ticker/marquee) — Görev 8, 2026-08-08 ──
+       Top Gainers/Delistings/New Listings seçildiğinde .cbb-spacer'ın
+       yerini alır (flex:1), sağdan sola sürekli kayan bir şerit gösterir.
+       İçerik JS tarafında iki kez tekrarlanır (screener-core.js
+       _renderTicker) — translateX(-50%) ile dikişsiz bir döngü sağlar. */
+    .cbb-ticker {
+      flex: 1;
+      overflow: hidden;
+      height: 100%;
+      display: none;
+      align-items: center;
+      min-width: 0;
+    }
+    .cbb-ticker.active { display: flex; }
+    .cbb-ticker-track {
+      display: inline-flex;
+      white-space: nowrap;
+      animation: cbb-marquee linear infinite;
+    }
+    .cbb-ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-right: 22px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .cbb-ticker-item .cbb-ti-sym { color: var(--text-primary); font-weight: 600; }
+    .cbb-ticker-item .cbb-ti-pct.pos { color: var(--accent-green, #26a69a); }
+    .cbb-ticker-item .cbb-ti-pct.neg { color: var(--accent-red, #ef5350); }
+    .cbb-ticker-item .cbb-ti-badge {
+      font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 6px;
+    }
+    .cbb-ticker-empty { font-size: 11px; color: var(--text-muted); }
+    @keyframes cbb-marquee {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
     /* .rsb-clock-btn'in dikey (ikon rafı) diziliminin aksine burada tek satır yatay.
        DİKKAT: css/chart.css'teki eski .rsb-clock-btn kuralı writing-mode:vertical-rl
        + rotate(180deg) uyguluyor (sağ sidebar'daki eski dikey konum içindi) — burada
@@ -565,7 +603,10 @@
               <div class="cbb-list-item" data-preview="new">New Listings</div>
             </div>
           </div>
-          <div class="cbb-spacer"></div>
+          <div class="cbb-spacer" id="cbb-spacer"></div>
+          <div class="cbb-ticker" id="cbb-ticker">
+            <div class="cbb-ticker-track" id="cbb-ticker-track"></div>
+          </div>
           <button class="rsb-clock-btn cbb-clock" id="rsb-clock-btn" title="Timezone Settings">
             <span id="rsb-clock-time">00:00:00</span>
             <span id="rsb-clock-tz">UTC</span>
