@@ -144,6 +144,40 @@ lsMetricsSchema.index({ exchange: 1, symbol: 1, timestamp: -1 });
 lsMetricsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 60 });
 const LSMetrics = mongoose.model('LSMetrics', lsMetricsSchema);
 
+// ── Sembol Durumu (Görev 8, 2026-08-08) — delist/yeni-listelenme algılama ──
+// Binance'in exchangeInfo `status` alanı gerçek zamanlı bir sinyal
+// (doğrulandı: SETTLING=delisting sürüyor, PENDING_TRADING=yakında
+// listelenecek, spot'ta BREAK=işlem durmuş) ama sadece ANLIK durumu verir —
+// "ne zaman değişti" bilgisi yok. Bu yüzden her turda mevcut durumu
+// SymbolStatus'ta saklayıp önceki turla karşılaştırıyoruz; fark varsa
+// SymbolStatusEvent'e bir olay yazıyoruz. Resmi "delist-schedule"
+// endpoint'leri gerçek Binance API key gerektirdiği için (doğrulandı:
+// -2008 Invalid Api-Key ID) kullanılmadı — bu, dolaylı ama public bir yöntem.
+const symbolStatusSchema = new mongoose.Schema({
+  exchange: { type: String, required: true },   // şimdilik sadece 'binance'
+  market:   { type: String, required: true },   // 'spot' | 'futures'
+  symbol:   { type: String, required: true },
+  status:   { type: String, required: true },   // TRADING/SETTLING/PENDING_TRADING/BREAK/...
+  updatedAt:{ type: Date,   default: Date.now }
+});
+symbolStatusSchema.index({ exchange: 1, market: 1, symbol: 1 }, { unique: true });
+const SymbolStatus = mongoose.model('SymbolStatus', symbolStatusSchema);
+
+const symbolStatusEventSchema = new mongoose.Schema({
+  exchange:   { type: String, required: true },
+  market:     { type: String, required: true },   // 'spot' | 'futures'
+  symbol:     { type: String, required: true },
+  fromStatus: { type: String },                    // null = ilk kez görüldü
+  toStatus:   { type: String, required: true },
+  category:   { type: String, required: true },   // 'delist_warning' | 'new_listing'
+  timestamp:  { type: Date,   required: true },
+  createdAt:  { type: Date,   default: Date.now }
+});
+symbolStatusEventSchema.index({ exchange: 1, market: 1, timestamp: -1 });
+// TTL: 30 gün — delist/yeni-listelenme uyarıları bu kadar süre "aktif" sayılır
+symbolStatusEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+const SymbolStatusEvent = mongoose.model('SymbolStatusEvent', symbolStatusEventSchema);
+
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
 // ==========================================
@@ -462,6 +496,85 @@ async function collectBybitLSData() {
   }
 }
 
+// ── Sembol Durum Taraması (Görev 8) — delist/yeni-listelenme algılama ──
+// Sadece Binance (spot + futures) — Bybit için aynı public status mekanizması
+// araştırılmadı, faz 2 olarak bırakıldı (bkz. gorevler2.md Görev 8 notu).
+// Delisting duyuruları saatlerce/günlerce önceden gelir, bu yüzden 15dk'lık
+// bir tarama periyodu fazlasıyla yeterli — ağırlık bütçesine etkisi ihmal
+// edilebilir (2 exchangeInfo çağrısı, ~toplam 40 weight).
+async function _processSymbolStatusMarket(market, symbolObjs, statusOf, isRelevant, events, now) {
+  const relevant = symbolObjs.filter(isRelevant);
+  const existing = await SymbolStatus.find({ exchange: 'binance', market }).lean();
+  const prevMap = new Map(existing.map(d => [d.symbol, d.status]));
+  const isBootstrap = existing.length === 0; // ilk tur — geçmişi olmayan turda olay üretme
+
+  const bulkOps = [];
+  for (const s of relevant) {
+    const symbol = s.symbol;
+    const status = statusOf(s);
+    const prevStatus = prevMap.get(symbol);
+
+    if (!isBootstrap) {
+      if (prevStatus === undefined) {
+        events.push({ exchange: 'binance', market, symbol, fromStatus: null, toStatus: status, category: 'new_listing', timestamp: now, createdAt: now });
+      } else if (prevStatus !== status) {
+        let category = null;
+        if (market === 'futures') {
+          if (status === 'SETTLING') category = 'delist_warning';
+          else if (status === 'TRADING' && prevStatus === 'PENDING_TRADING') category = 'new_listing';
+        } else if (status === 'BREAK') {
+          category = 'delist_warning';
+        }
+        if (category) {
+          events.push({ exchange: 'binance', market, symbol, fromStatus: prevStatus, toStatus: status, category, timestamp: now, createdAt: now });
+        }
+      }
+    }
+
+    bulkOps.push({
+      updateOne: {
+        filter: { exchange: 'binance', market, symbol },
+        update: { $set: { status, updatedAt: now } },
+        upsert: true,
+      }
+    });
+  }
+  if (bulkOps.length > 0) await SymbolStatus.bulkWrite(bulkOps, { ordered: false });
+}
+
+async function collectSymbolStatusChanges() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    const [futuresInfo, spotInfo] = await Promise.all([
+      fetchJson('fapi.binance.com', '/fapi/v1/exchangeInfo'),
+      fetchJson('api.binance.com', '/api/v3/exchangeInfo'),
+    ]);
+
+    const now = new Date();
+    const events = [];
+
+    if (Array.isArray(futuresInfo?.symbols)) {
+      await _processSymbolStatusMarket('futures', futuresInfo.symbols,
+        s => s.status,
+        s => s.quoteAsset === 'USDT' && s.contractType === 'PERPETUAL',
+        events, now);
+    }
+    if (Array.isArray(spotInfo?.symbols)) {
+      await _processSymbolStatusMarket('spot', spotInfo.symbols,
+        s => s.status,
+        s => s.quoteAsset === 'USDT',
+        events, now);
+    }
+
+    if (events.length > 0) {
+      await SymbolStatusEvent.insertMany(events, { ordered: false }).catch(() => {});
+    }
+    console.log(`[Collector] Sembol durum taraması: ${events.length} yeni olay (futures ${futuresInfo?.symbols?.length || 0}, spot ${spotInfo?.symbols?.length || 0} sembol tarandı)`);
+  } catch (e) {
+    console.error('[Collector] Sembol durum tarama hatası:', e.message);
+  }
+}
+
 // ── Zamanlayıcılar ──────────────────────────────────────────────────
 // DB bağlandıktan sonra başlat
 // Tüm toplayıcılar açılışta aynı anda ateşlenirse (hepsi tek Binance IP'sinden
@@ -492,6 +605,7 @@ mongoose.connection.once('open', () => {
   _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // Binance L/S — sabit 8 coinlik liste
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
   _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
+  _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
 });
 
 // ==========================================
@@ -619,6 +733,26 @@ app.get('/api/history/ls/:exchange/:symbol', async (req, res) => {
         takerBuySellRatio: 1, takerBuyVol: 1, takerSellVol: 1,
       }
     ).sort({ timestamp: 1 }).lean();
+
+    res.json(records);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Sembol Durum Olayları (Görev 8 — delist/yeni-liste uyarısı) ───────
+// GET /api/symbol-status/events?hours=168&market=futures
+app.get('/api/symbol-status/events', async (req, res) => {
+  try {
+    const hours  = Math.min(parseInt(req.query.hours) || 168, 720); // varsayılan 7 gün, azami 30 gün
+    const since  = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const filter = { timestamp: { $gte: since } };
+    if (req.query.market === 'spot' || req.query.market === 'futures') filter.market = req.query.market;
+
+    const records = await SymbolStatusEvent.find(
+      filter,
+      { _id: 0, __v: 0 }
+    ).sort({ timestamp: -1 }).limit(500).lean();
 
     res.json(records);
   } catch (e) {

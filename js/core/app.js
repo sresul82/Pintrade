@@ -901,8 +901,9 @@ const App = {
   },
 
   // Grafik altı bandın sol tarafındaki önizleme modu seçici (No Preview/Top
-  // Gainers/Delistings/New Listings). Şimdilik gerçek bir filtre uygulamıyor —
-  // sadece seçileni etiket olarak gösteriyor (bkz. 2026-08-01 rapor).
+  // Gainers/Delistings/New Listings). Görev 8 (2026-08-08): artık Watchlist'i
+  // gerçekten filtreliyor — screener-core.js'e 'screener:previewFilter' event'i
+  // ile bildiriyor (data-preview değeri: none/gainers/delistings/new).
   _bindChartBottomBar() {
     const trigger = document.getElementById('cbb-list-trigger');
     const menu    = document.getElementById('cbb-list-menu');
@@ -920,6 +921,7 @@ const App = {
         if (label) label.textContent = item.textContent;
         menu.querySelectorAll('.cbb-list-item').forEach(i => i.classList.toggle('active', i === item));
         menu.classList.remove('open');
+        EventBus.emit('screener:previewFilter', { type: item.dataset.preview || 'none' });
       });
     });
   },

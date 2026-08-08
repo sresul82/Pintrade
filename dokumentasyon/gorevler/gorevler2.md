@@ -222,7 +222,10 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 8'e geç" demeli. Aksi hal
 
 ---
 
-## [ ] Görev 8 — Visivero'dan alınan delist/yeni liste/en yükselen uyarısı özelliği
+## [x] Görev 8 — Visivero'dan alınan delist/yeni liste/en yükselen uyarısı özelliği
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev8-delist-uyarisi.md`
+**Kapsam notu:** Sadece Binance (spot+futures) kapsandı, Bybit için aynı public status mekanizması araştırılmadı — faz 2. Turuncu→kırmızı gradyan yapılmadı (kesin kaldırılma tarihi verisi yok, kimlik doğrulama gerektiren resmi endpoint kullanılmadı) — tek, sabit turuncu rozet kullanıldı. Grafik altı banttaki mevcut "No Preview ▾" dropdown'ı (Top Gainers/Delistings/New Listings) gerçek filtreye bağlandı, ayrı bir UI kurulmadı.
 
 **Bağımlılık:** Görev 7 (SPOT verisi) tamamlanmadan bu görev başlayamaz.
 
@@ -255,7 +258,7 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 8'e geç" demeli. Aksi hal
 - Delist rozeti hem SPOT hem FUTURES'ta doğru görünüyor mu (ikisi ayrı ayrı olabildiği için)?
 - Yeni listelenen ve en yükselen kategorileri doğru veriyle çalışıyor mu?
 
-**Rapor:** `2026-XX-XX-delist-uyarisi.md`
+**Rapor:** `2026-08-08-gorev8-delist-uyarisi.md`
 
 ---
 

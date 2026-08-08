@@ -66,6 +66,8 @@ const ScreenerCore = (() => {
   let _sortDir  = 'asc';
   let _exchange  = 'binance'; // 'binance' | 'bybit' — tek kaynak: State.screenerExchange
   let _market    = 'futures'; // 'futures' | 'spot' — tek kaynak: WatchlistStore.getMarket()
+  let _previewFilter = 'none'; // 'none' | 'gainers' | 'delistings' | 'new' — grafik altı bant (Görev 8)
+  let _topGainers = new Set(); // her render'da yeniden hesaplanır — rozet için
   let _selected  = null;
   let _priceMap    = new Map();
   let _frTracker   = null;
@@ -175,6 +177,39 @@ const ScreenerCore = (() => {
     return `<span style="margin-left:4px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:${b.bg}; color:${b.color}; border:${b.dashed ? '1px dashed' : '1px solid'} ${b.border};">${b.label}</span>`;
   }
 
+  /* ── Delist / Yeni Liste / En Yükselen rozetleri (Görev 8) ─────────
+     Delist ve yeni-liste sadece Binance için veri kaynağı var
+     (SymbolAlertsStore, server.js'in sembol durum taramasından besleniyor).
+     En yükselen borsa fark etmeksizin, mevcut pct24h'ten client-side
+     hesaplanıyor (bkz. _computeTopGainers). Hem SPOT hem FUTURES'ta çalışır. */
+  function _alertBadgeHtml(sym) {
+    let html = '';
+    if (_exchange === 'binance' && typeof SymbolAlertsStore !== 'undefined') {
+      const alert = SymbolAlertsStore.getAlert(sym + 'USDT', _market);
+      if (alert === 'delist_warning') {
+        html += '<span title="Delisting sinyali algılandı (Binance durum değişimi)" style="margin-left:3px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:rgba(249,115,22,0.15); color:#f97316; border:1px solid #f97316;">DELIST</span>';
+      } else if (alert === 'new_listing') {
+        html += '<span title="Yakın zamanda listelendi" style="margin-left:3px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:rgba(34,197,94,0.15); color:#22c55e; border:1px solid #22c55e;">NEW</span>';
+      }
+    }
+    if (_topGainers.has(sym)) {
+      html += '<span title="Günün en yükselenlerinden" style="margin-left:3px; flex-shrink:0; font-size:10px;">🔥</span>';
+    }
+    return html;
+  }
+
+  /** _filtered üzerinden top-N pozitif kazananı hesaplar (rozet için). */
+  function _computeTopGainers(arr) {
+    const TOP_N = 3;
+    const gainers = arr
+      .filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0)
+      .slice() // arr zaten sıralı olabilir, kopyala
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, TOP_N)
+      .map(d => d.sym);
+    _topGainers = new Set(gainers);
+  }
+
   /* ── Row render ───────────────────────────────────── */
   function _buildRow(d) {
     const row = document.createElement('div');
@@ -205,7 +240,7 @@ const ScreenerCore = (() => {
 
     // Sütun hücreleri — sadece görünür olanlar basılır (⋮ menüsü)
     const CELL = {
-      sym:   () => `<span class="wl-sym">${d.sym}USDT${signalBadge}${_market === 'futures' ? _komBadgeHtml(d.sym) : ''}</span>`,
+      sym:   () => `<span class="wl-sym">${d.sym}USDT${signalBadge}${_market === 'futures' ? _komBadgeHtml(d.sym) : ''}${_alertBadgeHtml(d.sym)}</span>`,
       price: () => `<span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>`,
       pct:   () => `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>`,
       fr:    () => `<span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>`,
@@ -239,7 +274,15 @@ const ScreenerCore = (() => {
       const store = window.WatchlistStore;
       const id = store?.getActiveId();
       let msg = 'No matching coins';
-      if (id === store?.SIGNALS_ID) {
+      if (_previewFilter === 'delistings' || _previewFilter === 'new') {
+        msg = _exchange !== 'binance'
+          ? 'Not available for Bybit yet.<br><span style="opacity:.7">Delisting/new-listing detection currently only covers Binance.</span>'
+          : (_previewFilter === 'delistings'
+              ? 'No delisting warnings right now.'
+              : 'No recent new listings.');
+      } else if (_previewFilter === 'gainers') {
+        msg = 'No coins are up right now.';
+      } else if (id === store?.SIGNALS_ID) {
         msg = 'No active signals right now.<br><span style="opacity:.7">Combo 1 / Combo 2 / Combo 3 will appear here once a live signal fires.</span>';
       } else if (id && id !== store?.ALL_ID) {
         msg = 'This list is empty.<br><span style="opacity:.7">Right-click a coin in the list to add it.</span>';
@@ -303,27 +346,49 @@ const ScreenerCore = (() => {
     return arr.filter(d => syms.has(d.sym + 'USDT'));
   }
 
+  /** Grafik altı bandın önizleme filtresi (Görev 8) — normal sıralamanın
+   *  üzerine biner. 'delistings'/'new' Binance dışı borsalarda veri
+   *  olmadığı için boş sonuç döner (yanlış/eksik veri göstermek yerine). */
+  function _applyPreviewFilter(arr) {
+    if (_previewFilter === 'delistings' || _previewFilter === 'new') {
+      const category = _previewFilter === 'delistings' ? 'delist_warning' : 'new_listing';
+      if (_exchange !== 'binance' || typeof SymbolAlertsStore === 'undefined') return [];
+      return arr.filter(d => SymbolAlertsStore.getAlert(d.sym + 'USDT', _market) === category);
+    }
+    if (_previewFilter === 'gainers') {
+      return arr.filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0);
+    }
+    return arr;
+  }
+
   function _applyFilterSort() {
     const q = (_searchEl?.value || '').trim().toUpperCase();
     let arr = q ? _rows.filter(d => d.sym.includes(q)) : [..._rows];
     arr = _applyListFilter(arr);
+    arr = _applyPreviewFilter(arr);
 
-    arr.sort((a, b) => {
-      let av = a[_sortKey], bv = b[_sortKey];
-      if (av === null || av === undefined) av = _sortDir === 'asc' ? Infinity : -Infinity;
-      if (bv === null || bv === undefined) bv = _sortDir === 'asc' ? Infinity : -Infinity;
-      if (typeof av === 'string') return _sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-      return _sortDir === 'asc' ? av - bv : bv - av;
-    });
+    if (_previewFilter === 'gainers') {
+      arr.sort((a, b) => b.pct - a.pct); // en yükselen üstte, sabit sıralama
+    } else {
+      arr.sort((a, b) => {
+        let av = a[_sortKey], bv = b[_sortKey];
+        if (av === null || av === undefined) av = _sortDir === 'asc' ? Infinity : -Infinity;
+        if (bv === null || bv === undefined) bv = _sortDir === 'asc' ? Infinity : -Infinity;
+        if (typeof av === 'string') return _sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+        return _sortDir === 'asc' ? av - bv : bv - av;
+      });
+    }
 
-    // 1h interval coinleri üste taşı (sadece FUTURES — SPOT'ta funding yok)
-    if (_market === 'futures' && window.fundingIntervalManager) {
+    // 1h interval coinleri üste taşı (sadece FUTURES, önizleme filtresi
+    // yokken — kullanıcı bilinçli bir önizleme seçtiyse sıralamasını korusun)
+    if (_previewFilter === 'none' && _market === 'futures' && window.fundingIntervalManager) {
       const exc = _exchange;
       const coins1h = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) === '1h');
       const coinsOther = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) !== '1h');
       arr = [...coins1h, ...coinsOther];
     }
 
+    _computeTopGainers(arr);
     _filtered = arr;
     _renderList();
   }
@@ -840,6 +905,13 @@ const ScreenerCore = (() => {
     EventBus.on('watchlist:volumeTypeChanged',() => { _renderHeader(); _renderList(); });
     // Pazar filtresi (FUTURES/SPOT) — Görev 7
     EventBus.on('watchlist:marketChanged', ({ type }) => _setMarket(type));
+    // Grafik altı bant önizleme filtresi (No Preview/Top Gainers/Delistings/New Listings) — Görev 8
+    EventBus.on('screener:previewFilter', ({ type }) => {
+      _previewFilter = type || 'none';
+      _applyFilterSort();
+    });
+    // Delist/yeni-liste verisi periyodik yenilendiğinde rozetleri tazele
+    EventBus.on('symbolAlerts:updated', () => _renderList());
 
     // Aktif fiyat güncellemeleri (aktif coin strip'ten)
     EventBus.on('chart:price:update', ({ symbol, price }) => {
@@ -859,6 +931,8 @@ const ScreenerCore = (() => {
       MarketDataStore.start();
       _startMDSListeners();
     }
+    // Delist/yeni-liste uyarı verisi (Görev 8) — kendi backend'imiz, 5dk'da bir
+    if (typeof SymbolAlertsStore !== 'undefined') SymbolAlertsStore.start();
     // Bybit: ban riski düşük, REST poll devam ediyor
     _startBybitPolling();
     _startBybitSpotPolling(); // kendi içinde _market/_exchange kontrolü yapar, no-op kalır
