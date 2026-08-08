@@ -133,6 +133,8 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 5'e geç" demeli. Aksi hal
 
 ## [ ] Görev 5 — Alarm kartına tıklayınca chart'ın sinyalin tarihine gitmesi ("zaman yolculuğu")
 
+**Ertelendi (2026-08-08):** Kullanıcı "zor iş olabilir, şimdilik atlayalım" dedi — iptal değil, ertelendi. Sırada beklemeye devam ediyor, ne zaman istenirse ele alınır.
+
 **Bağlam:** Alarm demo kartları çalışırken bilinçli olarak ertelenmişti (o zamanki not: "kolaydan başlayalım, sonra bu eklenir" — bkz. `dokumentasyon/raporlar/2026-08-07-alarm-sekmesi-sinyal-gecmisi-kartlari-demo.md`). Şimdi sırası.
 
 ### Yapılacak
@@ -189,7 +191,10 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 7'ye geç" demeli. Aksi ha
 
 ---
 
-## [ ] Görev 7 — Watchlist SPOT placeholder'ının gerçek işlevi
+## [x] Görev 7 — Watchlist SPOT placeholder'ının gerçek işlevi
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev7-watchlist-spot-gercek-islev.md`
+**Kapsam notu:** Kullanıcı onayıyla sadece liste (symbol/fiyat/değişim/hacim, canlı) yapıldı — tam grafik desteği (chart-data.js'e market boyutu eklemek) kasıtlı olarak dışarıda bırakıldı, ayrı bir iş olarak istenirse ele alınabilir. `dayOpen` sütunu da bu turda doldurulmadı (SPOT rolling 24h kullanıyor, futures ile aynı), izleme listesinde kalmaya devam ediyor.
 
 **Bağlam:** SPOT şu an menüde var ama tıklanınca "yakında" mesajı veriyor (bkz. `siradaki-gorevler.md` Görev 1.2). Gerçek işlevi: **sadece** USDT çiftli coin listesi + grafik/fiyat/değişim gösterme — **sinyal katılmayacak**.
 
@@ -205,7 +210,7 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 7'ye geç" demeli. Aksi ha
 - FUTURES'a dönüldüğünde eski davranış korunuyor mu?
 - Sinyal/bot sütunları SPOT'ta gizli mi?
 
-**Rapor:** `2026-XX-XX-watchlist-spot-gercek-islev.md`
+**Rapor:** `2026-08-08-gorev7-watchlist-spot-gercek-islev.md`
 
 ---
 
@@ -217,22 +222,38 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 8'e geç" demeli. Aksi hal
 
 ---
 
-## [ ] Görev 8 — Visivero'dan alınan delist/yeni liste uyarısı özelliği
+## [ ] Görev 8 — Visivero'dan alınan delist/yeni liste/en yükselen uyarısı özelliği
 
 **Bağımlılık:** Görev 7 (SPOT verisi) tamamlanmadan bu görev başlayamaz.
 
-Spot borsada delist olacak coinler için renkli (turuncu→kırmızı) uyarı sistemi.
+**Araştırma (2026-08-08, tamamlandı — kullanıcı isteğiyle):**
 
-### Yapılacak
+**Delist SADECE spot'ta olmuyor, hem spot'ta hem futures'ta ayrı ayrı (bazen aynı anda, bazen farklı tarihlerde) oluyor.** Gerçek örnekler bulundu: bazı coinler sadece futures'tan (`"Delistings impact only futures trading without affecting spot markets"`), bazıları sadece spot'tan, bazıları ikisinden birlikte ama farklı tarihlerde kaldırılıyor (örn. futures pozisyonları önce kapatılıyor, spot işlem birkaç gün/hafta sonra duruyor). Bu yüzden Görev 7'nin SPOT verisine bağımlı olması **yeterli değil** — FUTURES tarafında da ayrıca izlenmesi gerekiyor (zaten screener FUTURES verisini çekiyor, ek bir kaynak gerekmiyor).
 
-- Binance/Bybit'in delist duyurularını nereden çekeceğini araştır (resmi bir REST endpoint var mı, yoksa duyuru sayfası scrape mi gerekiyor — API varsa onu kullan, yoksa kullanıcıya danış).
-- Watchlist'te (SPOT modunda) etkilenen coin satırında renkli bir uyarı rozeti göster (turuncu = yaklaşan, kırmızı = yakın/kesin).
+**Kullanılabilir, PUBLIC (kimlik doğrulama GEREKMEYEN) sinyaller bulundu — resmi "delist-schedule" endpoint'leri (`/sapi/v1/spot/delist-schedule`, `/sapi/v1/margin/delist-schedule`) gerçek bir Binance API key/imza gerektiriyor (test edildi: `-2008 Invalid Api-Key ID`) — kullanıcının kendi Binance hesabına bağlanmak anlamına gelir, bu ayrı bir onay gerektirir, şimdilik ÖNERİLMİYOR.** Bunun yerine, zaten çektiğimiz `exchangeInfo` endpoint'lerinin (ekstra istek gerekmez, mevcut `screener-core.js`/`server.js` akışının parçası) `status` alanı gerçek zamanlı sinyal olarak doğrulandı:
+
+| Kaynak | Alan | Anlamı | Doğrulandı mı |
+|---|---|---|---|
+| `fapi.binance.com/fapi/v1/exchangeInfo` (futures, public) | `status: "SETTLING"` | Perpetual sözleşme kapatılma sürecinde — **delisting sinyali** | ✅ canlı örnekler bulundu (OMGUSDT, WAVESUSDT, MKRUSDT, DEFIUSDT, ...) |
+| aynı | `status: "PENDING_TRADING"` | Yakında listelenecek — **yeni liste sinyali** | ✅ canlı örnek (GAIBUSDT) |
+| aynı | `onboardDate` | Sembolün ilk listelenme tarihi | ✅ en yeni 8 sembol doğru sıralandı (en yenisi GRVTUSDT, 2026-07-31) |
+| `api.binance.com/api/v3/exchangeInfo` (spot, public) | `status: "BREAK"` | Spot işlem durdurulmuş — delisting/askıya alma | ✅ WAVESUSDT hem futures'ta SETTLING hem spot'ta BREAK (tutarlı) |
+
+**Kısıt:** `exchangeInfo` sadece ANLIK durumu verir, "ne zaman TRADING'den SETTLING'e geçti" bilgisini vermez — "yeni duyuruldu" ile "aylardır SETTLING" ayrımı için **periyodik polling ile durum geçişini biz kendimiz tespit etmemiz** gerekiyor (zaten periyodik çekilen exchangeInfo'yu önceki turla karşılaştırıp `TRADING→SETTLING/BREAK`, `PENDING_TRADING→TRADING` gibi geçişleri MongoDB'ye kaydetmek yeterli — yeni bir dış kaynağa gerek yok).
+
+**"Günün en yükseleni" için ek kaynağa gerek yok** — `pct24h` zaten `MarketDataStore`/screener üzerinden akıyor, sadece sıralama/filtreleme UI'da.
+
+### Yapılacak (araştırma sonrası güncellendi)
+
+- Watchlist'te hem SPOT hem FUTURES modunda, etkilenen coin satırında kategoriye göre rozet göster: **delist** (turuncu→kırmızı, SETTLING/BREAK durum geçişinden), **yeni listelenen** (yeşil/mavi, PENDING_TRADING→TRADING geçişi veya `onboardDate` yakınlığından), **günün en yükseleni** (mevcut `pct24h`'ten, yeni veri kaynağı gerekmez).
+- Durum geçişlerini tespit edip saklamak için küçük bir sunucu-taraflı iz (örn. yeni bir Mongo koleksiyonu veya mevcut bir koleksiyona alan ekleme) gerekebilir — tasarım kararı, uygulamaya geçmeden önce netleştirilmeli.
 - Grafik altı banttaki mevcut boş "No Preview ▾" liste yer tutucusuyla (bkz. `2026-08-01-bant-duzeltmeleri-liste-ikonu.md` — "Sıradaki adım") bu işin çakışıp çakışmadığını kontrol et; aynı UI alanı paylaşılıyor olabilir, tekrar iş yapmamak için önce oraya bak.
 
 ### Doğrulama
 
 - Uyarı gerçek/güncel verilerle mi çalışıyor, yoksa statik bir liste mi (statikse açıkça belirt)?
-- SPOT dışı (FUTURES) listede bu uyarı görünmüyor mu?
+- Delist rozeti hem SPOT hem FUTURES'ta doğru görünüyor mu (ikisi ayrı ayrı olabildiği için)?
+- Yeni listelenen ve en yükselen kategorileri doğru veriyle çalışıyor mu?
 
 **Rapor:** `2026-XX-XX-delist-uyarisi.md`
 

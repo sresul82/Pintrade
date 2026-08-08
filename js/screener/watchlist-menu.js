@@ -107,11 +107,11 @@ const WatchlistMenu = (() => {
 
       <div class="wl-lm-sep-line"></div>
       <div class="wl-lm-market">
-        <div class="wl-lm-market-row disabled" data-act="spot" title="Spot support not yet added">
-          SPOT <span class="wl-lm-soon">soon</span>
-        </div>
-        <div class="wl-lm-market-row plain">
+        <div class="wl-lm-market-row${store.getMarket().type === 'futures' ? ' active' : ''}" data-act="futures">
           FUTURES
+        </div>
+        <div class="wl-lm-market-row${store.getMarket().type === 'spot' ? ' active' : ''}" data-act="spot">
+          SPOT
         </div>
       </div>`;
 
@@ -153,9 +153,13 @@ const WatchlistMenu = (() => {
     }
 
     // ── Pazar filtresi ──
-    const spot = e.target.closest('[data-act="spot"]');
-    if (spot) {
-      if (window.Toast) Toast.show('SPOT support coming soon', 'info');
+    const marketRow = e.target.closest('[data-act="spot"], [data-act="futures"]');
+    if (marketRow) {
+      const type = marketRow.dataset.act;
+      if (store.getMarket().type !== type) {
+        store.setMarketType(type);
+        _renderListMenu();
+      }
       return;
     }
 

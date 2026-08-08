@@ -306,12 +306,10 @@
 .wl-lm-market-row:hover { background: var(--bg-hover); }
 .wl-lm-market-row.disabled { color: var(--text-muted); cursor: not-allowed; }
 .wl-lm-market-row.disabled:hover { background: transparent; }
-/* FUTURES: tek aktif pazar, tıklanacak bir şey yok — düz beyaz etiket */
-.wl-lm-market-row.plain {
+/* Aktif pazar (FUTURES veya SPOT) — beyaz etiket, tıklanabilir kalır (diğerine geçmek için) */
+.wl-lm-market-row.active {
   color: var(--text-primary);
-  cursor: default;
 }
-.wl-lm-market-row.plain:hover { background: transparent; }
 .wl-lm-soon {
   font-size: 8px;
   font-weight: 500;

@@ -230,11 +230,12 @@ const WatchlistStore = (() => {
   }
 
   /* ── Pazar filtresi ───────────────────────────────── */
-  // FUTURES çalışıyor. SPOT menüde görünür ama işlevsiz (veri katmanı yok).
+  // FUTURES ve SPOT ikisi de çalışıyor (Görev 7, 2026-08-08). SPOT'ta
+  // sinyal/FR/OI sütunları yok — sadece symbol/price/chg/vol (bkz. screener-core.js).
   function getMarket() { return { ..._market }; }
 
   function setMarketType(type) {
-    if (type !== 'futures') return false;  // spot henüz desteklenmiyor
+    if (type !== 'futures' && type !== 'spot') return false;
     if (_market.type === type) return true;
     _market = { ..._market, type };
     _save(LS_MARKET, _market);
