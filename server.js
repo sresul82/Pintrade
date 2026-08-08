@@ -416,20 +416,32 @@ async function collectLSData() {
 
 // ── Zamanlayıcılar ──────────────────────────────────────────────────
 // DB bağlandıktan sonra başlat
+// Tüm toplayıcılar açılışta aynı anda ateşlenirse (hepsi tek Binance IP'sinden
+// neredeyse aynı milisaniyede istek atınca) ani bir istek/bağlantı patlaması
+// oluşuyor — 2026-08-08'de bu yüzden production'da 11 saatlik bir Binance
+// hız-limit ban'ı (code:-1003) yaşandı. Çözüm: her toplayıcının hem ilk
+// çağrısını hem periyodik döngüsünü birkaç saniye arayla, art arda başlat.
+// setInterval'i de aynı gecikmeli setTimeout içinde kaydettiğimiz için bu
+// ofset sadece ilk turda değil, kalıcı olarak korunur — periyotlar bir daha
+// asla aynı ana denk gelmez (mevcut OI poller'ın, market-data-store.js,
+// kullandığı örüntüyle aynı fikir).
+function _staggeredStart(fn, delayMs, intervalMs) {
+  setTimeout(() => {
+    fn();
+    setInterval(fn, intervalMs);
+  }, delayMs);
+}
+
 mongoose.connection.once('open', () => {
-  console.log('[Collector] Arka plan toplayıcı başlatıldı!');
+  console.log('[Collector] Arka plan toplayıcı başlatıldı! (art arda, kademeli)');
 
-  // İlk veriyi hemen topla
-  collectBinanceData();
-  collectBybitData();
-  collectBinanceCandles();
-  collectLSData();
-
-  // Her 1, 5 veya 10 dakikada bir tekrarla
-  setInterval(collectBinanceData,   1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
-  setInterval(collectBybitData,     1 * 60 * 1000);  // 1 dakika
-  setInterval(collectBinanceCandles, 5 * 60 * 1000); // Mumlar 5dk yeterli
-  setInterval(collectLSData,        5 * 60 * 1000);  // L/S — sabit 8 coinlik liste, hafif bütçe
+  // Sıralama, en hafiften en ağıra: binanceData (~50 weight) → bybitData
+  // (ayrı borsa, Binance bütçesini etkilemez) → L/S (8 sembol × 4 endpoint,
+  // ~32 weight) → mumlar (526 sembol, ~530 weight — en ağır, en sona).
+  _staggeredStart(collectBinanceData,    0,      1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
+  _staggeredStart(collectBybitData,      5000,   1 * 60 * 1000);  // 1 dakika
+  _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // L/S — sabit 8 coinlik liste, hafif bütçe
+  _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
 });
 
 // ==========================================
