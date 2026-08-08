@@ -30,6 +30,27 @@ animasyon render zamanlamasıyla ilgili, gerçek tarayıcıda sorun değil) —
 ekran görüntüsü kanıtı yeterli görüldü. "None"a dönünce bant tamamen
 gizleniyor, spacer geri geliyor, konsol hatasız.
 
+## İkinci düzeltme (kullanıcı geri bildirimi, aynı gün)
+
+Kullanıcı üç şey belirtti:
+1. **Watchlist listesi kategori seçilince değişmemeli** — sadece kayan bant
+   göstersin. İlk implementasyonda `_applyFilterSort()` hem Watchlist'i hem
+   bandı aynı filtrelenmiş diziden besliyordu, bu yanlıştı. Düzeltildi:
+   Watchlist artık `_previewFilter`'dan tamamen bağımsız (`_applyListFilter`
+   + arama + sıralama, eskisi gibi); yeni `_tickerRows()` fonksiyonu SADECE
+   bant için ayrı bir küme hesaplıyor, `_rows`'un tamamından.
+2. **Top Gainers'ta ilk 5 coin ismi farklı renkte** — `.cbb-ti-top` (altın/amber
+   `#fbbf24`) eklendi, sadece `_previewFilter==='gainers'` iken ilk 5 öğeye
+   uygulanıyor.
+3. **Kayma çok hızlıydı** — `1.2s/öğe`den `3.2s/öğe`ye yavaşlatıldı (30 öğe
+   için tur süresi 36s → 96s).
+
+**Doğrulama:** SPOT'ta "Top Gainers" seçilince Watchlist'in ilk satırı
+(USDC) ve genel içeriği DEĞİŞMEDİ (satır sayısındaki artış canlı WS
+akışından, filtrelemeden değil); bant aktifleşti, ilk öğe (TUTUSDT,
++69.52%) altın renkli `.cbb-ti-top` sınıfıyla işaretlendi; animasyon süresi
+96s'ye çıktı. Konsol hatasız.
+
 ## Çakışma kontrolü (görev talimatı gereği)
 
 Görev talimatı, grafik altı banttaki boş "No Preview ▾" liste yer

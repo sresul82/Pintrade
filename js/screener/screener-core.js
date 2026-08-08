@@ -346,17 +346,20 @@ const ScreenerCore = (() => {
     return arr.filter(d => syms.has(d.sym + 'USDT'));
   }
 
-  /** Grafik altı bandın önizleme filtresi (Görev 8) — normal sıralamanın
-   *  üzerine biner. 'delistings'/'new' Binance dışı borsalarda veri
-   *  olmadığı için boş sonuç döner (yanlış/eksik veri göstermek yerine). */
-  function _applyPreviewFilter(arr) {
+  /** Grafik altı bandın kayan şeridi için ayrı bir küme — Watchlist'in
+   *  kendisini ETKİLEMEZ (kullanıcı geri bildirimi, 2026-08-08: "liste
+   *  değişmesin, sadece alt bantta gösterilsin"). 'delistings'/'new'
+   *  Binance dışı borsalarda veri olmadığı için boş döner. */
+  function _tickerRows() {
+    let arr = [..._rows];
     if (_previewFilter === 'delistings' || _previewFilter === 'new') {
       const category = _previewFilter === 'delistings' ? 'delist_warning' : 'new_listing';
       if (_exchange !== 'binance' || typeof SymbolAlertsStore === 'undefined') return [];
       return arr.filter(d => SymbolAlertsStore.getAlert(d.sym + 'USDT', _market) === category);
     }
     if (_previewFilter === 'gainers') {
-      return arr.filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0);
+      return arr.filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0)
+        .sort((a, b) => b.pct - a.pct);
     }
     return arr;
   }
@@ -365,23 +368,17 @@ const ScreenerCore = (() => {
     const q = (_searchEl?.value || '').trim().toUpperCase();
     let arr = q ? _rows.filter(d => d.sym.includes(q)) : [..._rows];
     arr = _applyListFilter(arr);
-    arr = _applyPreviewFilter(arr);
 
-    if (_previewFilter === 'gainers') {
-      arr.sort((a, b) => b.pct - a.pct); // en yükselen üstte, sabit sıralama
-    } else {
-      arr.sort((a, b) => {
-        let av = a[_sortKey], bv = b[_sortKey];
-        if (av === null || av === undefined) av = _sortDir === 'asc' ? Infinity : -Infinity;
-        if (bv === null || bv === undefined) bv = _sortDir === 'asc' ? Infinity : -Infinity;
-        if (typeof av === 'string') return _sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-        return _sortDir === 'asc' ? av - bv : bv - av;
-      });
-    }
+    arr.sort((a, b) => {
+      let av = a[_sortKey], bv = b[_sortKey];
+      if (av === null || av === undefined) av = _sortDir === 'asc' ? Infinity : -Infinity;
+      if (bv === null || bv === undefined) bv = _sortDir === 'asc' ? Infinity : -Infinity;
+      if (typeof av === 'string') return _sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return _sortDir === 'asc' ? av - bv : bv - av;
+    });
 
-    // 1h interval coinleri üste taşı (sadece FUTURES, önizleme filtresi
-    // yokken — kullanıcı bilinçli bir önizleme seçtiyse sıralamasını korusun)
-    if (_previewFilter === 'none' && _market === 'futures' && window.fundingIntervalManager) {
+    // 1h interval coinleri üste taşı (sadece FUTURES)
+    if (_market === 'futures' && window.fundingIntervalManager) {
       const exc = _exchange;
       const coins1h = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) === '1h');
       const coinsOther = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) !== '1h');
@@ -391,7 +388,7 @@ const ScreenerCore = (() => {
     _computeTopGainers(arr);
     _filtered = arr;
     _renderList();
-    _renderTicker(arr);
+    _renderTicker(_tickerRows());
   }
 
   /* ── Grafik altı kayan bant (ticker/marquee) — Görev 8 ────────────
@@ -430,7 +427,9 @@ const ScreenerCore = (() => {
     const TICKER_MAX = 30;
     const list = arr.slice(0, TICKER_MAX);
 
-    const itemHtml = list.map(d => {
+    const TOP_GAINER_HIGHLIGHT = 5; // gainers'ta ilk N coin ismi farklı renkte vurgulanır
+
+    const itemHtml = list.map((d, i) => {
       const pctCls = _pctCls(d.pct);
       let badge = '';
       if (_previewFilter === 'delistings') {
@@ -438,14 +437,16 @@ const ScreenerCore = (() => {
       } else if (_previewFilter === 'new') {
         badge = '<span class="cbb-ti-badge" style="background:rgba(34,197,94,0.15);color:#22c55e;">NEW</span>';
       }
-      return `<span class="cbb-ticker-item"><span class="cbb-ti-sym">${d.sym}USDT</span>${badge}<span class="cbb-ti-pct ${pctCls}">${_fmtPct(d.pct)}</span></span>`;
+      const symCls = (_previewFilter === 'gainers' && i < TOP_GAINER_HIGHLIGHT) ? 'cbb-ti-sym cbb-ti-top' : 'cbb-ti-sym';
+      return `<span class="cbb-ticker-item"><span class="${symCls}">${d.sym}USDT</span>${badge}<span class="cbb-ti-pct ${pctCls}">${_fmtPct(d.pct)}</span></span>`;
     }).join('');
 
     // İçerik iki kez tekrarlanır — translateX(-50%) döngüsü dikişsiz olsun diye.
     track.innerHTML = itemHtml + itemHtml;
     // Hız, öğe sayısıyla orantılı (kabaca sabit piksel/sn hızı hedefler) —
-    // TICKER_MAX ile sınırlı olduğu için artık çok uzun sürmüyor.
-    const duration = Math.max(12, list.length * 1.2);
+    // ilk denemede 1.2s/öğe çok hızlı bulundu (kullanıcı geri bildirimi),
+    // 3.2s/öğe'ye yavaşlatıldı.
+    const duration = Math.max(25, list.length * 3.2);
     track.style.animation = 'none';
     // Reflow'u zorla — animasyonu 'none'dan tekrar başlatmak için (aksi halde
     // aynı süreyle tekrar oynatma bazı tarayıcılarda no-op kalabilir).
