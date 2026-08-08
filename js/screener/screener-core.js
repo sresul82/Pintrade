@@ -198,9 +198,11 @@ const ScreenerCore = (() => {
     return html;
   }
 
-  /** _filtered üzerinden top-N pozitif kazananı hesaplar (rozet için). */
+  /** _filtered üzerinden top-N pozitif kazananı hesaplar — hem 🔥 rozeti
+   *  hem Chg% hücresinin yeşil gradient dolgusu (bkz. CELL.pct) bu setten
+   *  besleniyor. */
   function _computeTopGainers(arr) {
-    const TOP_N = 3;
+    const TOP_N = 5;
     const gainers = arr
       .filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0)
       .slice() // arr zaten sıralı olabilir, kopyala
@@ -242,7 +244,15 @@ const ScreenerCore = (() => {
     const CELL = {
       sym:   () => `<span class="wl-sym">${d.sym}USDT${signalBadge}${_market === 'futures' ? _komBadgeHtml(d.sym) : ''}${_alertBadgeHtml(d.sym)}</span>`,
       price: () => `<span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>`,
-      pct:   () => `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>`,
+      pct:   () => {
+        // En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers) —
+        // Chg% hücresi opak yeşil gradient ile doldurulur, metin okunabilirlik
+        // için beyaza döner (kullanıcı isteği, 2026-08-08).
+        const topStyle = _topGainers.has(d.sym)
+          ? ' style="background:linear-gradient(90deg,#15803d,#22c55e); color:#fff; border-radius:3px; padding:1px 5px;"'
+          : '';
+        return `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}"${topStyle}>${_fmtPct(d.pct)}</span>`;
+      },
       fr:    () => `<span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>`,
       frh:   () => `<span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>`,
       vol:   () => `<span class="wl-vol wl-col-right">${_fmtVol(d)}</span>`,

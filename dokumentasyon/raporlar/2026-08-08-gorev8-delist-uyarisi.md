@@ -51,6 +51,23 @@ akışından, filtrelemeden değil); bant aktifleşti, ilk öğe (TUTUSDT,
 +69.52%) altın renkli `.cbb-ti-top` sınıfıyla işaretlendi; animasyon süresi
 96s'ye çıktı. Konsol hatasız.
 
+## Üçüncü düzeltme/ek (kullanıcı geri bildirimi, aynı gün)
+
+1. **Doğrulama sorusu — banda borsa değişince yansıyor mu?** Evet, zaten
+   çalışıyordu — test edildi: SPOT + Binance'te bant `TUTUSDT +69.21%`
+   gösterirken, borsa Bybit'e çevrilince bant `MMTUSDT +36.35%`'e değişti
+   (farklı veri kümesi, doğru şekilde borsaya göre tazeleniyor).
+2. **Watchlist'te Chg% hücresi — en yüksek 5 coin için opak yeşil gradient:**
+   `_computeTopGainers`'ın `TOP_N`'i 3'ten 5'e çıkarıldı (hem 🔥 rozeti hem
+   yeni gradient aynı seti paylaşıyor). `CELL.pct` artık `_topGainers`
+   setindeki semboller için `linear-gradient(90deg,#15803d,#22c55e)`
+   arka plan + beyaz metin uyguluyor.
+
+**Doğrulama:** SPOT+Binance'te tam 5 satırın `wl-pct` hücresi gradient
+stiliyle işaretlendiği DOM üzerinden doğrulandı — gerçek en yüksek 5
+değişim (+70.67%, +35.89%, +34.06%, +22.63%, +20.42%) doğru satırlarda.
+Konsol hatasız.
+
 ## Çakışma kontrolü (görev talimatı gereği)
 
 Görev talimatı, grafik altı banttaki boş "No Preview ▾" liste yer
