@@ -82,7 +82,9 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 
 ---
 
-## [ ] Görev 3 — Bybit L/S (faz 2)
+## [x] Görev 3 — Bybit L/S (faz 2)
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev3-ls-bybit-faz2.md`
 
 `js/data/ls-data-store.js`'deki `exchange` parametresi zaten hazır iskelet (`'binance'` dışında bir değer verilirse şu an hata fırlatıyor). Bybit'in eşdeğer endpoint'lerini entegre et:
 
@@ -96,7 +98,7 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 - `LSDataStore.subscribe(symbol, cb, 'bybit')` gerçek veri döndürüyor mu?
 - Binance tarafında regresyon yok mu?
 
-**Rapor:** `2026-XX-XX-ls-bybit-faz2.md`
+**Rapor:** `2026-08-08-gorev3-ls-bybit-faz2.md`
 
 ---
 

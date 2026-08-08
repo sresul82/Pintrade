@@ -414,6 +414,54 @@ async function collectLSData() {
   }
 }
 
+// ── Bybit: L/S Metrikleri (her 5dk, aynı sabit coin listesi) ────────
+// Bybit'in public API'sinde Binance'in topPosition/topAccount/taker'ına
+// karşılık gelen bir endpoint YOK — sadece /v5/market/account-ratio var
+// (bkz. js/data/ls-data-store.js başlığındaki not). Bu yüzden Bybit
+// kayıtlarında sadece globalRatio/globalLongPct/globalShortPct dolu olur,
+// geri kalanı null kalır — bu eksik veri değil, gerçek bir kaynak kısıtı.
+async function collectBybitLSData() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    const symbols = LS_COLLECTOR_SYMBOLS;
+    const now = new Date();
+    const docs = [];
+
+    const BATCH = 5;
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      const batch = symbols.slice(i, i + BATCH);
+      await Promise.allSettled(batch.map(async (sym) => {
+        try {
+          const json = await fetchJsonUrl(`https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${sym}&period=5min&limit=1`);
+          if (json?.retCode !== 0) return;
+          const d = json.result?.list?.[0];
+          if (!d) return;
+
+          const buyRatio  = parseFloat(d.buyRatio);
+          const sellRatio = parseFloat(d.sellRatio);
+          docs.push({
+            exchange:  'bybit',
+            symbol:    sym,
+            timestamp: now,
+            globalRatio:    sellRatio > 0 ? buyRatio / sellRatio : null,
+            globalLongPct:  buyRatio,
+            globalShortPct: sellRatio,
+            createdAt: now
+          });
+        } catch { /* sessizce geç — tek sembol hatası turu durdurmasın */ }
+      }));
+      await sleep(250); // Rate limit koruması
+    }
+
+    if (docs.length > 0) {
+      await LSMetrics.insertMany(docs, { ordered: false }).catch(() => {});
+    }
+    console.log(`[Collector] Bybit L/S metrikleri: ${docs.length}/${symbols.length} sembol güncellendi`);
+  } catch (e) {
+    console.error('[Collector] Bybit L/S hatası:', e.message);
+  }
+}
+
 // ── Zamanlayıcılar ──────────────────────────────────────────────────
 // DB bağlandıktan sonra başlat
 // Tüm toplayıcılar açılışta aynı anda ateşlenirse (hepsi tek Binance IP'sinden
@@ -436,11 +484,13 @@ mongoose.connection.once('open', () => {
   console.log('[Collector] Arka plan toplayıcı başlatıldı! (art arda, kademeli)');
 
   // Sıralama, en hafiften en ağıra: binanceData (~50 weight) → bybitData
-  // (ayrı borsa, Binance bütçesini etkilemez) → L/S (8 sembol × 4 endpoint,
-  // ~32 weight) → mumlar (526 sembol, ~530 weight — en ağır, en sona).
+  // (ayrı borsa, Binance bütçesini etkilemez) → Binance L/S (8 sembol ×
+  // 4 endpoint, ~32 weight) → Bybit L/S (ayrı borsa, kendi bütçesi, 8
+  // sembol × 1 endpoint) → mumlar (526 sembol, ~530 weight — en ağır, en sona).
   _staggeredStart(collectBinanceData,    0,      1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
   _staggeredStart(collectBybitData,      5000,   1 * 60 * 1000);  // 1 dakika
-  _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // L/S — sabit 8 coinlik liste, hafif bütçe
+  _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // Binance L/S — sabit 8 coinlik liste
+  _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
   _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
 });
 

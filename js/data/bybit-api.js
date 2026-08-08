@@ -217,6 +217,120 @@ const BybitAPI = (() => {
     }
   }
 
+  /* ── WebSocket: Order Book (depth) ────────────────────
+     Bybit V5 orderbook stream'i snapshot + delta gönderir (Binance'in
+     partial depth'i gibi her seferinde tam top-N göndermez) — bu yüzden
+     yerel bir book state (Map<price,qty>) tutup delta'ları üzerine
+     uygulamak gerekiyor. "size":"0" olan seviye silinir.
+     subscribeKline ile aynı çoklu-abone örüntüsü: tek WS bağlantısı,
+     dinamik SUBSCRIBE/UNSUBSCRIBE, sembol başına Set<callback>. */
+  const DEPTH_LEVELS = 50;
+  const _depthSubs = new Map(); // "BTCUSDT" -> { ws, callbacks, book:{bids:Map,asks:Map}, reconnectMs, pingTimer, active }
+
+  function _depthTopic(symbol) {
+    return `orderbook.${DEPTH_LEVELS}.${symbol.toUpperCase()}`;
+  }
+
+  function _applyDepthLevels(map, levels) {
+    for (const [price, qty] of levels) {
+      const q = parseFloat(qty);
+      if (!q) map.delete(price); else map.set(price, q);
+    }
+  }
+
+  function _depthSnapshot(symbol, book) {
+    const toSorted = (map, desc) => [...map.entries()]
+      .map(([p, q]) => [parseFloat(p), q])
+      .sort((a, b) => desc ? b[0] - a[0] : a[0] - b[0]);
+    const bids = toSorted(book.bids, true);
+    const asks = toSorted(book.asks, false);
+    const bidVol = bids.reduce((s, [, q]) => s + q, 0);
+    const askVol = asks.reduce((s, [, q]) => s + q, 0);
+    const bidAskRatio = askVol > 0 ? bidVol / askVol : null;
+    return { symbol, bids: bids.slice(0, 20), asks: asks.slice(0, 20), bidVol, askVol, bidAskRatio, ts: Date.now() };
+  }
+
+  function _connectDepth(symbol, subKey) {
+    const sub = _depthSubs.get(subKey);
+    if (!sub) return;
+
+    const topic = _depthTopic(symbol);
+    const ws = new WebSocket(WS_BASE);
+    sub.ws = ws;
+    sub.reconnectMs = sub.reconnectMs || AppConfig.WS.reconnectBaseMs;
+
+    ws.onopen = () => {
+      console.log(`[BybitAPI] Depth WS bağlandı: ${topic} ✓`);
+      sub.reconnectMs = AppConfig.WS.reconnectBaseMs;
+      sub.book = { bids: new Map(), asks: new Map() }; // yeniden bağlanınca sıfırla, snapshot bekle
+      ws.send(JSON.stringify({ op: 'subscribe', args: [topic] }));
+      sub.pingTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' }));
+      }, AppConfig.WS.pingIntervalMs);
+    };
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.op === 'pong' || !msg.data || msg.topic !== topic) return;
+
+        if (msg.type === 'snapshot') {
+          sub.book = { bids: new Map(), asks: new Map() };
+        }
+        _applyDepthLevels(sub.book.bids, msg.data.b || []);
+        _applyDepthLevels(sub.book.asks, msg.data.a || []);
+
+        const snapshot = _depthSnapshot(symbol.toUpperCase(), sub.book);
+        sub.callbacks.forEach(cb => {
+          try { cb(snapshot); } catch (e) { console.warn('[BybitAPI] Depth callback hatası:', e.message); }
+        });
+      } catch { /* JSON parse hatası */ }
+    };
+
+    ws.onerror = (e) => console.warn(`[BybitAPI] Depth WS hata (${topic}):`, e);
+
+    ws.onclose = () => {
+      clearInterval(sub.pingTimer);
+      if (!sub.active) return;
+      console.warn(`[BybitAPI] Depth WS kapandı (${topic}), ${sub.reconnectMs}ms sonra yeniden bağlanılacak`);
+      setTimeout(() => { if (_depthSubs.has(subKey)) _connectDepth(symbol, subKey); }, sub.reconnectMs);
+      sub.reconnectMs = Math.min(sub.reconnectMs * AppConfig.WS.reconnectFactor, AppConfig.WS.reconnectMaxMs);
+    };
+  }
+
+  /** Bir sembolün order book'una abone ol. callback({symbol,bids,asks,bidVol,askVol,bidAskRatio,ts}) çağrılır. */
+  function subscribeDepth(symbol, callback) {
+    const key = symbol.toUpperCase();
+    if (!_depthSubs.has(key)) {
+      _depthSubs.set(key, {
+        ws: null, callbacks: new Set(), active: true,
+        reconnectMs: AppConfig.WS.reconnectBaseMs,
+        book: { bids: new Map(), asks: new Map() },
+      });
+      _connectDepth(symbol, key);
+    }
+    _depthSubs.get(key).callbacks.add(callback);
+  }
+
+  /** subscribeDepth'e verilen AYNI callback referansıyla abonelikten çık. */
+  function unsubscribeDepth(symbol, callback) {
+    const key = symbol.toUpperCase();
+    const sub = _depthSubs.get(key);
+    if (!sub) return;
+    sub.callbacks.delete(callback);
+    if (sub.callbacks.size === 0) {
+      sub.active = false;
+      clearInterval(sub.pingTimer);
+      if (sub.ws) {
+        if (sub.ws.readyState === WebSocket.OPEN) {
+          sub.ws.send(JSON.stringify({ op: 'unsubscribe', args: [_depthTopic(symbol)] }));
+        }
+        sub.ws.close();
+      }
+      _depthSubs.delete(key);
+    }
+  }
+
   console.log('[BybitAPI] Ready ✓');
 
   return {
@@ -225,6 +339,8 @@ const BybitAPI = (() => {
     fetchTicker,
     subscribeKline,
     unsubscribeKline,
+    subscribeDepth,
+    unsubscribeDepth,
     toApiTf,
   };
 })();
