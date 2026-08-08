@@ -20,7 +20,9 @@ Her rapor için standart format: değişen dosyalar listesi, ölçümler, doğru
 
 ---
 
-## [ ] Görev 1 — Toplayıcı açılış zamanlamasını yay (ACİL, onay gerekmez, hemen başla)
+## [x] Görev 1 — Toplayıcı açılış zamanlamasını yay (ACİL, onay gerekmez, hemen başla)
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev1-toplayici-zamanlama-tamamlanma.md`
 
 **Sebep (2026-08-08):** Sunucu her açıldığında `mongoose.connection.once('open', ...)` içindeki FR, Bybit, mum (526 sembol) ve şimdi L/S toplayıcılarının hepsi **aynı anda** ateşleniyor. Bu ani yük Binance'in geçici hız-limitine (`code:-1003 "Way too many requests"`) takılıp gerçek üretim ortamında (`pintrade-uwg9.onrender.com`) **11 saatlik IP ban**'a yol açtı. Bu, L/S toplayıcısından önce de var olan bir risk (mum toplayıcısı zaten 526 sembol tarıyordu), L/S eklenince ölçülür hâle geldi.
 
@@ -36,7 +38,7 @@ Her rapor için standart format: değişen dosyalar listesi, ölçümler, doğru
 - Mümkünse gerçek ortamda (Render) bir yeniden başlatma sonrası birkaç dakika `code:-1003` hatası görülmediğini doğrula (loglardan veya `/api/history/*` endpoint'lerinin veri üretmeye devam ettiğini kontrol ederek).
 - Mevcut FR/OI/mum/L/S toplayıcılarının işlevselliğinde regresyon olmadığını doğrula.
 
-**Rapor:** `2026-XX-XX-toplayici-zamanlama-tamamlanma.md`
+**Rapor:** `2026-08-08-gorev1-toplayici-zamanlama-tamamlanma.md`
 
 ---
 
