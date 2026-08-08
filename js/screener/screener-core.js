@@ -1,47 +1,57 @@
 /**
- * ScreenerCore — BN/BB Screener + BN All / BB All
- * 
- * Screener tabs : Symbol | Price | Chg% | FR% | FR(h) | Vol(USD) | OI
- *   → En negatif FR'li 20 coin listelenir
- * All tabs      : Symbol | Price | Chg% | Vol(USD)
- *   → Tüm coinler hacme göre sıralı
- * 
+ * ScreenerCore — Tek liste Screener (Binance / Bybit)
+ *
+ * Kolonlar: Symbol | Price | Chg% | FR% | FR(h) | Vol(USD) | OI
+ * Borsa seçimi wl-header'daki dropdown ile yapılır (State.screenerExchange).
+ * Liste artık tüm USDT perpetual coinleri gösterir (top-20 sınırı kaldırıldı),
+ * varsayılan sıralama en negatif FR üstte olacak şekildedir.
+ *
  * Günlük sembol listesi güncellenir, delist olan coinler çıkarılır.
  */
 const ScreenerCore = (() => {
 
-  /* ── Kolon tanımları ──────────────────────────────── */
-  const COLS_SCREENER = [
-    { key: 'sym',   label: 'Symbol',  cls: 'wl-col-sym',   sort: 'sym'   },
-    { key: 'price', label: 'Price',   cls: 'wl-col-right',  sort: 'price' },
-    { key: 'pct',   label: 'Chg%',   cls: 'wl-col-right',  sort: 'pct'   },
-    { key: 'fr',    label: 'FR%',     cls: 'wl-col-right',  sort: 'fr'    },
-    { key: 'frh',   label: 'FR(h)',   cls: 'wl-col-right',  sort: 'frh'   },
-    { key: 'vol',   label: 'Vol(USD)',cls: 'wl-col-right',  sort: 'vol'   },
-    { key: 'oi',    label: 'OI',      cls: 'wl-col-right',  sort: 'oi'    },
-  ];
+  /* ── Kolon tanımları ──────────────────────────────────
+     Hangi sütunun görüneceğini WatchlistStore belirler (kullanıcı ⋮
+     menüsünden açıp kapatır, seçim localStorage'da saklanır).
+     Buradaki tablo sadece etiket/hizalama/sıralama bilgisini tutar. */
+  const COL_META = {
+    sym:   { cls: 'wl-col-sym',   sort: 'sym'   },
+    price: { cls: 'wl-col-right', sort: 'price' },
+    pct:   { cls: 'wl-col-right', sort: 'pct'   },
+    fr:    { cls: 'wl-col-right', sort: 'fr'    },
+    frh:   { cls: 'wl-col-right', sort: 'frh'   },
+    vol:   { cls: 'wl-col-right', sort: 'vol'   },
+    oi:    { cls: 'wl-col-right', sort: 'oi'    },
+  };
 
-  const COLS_ALL = [
-    { key: 'sym',   label: 'Symbol',  cls: 'wl-col-sym',   sort: 'sym'   },
-    { key: 'price', label: 'Price',   cls: 'wl-col-right',  sort: 'price' },
-    { key: 'pct',   label: 'Chg%',   cls: 'wl-col-right',  sort: 'pct'   },
-    { key: 'fr',    label: 'FR%',     cls: 'wl-col-right',  sort: 'fr'    },
-    { key: 'frh',   label: 'FR(h)',   cls: 'wl-col-right',  sort: 'frh'   },
-    { key: 'vol',   label: 'Vol(USD)',cls: 'wl-col-right',  sort: 'vol'   },
-    { key: 'oi',    label: 'OI',      cls: 'wl-col-right',  sort: 'oi'    },
-  ];
+  /** Görünür sütunlar — store yoksa hepsini göster (geriye dönük güvenli). */
+  function _visibleCols() {
+    if (window.WatchlistStore) return WatchlistStore.getVisibleColumns();
+    return Object.keys(COL_META).map(k => ({ key: k, label: k, width: '70px' }));
+  }
+
+  /** Görünür sütunlara göre grid şablonunu satırlara ve başlığa uygula. */
+  function _applyGridTemplate() {
+    const tpl = window.WatchlistStore
+      ? WatchlistStore.getGridTemplate()
+      : 'minmax(80px, 1fr) 74px 62px 68px 48px 62px 56px';
+    if (_panel) _panel.style.setProperty('--wl-cols', tpl);
+  }
 
   /* ── State ────────────────────────────────────────── */
   let _list      = null;
   let _colHeader = null;
   let _searchEl  = null;
   let _panel     = null;   // #right-panel — mode attribute için
+  let _excPicker  = null;
+  let _excMenu    = null;
+  let _excLabel   = null;
 
   let _rows     = [];
   let _filtered = [];
   let _sortKey  = 'fr';
   let _sortDir  = 'asc';
-  let _activeTab = 'bn-screener';
+  let _exchange  = 'binance'; // 'binance' | 'bybit' — tek kaynak: State.screenerExchange
   let _selected  = null;
   let _priceMap    = new Map();
   let _frTracker   = null;
@@ -82,12 +92,19 @@ const ScreenerCore = (() => {
     return (parseFloat(v) * 100).toFixed(4) + '%';
   }
 
-  function _fmtVol(v) {
+  /** Watchlist Volume Type ayarına göre USD (quote) veya coin (base) hacmini formatlar.
+   *  d — satır objesi ({ vol, volBase, sym }); volBase yoksa (henüz WS'ten
+   *  gelmediyse) USD'ye düşer, "—" flaşına düşmemek için. */
+  function _fmtVol(d) {
+    const standard = window.WatchlistStore?.getVolumeType() === 'standard';
+    const v = standard && d.volBase != null ? d.volBase : d.vol;
     if (v === null || v === undefined) return '—';
-    if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-    if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-    if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-    return v.toFixed(0);
+    let out;
+    if (v >= 1e9) out = (v / 1e9).toFixed(2) + 'B';
+    else if (v >= 1e6) out = (v / 1e6).toFixed(2) + 'M';
+    else if (v >= 1e3) out = (v / 1e3).toFixed(1) + 'K';
+    else out = v.toFixed(0);
+    return (standard && d.volBase != null) ? `${out} ${d.sym}` : out;
   }
 
   function _fmtOI(v) {
@@ -105,20 +122,47 @@ const ScreenerCore = (() => {
   }
 
   /* ── Col header render ────────────────────────────── */
-  function _renderHeader(cols) {
+  function _renderHeader() {
     if (!_colHeader) return;
-    _colHeader.innerHTML = cols.map(c => `
-      <span class="${c.cls}" data-sort="${c.sort}">
-        ${c.label} <span class="wl-sort-arrow"></span>
-      </span>`).join('');
+    _applyGridTemplate();
+    const volStandard = window.WatchlistStore?.getVolumeType() === 'standard';
+    _colHeader.innerHTML = _visibleCols().map(c => {
+      const m = COL_META[c.key] || { cls: 'wl-col-right', sort: c.key };
+      const label = (c.key === 'vol' && volStandard) ? 'Vol (Coin)' : c.label;
+      return `
+      <span class="${m.cls}" data-sort="${m.sort}">
+        ${label} <span class="wl-sort-arrow"></span>
+      </span>`;
+    }).join('');
     _colHeader.querySelectorAll('[data-sort]').forEach(th => {
       th.addEventListener('click', () => _sort(th.dataset.sort));
     });
     _updateSortArrows();
   }
 
+  /* ── Signals listesi Combo rozeti ─────────────────────
+     Sadece aktif liste "Signals" iken gösterilir — hangi Combo
+     grubundan geldiğini watchlist-menu.js'teki gruplarla aynı renklerle işaretler. */
+  const KOM_BADGE_STYLE = {
+    1: { label: 'Combo 1', bg: 'rgba(59,130,246,0.15)',  color: '#3b82f6', border: '#3b82f6' },
+    2: { label: 'Combo 2', bg: 'rgba(249,115,22,0.15)',  color: '#f97316', border: '#f97316' },
+    3: { label: 'Combo 3', bg: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '#94a3b8', dashed: true },
+  };
+
+  function _komBadgeHtml(sym) {
+    const store = window.WatchlistStore;
+    if (!store || store.getActiveId() !== store.SIGNALS_ID) return '';
+    const full = sym + 'USDT';
+    const groups = store.getSignalGroups();
+    const idx = groups.findIndex(g => g.symbols.includes(full));
+    if (idx === -1) return '';
+    const b = KOM_BADGE_STYLE[idx + 1];
+    if (!b) return '';
+    return `<span style="margin-left:4px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:${b.bg}; color:${b.color}; border:${b.dashed ? '1px dashed' : '1px solid'} ${b.border};">${b.label}</span>`;
+  }
+
   /* ── Row render ───────────────────────────────────── */
-  function _buildRowScreener(d) {
+  function _buildRow(d) {
     const row = document.createElement('div');
     row.className = 'wl-row';
     row.dataset.sym = d.sym;
@@ -130,7 +174,7 @@ const ScreenerCore = (() => {
     // FR countdown warning: < 15 minutes remaining
     const secsLeft = d.nextFundingTime ? Math.max(0, (d.nextFundingTime - Date.now()) / 1000) : Infinity;
     const frhCls = secsLeft < 15 * 60 ? 'frh-ending' : '';
-    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
+    const exc = _exchange;
 
     // Sinyal kontrolü (ScalpFRMonitor)
     const monitor = window[`scalpFRMonitor_${exc}`] || window.scalpFRMonitor;
@@ -140,46 +184,23 @@ const ScreenerCore = (() => {
         // Sinyal son 30 dakika içinde geldiyse göster
         if (lastSig && (Date.now() - lastSig.timestamp) < 30 * 60 * 1000) {
             if (lastSig.severity === 'alarm') signalBadge = '<span title="Global Alarm" style="margin-left:2px; font-size:10px">🚨</span>';
-            else if (lastSig.severity === 'rapid') signalBadge = '<span title="Ani Yükseliş" style="margin-left:2px; font-size:10px">⚡</span>';
-            else signalBadge = '<span title="Hareketli" style="margin-left:2px; font-size:10px; color:var(--signal-color-green)">•</span>';
+            else if (lastSig.severity === 'rapid') signalBadge = '<span title="Rapid Rise" style="margin-left:2px; font-size:10px">⚡</span>';
+            else signalBadge = '<span title="Active" style="margin-left:2px; font-size:10px; color:var(--signal-color-green)">•</span>';
         }
     }
 
-    row.innerHTML = `
-      <span class="wl-sym">${d.sym}USDT${signalBadge}</span>
-      <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
-      <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
-      <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
-      <span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>
-      <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
-      <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
-    `;
-    const symSpan = row.querySelector('.wl-sym');
-    if (symSpan) {
-      symSpan.addEventListener('click', () => _selectRow(d.sym));
-    }
-    return row;
-  }
+    // Sütun hücreleri — sadece görünür olanlar basılır (⋮ menüsü)
+    const CELL = {
+      sym:   () => `<span class="wl-sym">${d.sym}USDT${signalBadge}${_komBadgeHtml(d.sym)}</span>`,
+      price: () => `<span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>`,
+      pct:   () => `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>`,
+      fr:    () => `<span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>`,
+      frh:   () => `<span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>`,
+      vol:   () => `<span class="wl-vol wl-col-right">${_fmtVol(d)}</span>`,
+      oi:    () => `<span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>`,
+    };
+    row.innerHTML = _visibleCols().map(c => (CELL[c.key] ? CELL[c.key]() : '')).join('');
 
-  function _buildRowAll(d) {
-    const row = document.createElement('div');
-    row.className = 'wl-row';
-    row.dataset.sym = d.sym;
-    if (d.sym === _selected) row.classList.add('selected');
-
-    const frCls = d.fr !== null ? (d.fr < 0 ? 'neg' : 'pos') : '';
-    const trendCls = _frTracker ? _frTracker.getFRTrendType(d.sym + 'USDT') : 'neutral';
-    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
-    
-    row.innerHTML = `
-      <span class="wl-sym">${d.sym}USDT</span>
-      <span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>
-      <span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>
-      <span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>
-      <span class="wl-frh wl-col-right">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>
-      <span class="wl-vol wl-col-right">${_fmtVol(d.vol)}</span>
-      <span class="wl-oi wl-col-right ${d.oiDir === 'up' ? 'pos' : d.oiDir === 'down' ? 'neg' : ''}">${_fmtOI(d.oi)}</span>
-    `;
     const symSpan = row.querySelector('.wl-sym');
     if (symSpan) {
       symSpan.addEventListener('click', () => _selectRow(d.sym));
@@ -191,22 +212,35 @@ const ScreenerCore = (() => {
     _selected = sym;
     _list.querySelectorAll('.wl-row').forEach(r =>
       r.classList.toggle('selected', r.dataset.sym === sym));
-    const exchange = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
     const fullSym = sym.endsWith('USDT') ? sym : sym + 'USDT';
-    State.setSymbol(fullSym, exchange);
+    State.setSymbol(fullSym, _exchange);
   }
 
   /* ── List render ──────────────────────────────────── */
   function _renderList() {
     if (!_list) return;
-    const isAll = _activeTab.endsWith('-all');
+
+    // Boş liste → ne yapılacağını anlatan mesaj (boş ekran bırakma)
+    if (_filtered.length === 0 && _rows.length > 0) {
+      const store = window.WatchlistStore;
+      const id = store?.getActiveId();
+      let msg = 'No matching coins';
+      if (id === store?.SIGNALS_ID) {
+        msg = 'No active signals right now.<br><span style="opacity:.7">Combo 1 / Combo 2 / Combo 3 will appear here once a live signal fires.</span>';
+      } else if (id && id !== store?.ALL_ID) {
+        msg = 'This list is empty.<br><span style="opacity:.7">Right-click a coin in the list to add it.</span>';
+      }
+      _list.innerHTML = `<div style="color:var(--text-secondary);font-size:11px;text-align:center;padding:24px;line-height:1.6">${msg}</div>`;
+      return;
+    }
+
     const frag = document.createDocumentFragment();
     let separatorAdded = false;
-    const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
+    const exc = _exchange;
 
     _filtered.forEach((d, i) => {
       const is1h = window.fundingIntervalManager?.get(d.sym + 'USDT', exc) === '1h';
-      if (!isAll && !separatorAdded && !is1h && i > 0) {
+      if (!separatorAdded && !is1h && i > 0) {
         const prev = _filtered[i - 1];
         if (window.fundingIntervalManager?.get(prev.sym + 'USDT', exc) === '1h') {
           const sep = document.createElement('div');
@@ -215,7 +249,7 @@ const ScreenerCore = (() => {
           separatorAdded = true;
         }
       }
-      frag.appendChild(isAll ? _buildRowAll(d) : _buildRowScreener(d));
+      frag.appendChild(_buildRow(d));
     });
 
     _list.innerHTML = '';
@@ -237,9 +271,28 @@ const ScreenerCore = (() => {
     if (el) el.classList.add(_sortDir);
   }  
 
+  /** Aktif watchlist'e göre satırları süz.
+   *  Tüm Coinler → hepsi.  Kullanıcı listesi → sadece o listedekiler.
+   *  Sinyaller    → Kom1/2/3 henüz boş (doldurma mantığı sonraki turda). */
+  function _applyListFilter(arr) {
+    const store = window.WatchlistStore;
+    if (!store) return arr;
+    const id = store.getActiveId();
+    if (id === store.ALL_ID) return arr;
+    if (id === store.SIGNALS_ID) {
+      const syms = new Set(store.getSignalGroups().flatMap(g => g.symbols));
+      return arr.filter(d => syms.has(d.sym + 'USDT'));
+    }
+    const list = store.getList(id);
+    if (!list) return arr;
+    const syms = new Set(list.symbols);
+    return arr.filter(d => syms.has(d.sym + 'USDT'));
+  }
+
   function _applyFilterSort() {
     const q = (_searchEl?.value || '').trim().toUpperCase();
     let arr = q ? _rows.filter(d => d.sym.includes(q)) : [..._rows];
+    arr = _applyListFilter(arr);
 
     arr.sort((a, b) => {
       let av = a[_sortKey], bv = b[_sortKey];
@@ -251,7 +304,7 @@ const ScreenerCore = (() => {
 
     // 1h interval coinleri üste taşı
     if (window.fundingIntervalManager) {
-      const exc = _activeTab.startsWith('bn') ? 'binance' : 'bybit';
+      const exc = _exchange;
       const coins1h = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) === '1h');
       const coinsOther = arr.filter(d => fundingIntervalManager.get(d.sym + 'USDT', exc) !== '1h');
       arr = [...coins1h, ...coinsOther];
@@ -273,8 +326,12 @@ const ScreenerCore = (() => {
     });
   }
 
-  /* ── Binance Screener (en negatif FR 20) ──────────── */
-  async function _loadBinanceScreener() {
+  /* ── Binance — tüm USDT perpetual listesi ─────────── */
+  // OI değerleri burada eagerly çekilmez: MarketDataStore zaten tüm market için
+  // her 60sn'de bir batch halinde OI çekip 'mds:oi' event'iyle yayınlıyor
+  // (bkz. market-data-store.js). _startMDSListeners() bu event'i dinleyip
+  // _rows üzerindeki ilgili satırı günceller.
+  async function _loadBinance() {
     _setLoading();
     try {
       // 1) Sembol listesini güncelle (günlük cache)
@@ -296,6 +353,9 @@ const ScreenerCore = (() => {
 
       // 4) Sadece cache'deki sembolleri filtrele → delist koruması
       const validSet = new Set(symbols);
+      // Önceki OI değerlerini koru (reload sonrası "—" flaşına düşmesin)
+      const prevRows = new Map(_rows.map(r => [r.sym, r]));
+
       const rows = frData
         .filter(f => f.symbol.endsWith('USDT') && validSet.has(f.symbol))
         .map(f => {
@@ -303,99 +363,49 @@ const ScreenerCore = (() => {
             FRDataBridge.feed('binance', f.symbol, parseFloat(f.lastFundingRate) * 100, Date.now());
           }
           const tk = tkMap[f.symbol] || {};
+          const sym = f.symbol.replace(/USDT$/, '');
+          const prev = prevRows.get(sym);
           return {
-            sym:   f.symbol.replace(/USDT$/, ''),
+            sym,
             price: parseFloat(f.markPrice) || null,
             pct:   tk.priceChangePercent ? parseFloat(tk.priceChangePercent) : null,
             fr:    parseFloat(f.lastFundingRate) || null,
             frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || f.nextFundingTime),
             nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || parseInt(f.nextFundingTime) || 0,
-            vol:   tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
-            oi:    null,  // OI ayrı endpoint — ileride eklenecek
+            vol:     tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
+            volBase: tk.volume ? parseFloat(tk.volume) : null,
+            oi:    prev?.oi ?? null,
+            oiDir: prev?.oiDir ?? null,
           };
         });
 
-      // En negatif FR 20 coin
+      // Varsayılan sıralama: en negatif FR üstte
       rows.sort((a, b) => (a.fr ?? 0) - (b.fr ?? 0));
-      _rows = rows.slice(0, 20);
+      _rows = rows;
       _sortKey = 'fr'; _sortDir = 'asc';
-      _applyFilterSort(); // İlk render (OI'siz)
+      _applyFilterSort();
 
-      // 5) OI batch çek — Anlık v1/openInterest ile
-      const fetchOI = async (sym, price, oldOi) => {
-        try {
-          const r = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/openInterest?symbol=${sym}USDT&_t=${Date.now()}`);
-          if (!r.ok) return null;
-          const d = await r.json();
-          if (!d?.openInterest) return null;
-          
-          let current = parseFloat(d.openInterest);
-          if (price) current *= price; // USD'ye çevir
-          
-          // Anlık değer olduğu için yönü elimizdeki eski OI ile kıyaslıyoruz
-          const oiDir = oldOi ? (current >= oldOi ? 'up' : 'down') : 'up';
-          return { oi: current, oiDir };
-        } catch { return null; }
-      };
-
-      const batchSize = 5;
-      for (let i = 0; i < _rows.length; i += batchSize) {
-        const batch = _rows.slice(i, i + batchSize);
-        const results = await Promise.allSettled(batch.map(r => fetchOI(r.sym, r.price, r.oi)));
-        results.forEach((res, j) => {
-          if (res.status === 'fulfilled' && res.value !== null) {
-            _rows[i + j].oi    = res.value.oi;
-            _rows[i + j].oiDir = res.value.oiDir;
-          }
-        });
-      }
-      _applyFilterSort(); // OI ile yeniden render
       if (typeof EventBus !== 'undefined') {
         EventBus.emit('screener:loaded');
       }
-
-
     } catch(e) {
-      console.error('[ScreenerCore] BN Screener error:', e);
+      console.error('[ScreenerCore] Binance screener error:', e);
       _setError();
     }
   }
 
-  /* ── Binance All ──────────────────────────────────── */
-  async function _loadBinanceAll() {
-    _setLoading();
-    try {
-      const symbols = await _getBinanceSymbols();
-      const tkResp = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?_t=${Date.now()}`);
-      const tkData = await tkResp.json();
-      const validSet = new Set(symbols);
-
-      _rows = tkData
-        .filter(t => t.symbol.endsWith('USDT') && validSet.has(t.symbol))
-        .map(t => ({
-          sym:   t.symbol.replace(/USDT$/, ''),
-          price: parseFloat(t.lastPrice) || null,
-          pct:   parseFloat(t.priceChangePercent) || null,
-          vol:   parseFloat(t.quoteVolume) || null,
-        }))
-        .filter(r => r.price > 0);
-
-      _sortKey = 'vol'; _sortDir = 'desc';
-      _applyFilterSort();
-    } catch(e) {
-      console.error('[ScreenerCore] BN All error:', e);
-      _setError();
-    }
-  }
-
-  /* ── Bybit Screener (en negatif FR 20) ───────────── */
-  async function _loadBybitScreener() {
+  /* ── Bybit — tüm USDT perpetual listesi ───────────── */
+  // Bybit ticker endpoint'i openInterestValue'yu doğrudan döndürüyor,
+  // bu yüzden ayrı bir OI isteği gerekmiyor. oiDir, önceki değerle
+  // karşılaştırılarak hesaplanır (ekstra API çağrısı yok).
+  async function _loadBybit() {
     _setLoading();
     try {
       const symbols = await _getBybitSymbols();
-      const resp = await fetch('https://api.bybit.com/v5/market/tickers?category=linear');
+      const resp = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&_t=${Date.now()}`);
       const data = await resp.json();
       const validSet = new Set(symbols);
+      const prevRows = new Map(_rows.map(r => [r.sym, r]));
 
       const rows = (data?.result?.list || [])
         .filter(t => t.symbol.endsWith('USDT') && validSet.has(t.symbol))
@@ -403,82 +413,36 @@ const ScreenerCore = (() => {
           if (window.FRDataBridge) {
             FRDataBridge.feed('bybit', t.symbol, parseFloat(t.fundingRate) * 100, Date.now());
           }
+          const sym  = t.symbol.replace(/USDT$/, '');
+          const oi   = parseFloat(t.openInterestValue) || null;
+          const prev = prevRows.get(sym);
+          const oiDir = (prev?.oi != null && oi != null)
+            ? (oi >= prev.oi ? 'up' : 'down')
+            : (prev?.oiDir ?? null);
           return {
-            sym:   t.symbol.replace(/USDT$/, ''),
+            sym,
             price: parseFloat(t.lastPrice) || null,
             pct:   parseFloat(t.price24hPcnt) * 100 || null,
             fr:    parseFloat(t.fundingRate) || null,
             frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0),
             nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(t.symbol, 'bybit') || parseInt(t.nextFundingTime) || 0,
-            vol:   parseFloat(t.turnover24h) || null,
-            oi:    parseFloat(t.openInterestValue) || null,
-            oiDir: null,
+            vol:     parseFloat(t.turnover24h) || null,
+            volBase: parseFloat(t.volume24h) || null,
+            oi,
+            oiDir,
           };
         });
 
       rows.sort((a, b) => (a.fr ?? 0) - (b.fr ?? 0));
-      _rows = rows.slice(0, 20);
+      _rows = rows;
       _sortKey = 'fr'; _sortDir = 'asc';
-      _applyFilterSort(); // İlk render (oiDir'siz)
+      _applyFilterSort();
 
-      // Bybit OI trend: son 2 snapshot karşılaştır
-      const fetchBybitOI = async (sym) => {
-        try {
-          const r = await fetch(`https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${sym}USDT&intervalTime=5min&limit=2`);
-          if (!r.ok) return null;
-          const d = await r.json();
-          const list = d?.result?.list || [];
-          if (list.length < 2) return null;
-          const current  = parseFloat(list[0].openInterestValue || 0);
-          const previous = parseFloat(list[1].openInterestValue || 0);
-          return current >= previous ? 'up' : 'down';
-        } catch { return null; }
-      };
-
-      const batchSize = 5;
-      for (let i = 0; i < _rows.length; i += batchSize) {
-        const batch = _rows.slice(i, i + batchSize);
-        const results = await Promise.allSettled(batch.map(r => fetchBybitOI(r.sym)));
-        results.forEach((res, j) => {
-          if (res.status === 'fulfilled' && res.value !== null) {
-            _rows[i + j].oiDir = res.value;
-          }
-        });
-      }
-      _applyFilterSort(); // oiDir ile yeniden render
       if (typeof EventBus !== 'undefined') {
         EventBus.emit('screener:loaded');
       }
-
     } catch(e) {
-      console.error('[ScreenerCore] BB Screener error:', e);
-      _setError();
-    }
-  }
-
-  /* ── Bybit All ────────────────────────────────────── */
-  async function _loadBybitAll() {
-    _setLoading();
-    try {
-      const symbols = await _getBybitSymbols();
-      const resp = await fetch('https://api.bybit.com/v5/market/tickers?category=linear');
-      const data = await resp.json();
-      const validSet = new Set(symbols);
-
-      _rows = (data?.result?.list || [])
-        .filter(t => t.symbol.endsWith('USDT') && validSet.has(t.symbol))
-        .map(t => ({
-          sym:   t.symbol.replace(/USDT$/, ''),
-          price: parseFloat(t.lastPrice) || null,
-          pct:   parseFloat(t.price24hPcnt) * 100 || null,
-          vol:   parseFloat(t.turnover24h) || null,
-        }))
-        .filter(r => r.price > 0);
-
-      _sortKey = 'vol'; _sortDir = 'desc';
-      _applyFilterSort();
-    } catch(e) {
-      console.error('[ScreenerCore] BB All error:', e);
+      console.error('[ScreenerCore] Bybit screener error:', e);
       _setError();
     }
   }
@@ -528,7 +492,7 @@ const ScreenerCore = (() => {
 
   /* ── UI helpers ───────────────────────────────────── */
   function _setLoading() {
-    if (_list) _list.innerHTML = '<div style="color:var(--text-secondary);font-size:11px;text-align:center;padding:24px">Yükleniyor...</div>';
+    if (_list) _list.innerHTML = '<div style="color:var(--text-secondary);font-size:11px;text-align:center;padding:24px">Loading...</div>';
   }
 
   function _throttledRender() {
@@ -540,23 +504,24 @@ const ScreenerCore = (() => {
   // Artık 5 saniyelik REST poll yok — MDS WebSocket'ten her 1-3sn'de push eder.
   function _startMDSListeners() {
     // Fiyat + hacim güncellemesi
-    EventBus.on('mds:tick', ({ symbol, price, pct24h, volume24h }) => {
-      if (!_activeTab.startsWith('bn')) return;
+    EventBus.on('mds:tick', ({ symbol, price, pct24h, volume24h, volumeBase24h }) => {
+      if (_exchange !== 'binance') return;
       const sym = symbol.replace(/USDT$/, '');
       _priceMap.set(sym, price);
 
       const row = _rows.find(r => r.sym === sym);
       if (row) {
-        row.price = price;
-        row.pct   = pct24h;
-        row.vol   = volume24h;
+        row.price   = price;
+        row.pct     = pct24h;
+        row.vol     = volume24h;
+        row.volBase = volumeBase24h;
         _throttledRender();
       }
     });
 
     // Funding Rate güncellemesi
     EventBus.on('mds:fr', ({ symbol, rate, nextFundingTime }) => {
-      if (!_activeTab.startsWith('bn')) return;
+      if (_exchange !== 'binance') return;
       const sym = symbol.replace(/USDT$/, '');
 
       // FRTracker'a besle
@@ -571,9 +536,9 @@ const ScreenerCore = (() => {
       }
     });
 
-    // OI güncellemesi
+    // OI güncellemesi (MarketDataStore — tüm market için 60sn'de bir batch)
     EventBus.on('mds:oi', ({ symbol, value, dir }) => {
-      if (!_activeTab.startsWith('bn')) return;
+      if (_exchange !== 'binance') return;
       const sym = symbol.replace(/USDT$/, '');
       const row = _rows.find(r => r.sym === sym);
       if (row) {
@@ -594,7 +559,7 @@ const ScreenerCore = (() => {
   }
 
   async function _pollBybitPrices() {
-    if (!_activeTab.startsWith('bb')) return;
+    if (_exchange !== 'bybit') return;
 
     try {
       const res = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&_t=${Date.now()}`);
@@ -609,6 +574,7 @@ const ScreenerCore = (() => {
         const price = parseFloat(d.lastPrice);
         const fr    = parseFloat(d.fundingRate);
         const pct   = parseFloat(d.price24hPcnt) * 100;
+        const oi    = parseFloat(d.openInterestValue) || null;
 
         _priceMap.set(sym, price);
 
@@ -621,6 +587,10 @@ const ScreenerCore = (() => {
           row.price = price;
           row.fr    = fr;
           row.pct   = pct;
+          if (oi != null) {
+            row.oiDir = row.oi != null ? (oi >= row.oi ? 'up' : 'down') : row.oiDir;
+            row.oi    = oi;
+          }
           changed   = true;
         }
       });
@@ -633,58 +603,47 @@ const ScreenerCore = (() => {
   }
 
   function _setError() {
-    if (_list) _list.innerHTML = '<div style="color:var(--accent-red);font-size:11px;text-align:center;padding:24px">Veri alınamadı</div>';
+    if (_list) _list.innerHTML = '<div style="color:var(--accent-red);font-size:11px;text-align:center;padding:24px">Failed to load data</div>';
   }
 
-  /* ── Tab switch ───────────────────────────────────── */
-  function _setTab(tab) {
-    _activeTab = tab;
+  /* ── Borsa değişimi ───────────────────────────────── */
+  function _setExchange(exchange) {
+    _exchange = exchange;
+    State.set('screenerExchange', exchange, true); // silent — zaten UI kendi güncelliyor
     _rows = []; _filtered = [];
 
-    const isScreener = tab.endsWith('-screener');
-    const cols = isScreener ? COLS_SCREENER : COLS_ALL;
+    if (_panel) _panel.setAttribute('data-wl-mode', 'screener');
+    _renderHeader();
+    _updateExchangeUI();
 
-    // Panel mode attribute → CSS grid değişsin
-    if (_panel) _panel.setAttribute('data-wl-mode', isScreener ? 'screener' : 'all');
+    if (exchange === 'binance') _loadBinance();
+    else _loadBybit();
 
-    _renderHeader(cols);
-
-    if (tab === 'bn-screener') _loadBinanceScreener();
-    else if (tab === 'bb-screener') _loadBybitScreener();
-    else if (tab === 'bn-all')  _loadBinanceAll();
-    else if (tab === 'bb-all')  _loadBybitAll();
-
-    // ── YENİ: Sekme değişince görünen coinleri preload et ────────
-    setTimeout(_preloadVisibleCoins, 1500); // Yeni sekme yüklensin
+    // Borsa değişince görünen coinleri preload et
+    setTimeout(_preloadVisibleCoins, 1500);
   }
 
-  // Screener ilk yüklenince tüm görünen coinler için FR geçmişini preload et
+  function _updateExchangeUI() {
+    if (_excLabel) _excLabel.textContent = _exchange === 'binance' ? 'Binance' : 'Bybit';
+    document.querySelectorAll('.wl-exchange-item').forEach(el =>
+      el.classList.toggle('active', el.dataset.exchange === _exchange));
+  }
+
+  // Liste yüklenince ilk N coin için FR geçmişini preload et (trend rozeti için).
+  // Tüm listeyi (300+ coin) preload etmek performans/rate-limit açısından
+  // gereksiz — sadece en üstteki (en negatif FR'li) coinler önceliklidir.
   async function _preloadVisibleCoins() {
-    const exchange = ExchangeRouter.getActive();
-    const monitor  = ExchangeRouter.getMonitor(exchange);
+    const monitor = ExchangeRouter.getMonitor(_exchange);
     if (!monitor?.preloadFromServer) return;
 
-    const isAllTab = _activeTab.endsWith('-all');
-
-    let coins;
-    if (isAllTab) {
-      // All sekmesinde sadece aktif seçili coini preload et
-      // (tüm borsayı preload etmek anlamsız ve yavaş)
-      const activeSym = window.State?.get('activeSymbol');
-      coins = activeSym ? [activeSym] : [];
-    } else {
-      // BN Screener / BB Screener — görünen negatif FR listesi
-      // _rows zaten sıralanmış ve filtrelenmiş (negatif FR'ye göre)
-      coins = _rows.map(r => r.sym + 'USDT');
-    }
-
+    const coins = _rows.slice(0, 40).map(r => r.sym + 'USDT');
     if (coins.length === 0) return;
 
     for (const symbol of coins) {
-      await monitor.preloadFromServer(symbol, exchange, 2); // Son 2 saat
+      await monitor.preloadFromServer(symbol, _exchange, 2); // Son 2 saat
       await new Promise(r => setTimeout(r, 100)); // Rate limit koruması
     }
-    console.log(`[ScreenerCore] ${coins.length} coin FR preload edildi (${_activeTab})`);
+    console.log(`[ScreenerCore] ${coins.length} coin FR preload edildi (${_exchange})`);
   }
 
   /* ── Init ─────────────────────────────────────────── */
@@ -693,17 +652,46 @@ const ScreenerCore = (() => {
     _colHeader = document.getElementById('wl-col-header');
     _searchEl  = document.getElementById('wl-search');
     _panel     = document.getElementById('right-panel');
+    _excPicker = document.getElementById('wl-exchange-picker');
+    _excMenu   = document.getElementById('wl-exchange-menu');
+    _excLabel  = document.getElementById('wl-exchange-label');
 
     if (!_list) return;
 
-    document.querySelectorAll('.wl-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.wl-tab').forEach(t => t.classList.toggle('active', t === tab));
-        _setTab(tab.dataset.tab);
+    // Borsa dropdown — tek seçim, hem Screener hem Bot Signals paneli bunu izler
+    _excPicker?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _excMenu?.classList.toggle('open');
+    });
+    document.querySelectorAll('.wl-exchange-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _excMenu?.classList.remove('open');
+        if (item.dataset.exchange !== _exchange) _setExchange(item.dataset.exchange);
       });
     });
+    document.addEventListener('click', () => _excMenu?.classList.remove('open'));
 
-    _searchEl?.addEventListener('input', () => _applyFilterSort());
+    // Arama + temizleme (✕) — ✕ sadece kutuda yazı varken görünür
+    const _clearBtn = document.getElementById('wl-search-clear');
+    const _syncClear = () => {
+      if (_clearBtn) _clearBtn.classList.toggle('visible', !!_searchEl?.value);
+    };
+    _searchEl?.addEventListener('input', () => { _syncClear(); _applyFilterSort(); });
+    _clearBtn?.addEventListener('click', () => {
+      if (!_searchEl) return;
+      _searchEl.value = '';
+      _syncClear();
+      _applyFilterSort();
+      _searchEl.focus();
+    });
+    _syncClear();
+
+    // Watchlist menüsü değişiklikleri
+    EventBus.on('watchlist:columnsChanged',   () => { _renderHeader(); _renderList(); });
+    EventBus.on('watchlist:activeChanged',    () => _applyFilterSort());
+    EventBus.on('watchlist:listsChanged',     () => _applyFilterSort());
+    EventBus.on('watchlist:volumeTypeChanged',() => { _renderHeader(); _renderList(); });
 
     // Aktif fiyat güncellemeleri (aktif coin strip'ten)
     EventBus.on('chart:price:update', ({ symbol, price }) => {
@@ -726,11 +714,12 @@ const ScreenerCore = (() => {
     // Bybit: ban riski düşük, REST poll devam ediyor
     _startBybitPolling();
     setInterval(() => {
-      if (_activeTab === 'bn-screener') _loadBinanceScreener();
-      else if (_activeTab === 'bb-screener') _loadBybitScreener();
+      if (_exchange === 'binance') _loadBinance();
+      else _loadBybit();
     }, 60000);
 
-    _setTab('bn-screener');
+    _exchange = State.get('screenerExchange') || 'binance';
+    _setExchange(_exchange);
     console.log('[ScreenerCore] Initialized ✓');
 
     EventBus.on('screener:loaded', () => {

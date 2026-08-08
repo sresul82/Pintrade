@@ -14,15 +14,95 @@ const BotSignalsPanel = (() => {
   let _chartHourOffset = 0;       // 0 = now, -1 = 1 hour ago
   let _extraContainers = [];      // Floating panel gibi ek render hedefleri
   let _allContainers = [];        // Tüm render hedef container'ları
-  let _exchangeFilter = 'bn';     // 'bn' | 'bb' — FR dışı botlar için
+  let _searchOpen = false;        // Sembol arama kutusu açık mı
+  let _searchQuery = '';          // Arama metni (büyük harfe çevrilip symbol'e karşı test edilir)
 
+  // FR dışı botlar (M1Hammer vb.) artık kendi BN/BB toggle'ına sahip değil —
+  // borsa her zaman ExchangeRouter.getActive() (= seçili coinin borsası) üzerinden
+  // belirlenir. Böylece Screener'dan bir coin seçildiğinde bot paneli otomatik
+  // doğru borsaya döner (önceki manuel toggle senkron kalmıyordu).
+  function _activeBotExchange() {
+    return ExchangeRouter.getActive() === 'binance' ? 'bn' : 'bb';
+  }
+
+  function _esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // code: sol dikey rafta ve header'daki SE rozetinde gösterilen kısa etiket.
   const BOT_TABS = [
-    { id: 'fr',        label: 'FR' },
-    { id: 'm1hammer',  label: 'M1 Hammer' },
-    { id: 'm1a',       label: 'M1-A' },
-    { id: 'v3',        label: 'V3' },
-    { id: '4s',        label: '4S' },
+    { id: 'fr',        label: 'FR',        code: 'FR' },
+    { id: 'm1hammer',  label: 'M1 Hammer', code: 'M1' },
+    { id: 'm1a',       label: 'M1-A',      code: 'MA' },
+    { id: 'v3',        label: 'V3',        code: 'V3' },
+    { id: '4s',        label: '4S',        code: '4S' },
   ];
+
+  const ICON_SEARCH = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/></svg>`;
+  const ICON_SNIPE = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.2"/><path d="M8 1v2.4M8 12.6V15M1 8h2.4M12.6 8H15" stroke-linecap="round"/></svg>`;
+
+  /** Sol dikey bot rafı — eski yatay .bsp-bot-tabs'in yerine geçti. */
+  function _buildBotRailHTML() {
+    let html = `<div class="bsp-bot-rail">`;
+    BOT_TABS.forEach(tab => {
+      const activeClass = _activeBot === tab.id ? 'active' : '';
+      html += `<button class="bsp-rail-btn ${activeClass}" data-bot="${tab.id}" title="${_esc(tab.label)}">
+        <span class="bsp-rail-code">${_esc(tab.code)}</span>
+      </button>`;
+    });
+    html += `</div>`;
+    return html;
+  }
+
+  /** Coin Detail/Bot Signals/News sekme çubuğunda, popout butonunun solunda
+   *  gösterilen kontroller: SE rozeti (sadece FR botunda), arama, snipe,
+   *  sıralama. Rail butonu zaten hangi bot'un seçili olduğunu gösterdiği
+   *  için burada ayrıca bot adı/kısaltması tekrarlanmıyor — BB (borsa)
+   *  rozeti de kaldırıldı (borsa zaten Screener'dan seçiliyor). */
+  function _buildTabbarControlsHTML() {
+    let html = '';
+
+    if (_activeBot === 'fr') {
+      html += `<div class="bsp-se-badge" title="FR">SE</div>`;
+    }
+
+    html += `<div class="bsp-search-wrap${_searchOpen ? ' open' : ''}">`;
+    html += `<input class="bsp-search-input" type="text" placeholder="Symbol..." value="${_esc(_searchQuery)}" ${_searchOpen ? '' : 'tabindex="-1"'}>`;
+    html += `<button class="bsp-icon-btn bsp-search-btn" title="Search by symbol">${ICON_SEARCH}</button>`;
+    html += `</div>`;
+
+    // Snipe — eski "Seçili Coin / Tüm Coinler" ikilisinin yerine tek toggle.
+    // Açıkken: sadece screener'da seçili coin'in sinyalleri gösterilir.
+    // Kapalıyken: tüm coinlerin (alarm seviyesindeki) sinyalleri gösterilir.
+    html += `<button class="bsp-icon-btn bsp-snipe-btn ${_coinFilter === 'selected' ? 'active' : ''}"
+                      data-filter="${_coinFilter === 'selected' ? 'all' : 'selected'}"
+                      title="${_coinFilter === 'selected' ? 'Snipe: showing selected coin only — click to show all' : 'Snipe: showing all coins — click to lock to selected coin'}">${ICON_SNIPE}</button>`;
+
+    const sortArrow = _sortOrder === 'desc' ? '↑' : '↓';
+    const sortTitle = _sortOrder === 'desc' ? 'Newest signals on top' : 'Newest signals on bottom';
+    html += `<button class="bsp-sort-btn" title="${sortTitle}">${sortArrow}</button>`;
+
+    return html;
+  }
+
+  /** Kontrolleri, .bsp-tabbar-controls-target sınıflı TÜM hedeflere yazar —
+   *  hem docked (#bsp-tabbar-controls, statik sekme çubuğunda) hem floating
+   *  panel (#fp-tabbar-controls, sadece panel açıkken DOM'da var) aynı anda
+   *  güncelleniyor. _allContainers'tan bağımsız. */
+  function _renderTabbarControls() {
+    document.querySelectorAll('.bsp-tabbar-controls-target').forEach(el => {
+      el.innerHTML = _buildTabbarControlsHTML();
+    });
+  }
+
+  /** Yeni bir tabbar-controls hedefi (örn. floating panel ilk açıldığında
+   *  oluşan #fp-tabbar-controls) delegasyona bağlanır + hemen doldurulur. */
+  function attachTabbarTarget(el) {
+    if (!el) return;
+    _attachDelegation(el);
+    el.innerHTML = _buildTabbarControlsHTML();
+  }
 
   // Public API
   function init() {
@@ -41,6 +121,12 @@ const BotSignalsPanel = (() => {
     // Event delegation for our control buttons in the signals tab container
     const container = document.getElementById('dp-signals-tab');
     if (container) _attachDelegation(container);
+
+    // Tabbar kontrolleri (SE/arama/snipe/sırala) dış sekme çubuğunda —
+    // ayrı bir DOM ağacı, kendi delegasyonunu istiyor. Floating panel'in
+    // kendi hedefi (#fp-tabbar-controls) panel ilk açıldığında oluştuğu
+    // için floating-panel.js kendi attachTabbarTarget() çağrısını yapıyor.
+    attachTabbarTarget(document.getElementById('bsp-tabbar-controls'));
 
     // Increase max signals limit from default 200 to 5000 to keep all 24h signals
     if (typeof scalpFRMonitor !== 'undefined') {
@@ -61,65 +147,112 @@ const BotSignalsPanel = (() => {
           height: 100%;
           font-family: var(--font-sans, 'Inter', sans-serif);
         }
-        .bsp-header-row {
+        /* .bsp-body: dikey rafı (.bsp-bot-rail) ve içeriği (.bsp-main) yan yana yerleştirir */
+        .bsp-body {
+          display: flex;
+          flex: 1;
+          min-height: 0;
+        }
+        .bsp-main {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-width: 0;
+        }
+        /* ── Sol dikey bot rafı — eski yatay .bsp-bot-tabs'in yerine geçti ── */
+        .bsp-bot-rail {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 8px 6px;
+          border-right: 1px solid var(--border-primary);
+          background: var(--bg-secondary);
+          flex-shrink: 0;
+        }
+        .bsp-rail-btn {
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 6px 10px;
-          border-bottom: 1px solid var(--border-primary);
-          background: var(--bg-secondary);
-        }
-        .bsp-bot-tabs {
-          display: flex;
-          gap: 4px;
-        }
-        .bsp-tab-btn {
-          width: 65px;
-          padding: 5px 0;
-          font-size: 10px;
-          font-weight: 600;
+          justify-content: center;
           border: 1px solid var(--border-primary);
           background: var(--bg-tertiary);
-          color: var(--text-active);
-          border-radius: var(--radius-sm, 4px);
+          color: var(--text-secondary);
+          border-radius: 50%;
           cursor: pointer;
-          transition: all 0.2s ease;
-          text-align: center;
+          transition: all 0.15s ease;
         }
-        .bsp-tab-btn:hover {
+        .bsp-rail-btn:hover {
           background: var(--bg-hover);
           color: var(--text-active);
         }
-        .bsp-tab-btn.active {
+        .bsp-rail-btn.active {
           background: var(--accent-blue-bg, rgba(9, 105, 218, 0.1));
           color: var(--accent-blue, #0969da);
           border-color: var(--accent-blue, #0969da);
         }
-        .bsp-stacked-filters {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
+        .bsp-rail-code {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
         }
-        .bsp-stacked-btn {
-          padding: 2px 6px;
-          font-size: 8px;
-          font-weight: 600;
-          border: 1px solid var(--border-primary);
+        /* ── SE rozeti (aktif bot'un kısa kodu) ── */
+        .bsp-se-badge {
+          padding: 3px 7px;
+          font-size: 9px;
+          font-weight: 700;
+          border-radius: 3px;
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          flex-shrink: 0;
+        }
+        /* ── Arama ikonu / genişleyen input ── */
+        .bsp-search-wrap {
+          display: flex;
+          align-items: center;
+          flex: 0 0 auto;
+        }
+        .bsp-search-input {
+          width: 0;
+          padding: 0;
+          border: none;
           background: var(--bg-tertiary);
           color: var(--text-active);
+          font-size: 10px;
           border-radius: 3px;
-          cursor: pointer;
-          text-align: center;
-          transition: all 0.15s ease;
+          opacity: 0;
+          transition: width 0.15s ease, opacity 0.15s ease, padding 0.15s ease;
         }
-        .bsp-stacked-btn:hover {
+        .bsp-search-wrap.open .bsp-search-input {
+          width: 90px;
+          padding: 4px 6px;
+          opacity: 1;
+          margin-right: 4px;
+        }
+        /* ── Ortak küçük ikon buton (arama, snipe) ── */
+        .bsp-icon-btn {
+          width: 26px;
+          height: 26px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border-primary);
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+        .bsp-icon-btn:hover {
           background: var(--bg-hover);
           color: var(--text-active);
         }
-        .bsp-stacked-btn.active {
-          background: var(--text-primary);
-          color: var(--bg-primary);
-          border-color: var(--text-primary);
+        /* Snipe aktifken (sadece seçili coin gösteriliyor) vurgulu */
+        .bsp-snipe-btn.active {
+          background: var(--accent-red-bg, rgba(248, 81, 73, 0.12));
+          color: var(--accent-red, #f85149);
+          border-color: var(--accent-red, #f85149);
         }
         .bsp-filters-row {
           display: flex;
@@ -250,34 +383,73 @@ const BotSignalsPanel = (() => {
       }
       const btn = e.target.closest('button');
       if (!btn) return;
-      if (btn.classList.contains('bsp-tab-btn'))        { _activeBot    = btn.dataset.bot;    render(); }
+      if (btn.classList.contains('bsp-rail-btn'))        { _activeBot    = btn.dataset.bot;    render(); }
       else if (btn.classList.contains('bsp-filter-btn-time')) { _activeFilter = btn.dataset.filter; render(); }
-      else if (btn.classList.contains('bsp-filter-btn-coin')) { _coinFilter   = btn.dataset.filter; render(); }
+      else if (btn.classList.contains('bsp-snipe-btn'))  { _coinFilter   = btn.dataset.filter; render(); }
+      else if (btn.classList.contains('bsp-search-btn')) {
+        _searchOpen = !_searchOpen;
+        if (!_searchOpen) _searchQuery = '';
+        render();
+      }
       else if (btn.classList.contains('bsp-sort-btn'))      { _sortOrder = _sortOrder === 'desc' ? 'asc' : 'desc'; render(); }
-      else if (btn.classList.contains('bsp-exchange-btn'))  { _exchangeFilter = btn.dataset.exchange; render(); }
+    });
+
+    // Arama kutusu — input olayı click delegasyonundan ayrı dinleniyor
+    el.addEventListener('input', (e) => {
+      if (!e.target.classList.contains('bsp-search-input')) return;
+      _searchQuery = e.target.value.trim().toUpperCase();
+      // Render() innerHTML'i yeniden yazıp input'un focus'unu kaybettirir —
+      // burada sadece filtreyi tetikleyip listeyi güncelliyoruz, input'a
+      // dokunmuyoruz (aşağıdaki _renderSync input'u yeniden odaklıyor).
+      render();
     });
   }
 
   let _renderTimer = null;
   function render() {
     if (_renderTimer) clearTimeout(_renderTimer);
-    _renderTimer = setTimeout(_renderSync, 50);
+    _renderTimer = setTimeout(() => {
+      // innerHTML tüm içeriği değiştirdiği için arama kutusundaki focus/imleç
+      // konumu kayboluyor — render sonrası geri yüklüyoruz (her tuş vuruşunda
+      // input'tan dışarı atılmasın diye).
+      const active = document.activeElement;
+      const wasSearchFocused = active?.classList?.contains('bsp-search-input');
+      const caretPos = wasSearchFocused ? active.selectionStart : null;
+
+      _renderSync();
+
+      if (wasSearchFocused) {
+        const input = document.querySelector('.bsp-search-input');
+        if (input) {
+          input.focus();
+          if (caretPos != null) input.setSelectionRange(caretPos, caretPos);
+        }
+      }
+    }, 50);
   }
 
   function _buildM1HammerHTML() {
     const allSignals = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
-    const signals = allSignals.filter(s => s.exchange === _exchangeFilter);
+    const exFilter = _activeBotExchange();
+    const signals = allSignals.filter(s => s.exchange === exFilter);
 
     if (!signals.length) {
-      return `<div class="bsp-empty">M1 Hammer sinyali bekleniyor...</div>`;
+      // M1 Hammer şu an sadece Binance verisiyle taranıyor — Bybit seçiliyken
+      // liste her zaman boş gelir, bu bir hata değil.
+      const excLabel = exFilter === 'bn' ? 'Binance' : 'Bybit';
+      return `<div class="bsp-empty">Waiting for M1 Hammer signals on ${excLabel}...</div>`;
     }
 
-    const filtered = _coinFilter === 'selected' && _selectedSymbol
+    let filtered = _coinFilter === 'selected' && _selectedSymbol
       ? signals.filter(s => s.symbol.replace(/USDT$/, '') === _selectedSymbol)
       : signals;
 
+    if (_searchQuery) {
+      filtered = filtered.filter(s => s.symbol.toUpperCase().includes(_searchQuery));
+    }
+
     if (!filtered.length) {
-      return `<div class="bsp-empty">Seçili coin için sinyal yok.</div>`;
+      return `<div class="bsp-empty">${_searchQuery ? 'No signals match "' + _esc(_searchQuery) + '".' : 'No signal for the selected coin.'}</div>`;
     }
 
     const sorted = [...filtered].sort((a, b) =>
@@ -402,6 +574,10 @@ const BotSignalsPanel = (() => {
 
     if (_allContainers.length === 0) return;
 
+    // Dış sekme çubuğundaki kontroller (SE/arama/snipe/sırala) — içerik
+    // dalından bağımsız, her render'da tazelenir.
+    _renderTabbarControls();
+
     // Clean up previous chart instance
     if (_chartInstance) {
       if (Array.isArray(_chartInstance)) {
@@ -422,64 +598,33 @@ const BotSignalsPanel = (() => {
       _allContainers.forEach(container => {
         container.innerHTML = `
           <div style="padding:16px; text-align:center; color:var(--text-secondary); font-size:12px;">
-            ScalpFR monitor çalışmıyor.
+            ScalpFR monitor is not running.
           </div>`;
       });
       return;
     }
 
-    // ── 1. Bot Tabs & Stacked Coin Filters ───────────
+    // ── 1. Vertical Bot Rail ──────────────────────────
+    // Layout: .bsp-container > .bsp-body > [.bsp-bot-rail, .bsp-main]
+    // Üst kontroller (SE/arama/snipe/sırala) artık burada değil — dış
+    // Coin Detail/Bot Signals/News sekme çubuğuna taşındı, bkz.
+    // _buildTabbarControlsHTML() ve _renderTabbarControls().
     let html = `<div class="bsp-container">`;
-    html += `<div class="bsp-header-row">`;
-    
-    html += `<div class="bsp-bot-tabs">`;
-    BOT_TABS.forEach(tab => {
-      const activeClass = _activeBot === tab.id ? 'active' : '';
-      html += `<button class="bsp-tab-btn ${activeClass}" data-bot="${tab.id}">${tab.label}</button>`;
-    });
-    html += `</div>`;
-
-    // Sort toggle button (between bot tabs and stacked filters)
-    const sortArrow = _sortOrder === 'desc' ? '↑' : '↓';
-    const sortTitle = _sortOrder === 'desc' ? 'Yeni sinyaller yukarıda' : 'Yeni sinyaller aşağıda';
-    html += `<button class="bsp-sort-btn" title="${sortTitle}">${sortArrow}</button>`;
-
-    // BN/BB Exchange Filter — sadece FR dışı botlarda göster
-    if (_activeBot !== 'fr') {
-      html += `<div style="display:flex; gap:3px; margin-left:4px;">`;
-      [{ id: 'bn', label: 'BN' }, { id: 'bb', label: 'BB' }].forEach(ex => {
-        const activeClass = _exchangeFilter === ex.id ? 'active' : '';
-        html += `<button class="bsp-stacked-btn bsp-exchange-btn ${activeClass}" data-exchange="${ex.id}">${ex.label}</button>`;
-      });
-      html += `</div>`;
-    }
-
-    // Stacked Coin Filters
-    html += `<div class="bsp-stacked-filters">`;
-    [
-      { id: 'selected', label: 'Seçili Coin' },
-      { id: 'all',      label: 'Tüm Coinler' }
-    ].forEach(f => {
-      const activeClass = _coinFilter === f.id ? 'active' : '';
-      html += `<button class="bsp-stacked-btn bsp-filter-btn-coin ${activeClass}" data-filter="${f.id}">${f.label}</button>`;
-    });
-    html += `</div>`;
-    
-    html += `</div>`; // .bsp-header-row
-
-
+    html += `<div class="bsp-body">`;
+    html += _buildBotRailHTML();
+    html += `<div class="bsp-main">`;
 
     // ── 3. Content Area ──────────────────────────────
     if (_activeBot === 'm1hammer') {
       html += _buildM1HammerHTML();
-      html += `</div>`;
+      html += `</div></div></div>`; // .bsp-main / .bsp-body / .bsp-container
       _allContainers.forEach(c => { c.innerHTML = html; });
       return;
     }
 
     if (_activeBot !== 'fr') {
-      html += `<div class="bsp-empty">Bu bot tipi henüz aktif değil.</div>`;
-      html += `</div>`;
+      html += `<div class="bsp-empty">This bot type is not active yet.</div>`;
+      html += `</div></div></div>`; // .bsp-main / .bsp-body / .bsp-container
       _allContainers.forEach(c => { c.innerHTML = html; });
       return;
     }
@@ -522,6 +667,7 @@ const BotSignalsPanel = (() => {
     }
 
     const signals = allSignals.filter(s => {
+      if (_searchQuery && !s.symbol.toUpperCase().includes(_searchQuery)) return false;
       if (_coinFilter === 'selected' && _selectedSymbol) {
         const sigSym = s.symbol.replace(/USDT$/, '');
         if (sigSym !== _selectedSymbol) return false;
@@ -597,40 +743,45 @@ const BotSignalsPanel = (() => {
           ">
             <div class="bsp-chart-container">
               ${mainSignals.length === 0 && altSignals.length === 0
-                ? `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:10px;opacity:0.6;">Bu saate ait veri bulunamadı</div>`
+                ? `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:10px;opacity:0.6;">No data for this hour</div>`
                 : `<canvas id="bsp-mini-chart"></canvas>`
               }
             </div>
           </div>`;
     }
 
+    // Orta bölüm (header + satırlar/boş mesaj) flex:1 alır — böylece
+    // altındaki "son 24s" footer'ı her zaman panelin gerçek alt kenarına
+    // yapışık kalır ve panel dikey resize edildiğinde onunla birlikte hareket eder.
+    html += `<div style="display:flex; flex-direction:column; flex:1; min-height:0;">`;
+
     // ── 5. Column Headers ────────────────────────────
     html += `
       <div style="
         display:grid;
-        grid-template-columns: 18px 72px 1fr 1fr 1fr 1fr 72px;
+        grid-template-columns: 16px 58px minmax(54px,1fr) minmax(54px,1fr) minmax(60px,1fr) minmax(58px,1fr) minmax(50px,1fr);
         font-size:10px;
         color: var(--text-active); font-weight:600;
-        padding:6px 10px;
+        padding:6px 8px;
         border-bottom:1px solid var(--border-primary);
-        gap:4px;
+        gap:6px;
         background: var(--bg-secondary);
       ">
         <span></span>
-        <span style="text-align:center;">Ticker</span>
-        <span style="text-align:center;">Previous</span>
-        <span style="text-align:center;">Current</span>
-        <span style="text-align:center;">Delta</span>
-        <span style="text-align:center;">Remaining</span>
-        <span style="text-align:center;">Saat</span>
+        <span style="text-align:left;">Ticker</span>
+        <span style="text-align:right;">Previous</span>
+        <span style="text-align:right;">Current</span>
+        <span style="text-align:right;">Delta</span>
+        <span style="text-align:right;">Remaining</span>
+        <span style="text-align:right;">Time</span>
       </div>`;
 
     // ── 6. Signal Rows ───────────────────────────────
     if (!signals.length) {
       html += `
         <div style="padding:24px 16px; text-align:center; color: var(--text-active); font-size:12px;">
-          Sinyal bekleniyor...<br>
-          <span style="font-size:10px; opacity:0.6;">${mainMonitor?.windows?.size || 0} aktif pencere izleniyor</span>
+          Waiting for signal...<br>
+          <span style="font-size:10px; opacity:0.6;">${mainMonitor?.windows?.size || 0} active windows being watched</span>
         </div>`;
     } else {
       html += `<div id="bsp-signals-list" style="overflow-y:auto; max-height:calc(100vh - ${hasChart ? '460px' : '320px'}); flex:1;">`;
@@ -669,18 +820,18 @@ const BotSignalsPanel = (() => {
         html += `
           <div style="
             display:grid;
-            grid-template-columns: 18px 72px 1fr 1fr 1fr 1fr 72px;
+            grid-template-columns: 16px 58px minmax(54px,1fr) minmax(54px,1fr) minmax(60px,1fr) minmax(58px,1fr) minmax(50px,1fr);
             align-items:center;
             background:${bgColor};
             border-bottom:0.5px solid var(--border-primary);
             box-shadow:inset 3px 0 0 ${accentColor};
-            padding:7px 10px;
-            gap:4px;
+            padding:7px 8px;
+            gap:6px;
             font-size:11px;
             opacity:${opacity};
           ">
             <span style="color:${accentColor}; font-size:13px; line-height:1; font-weight: bold;">${arrow}</span>
-            <span class="bsp-ticker-link" data-symbol="${symDisplay}" style="color:var(--text-active); font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:2px; text-decoration-color:rgba(255,255,255,0.25); transition:color 0.15s;" title="${symDisplay} grafiğini aç">${symDisplay}</span>
+            <span class="bsp-ticker-link" data-symbol="${symDisplay}" style="color:var(--text-active); font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:2px; text-decoration-color:rgba(255,255,255,0.25); transition:color 0.15s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Open ${symDisplay} chart">${symDisplay}</span>
             <span style="color: var(--text-active); text-align:right;">${sig.display.startFR}</span>
             <span style="color:${accentColor}; text-align:right;">${sig.display.currentFR}</span>
             <span style="color:${accentColor}; font-weight:600; text-align:right;">${displayDelta}</span>
@@ -691,14 +842,16 @@ const BotSignalsPanel = (() => {
       html += `</div>`;
     }
 
+    html += `</div>`; // orta bölüm (header + satırlar/boş mesaj) flex:1 wrapper kapanışı
+
     // Footer
     html += `
       <div style="text-align:center; font-size:10px; color: var(--text-active); padding:6px; border-top:1px solid var(--border-primary); background: var(--bg-secondary);">
-        son 24s · ${signals.length} sinyal
+        last 24h · ${signals.length} signals
       </div>`;
 
-    html += `</div>`; // bsp-container close
-    
+    html += `</div></div></div>`; // .bsp-main / .bsp-body / .bsp-container
+
     // Her hedef container'a ayni HTML'i yaz
     _allContainers.forEach(c => { c.innerHTML = html; });
 
@@ -857,7 +1010,7 @@ const BotSignalsPanel = (() => {
     _extraContainers = _extraContainers.filter(c => c !== el);
   }
 
-  return { init, render, addContainer, removeContainer };
+  return { init, render, addContainer, removeContainer, attachTabbarTarget };
 })();
 
 window.BotSignalsPanel = BotSignalsPanel;

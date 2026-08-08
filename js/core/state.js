@@ -9,7 +9,7 @@ const defaults = {
   chartLayout: '1',
   showCountdown: false,
   watchlistOpen: false,
-  watchlistTab: 'bn-screener',
+  screenerExchange: 'binance', // Screener listesinin gösterdiği borsa (BN/BB)
   detailTab: 'detail',
   panelHeight: 220,
 

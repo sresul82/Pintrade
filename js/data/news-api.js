@@ -1,62 +1,89 @@
 /**
  * PinTrade V2.4 - News API Service
  * Handles fetching crypto news from CryptoCompare and translating to Turkish.
+ *
+ * News sekmesi (dp-news-tab) tek bir yerde iki haber kaynağını birleştirir:
+ *   snipe AÇIK  → sadece seçili coinin haberleri (fetchCoinNews)
+ *   snipe KAPALI → genel piyasa haberleri (fetchGeneralNews)
+ * Kontroller (snipe + sırala) sekme çubuğundaki #news-tabbar-controls'a
+ * yazılıyor — aynı desen bot-signals-panel.js'in SE/arama/snipe/sırala
+ * kontrolleri için kullandığı desenle birebir aynı.
+ *
+ * Not: Eskiden ayrı bir "Global News" paneli (sağ sidebar'da, Alarm'ın
+ * altında) vardı — kaldırıldı, aynı işlev artık burada (snipe kapalı hali).
  */
 
 const NewsAPI = {
-  activeGlobalTab: 'global', // 'global' | 'exchange'
-  activeCoinData: null,
+  _snipe: true,        // true: coin bazlı (varsayılan) | false: genel piyasa haberleri
+  _sortOrder: 'desc',  // 'desc' = yeni üstte | 'asc' = eski üstte
+  _lastNewsData: [],   // sıralama toggle'ında API'ye tekrar gitmemek için ham veri önbelleği
+  _activeSymbol: null,
+  _loadedOnce: false,  // News sekmesine hiç girilmediyse veri çekmiyoruz (gereksiz istek atmasın)
 
   init() {
-    this.bindEvents();
-    // Fetch initial global news
-    this.fetchGlobalNews();
-    
-    // Subscribe to active coin changes to update Coin News in detail panel
+    this._activeSymbol = (window.State?.get('activeSymbol') || 'BTCUSDT').replace(/USDT$/, '');
+
     if (window.EventBus) {
-      window.EventBus.on('symbol:changed', (data) => {
-        this.activeCoinData = data;
-        this.fetchCoinNews(data.symbol);
+      // NOT: önceki sürüm 'symbol:changed' dinliyordu — projede hiçbir yerde
+      // bu isimde bir olay yayınlanmıyor (her yerde 'symbol:change' kullanılıyor),
+      // yani coin değiştiğinde haberler HİÇBİR ZAMAN güncellenmiyordu. Düzeltildi.
+      window.EventBus.on('symbol:change', ({ symbol }) => {
+        if (!symbol) return;
+        this._activeSymbol = symbol.replace(/USDT$/, '');
+        if (this._snipe && this._loadedOnce) this._refetch();
       });
     }
   },
 
-  bindEvents() {
-    // Global Panel Tabs
-    const gnpTabs = document.querySelectorAll('.gnp-tab');
-    gnpTabs.forEach(tabBtn => {
-      tabBtn.addEventListener('click', (e) => {
-        gnpTabs.forEach(btn => btn.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        
-        const tabName = e.currentTarget.getAttribute('data-gnp-tab');
-        this.activeGlobalTab = tabName;
-        
-        document.querySelectorAll('.gnp-content').forEach(c => c.style.display = 'none');
-        document.getElementById(`gnp-${tabName}`).style.display = 'flex';
-        
-        // Fetch if empty
-        const contentDiv = document.getElementById(`gnp-${tabName}`);
-        if (contentDiv.children.length === 1 && contentDiv.children[0].classList.contains('gnp-loading')) {
-          if (tabName === 'global') this.fetchGlobalNews();
-          else if (tabName === 'exchange') this.fetchExchangeNews();
-        }
-      });
-    });
-
-    // When the right sidebar toggles 'rsb-news', ensure we load data if it hasn't been loaded.
-    if (window.EventBus) {
-      window.EventBus.on('watchlist:toggle', ({ open, tab }) => {
-        if (open && tab === 'rsb-news') {
-          // Check if current tab is empty
-          const contentDiv = document.getElementById(`gnp-${this.activeGlobalTab}`);
-          if (contentDiv && contentDiv.children.length === 1 && contentDiv.children[0].classList.contains('gnp-loading')) {
-            if (this.activeGlobalTab === 'global') this.fetchGlobalNews();
-            else this.fetchExchangeNews();
-          }
-        }
-      });
+  /** detail-panel.js, kullanıcı News sekmesine her tıkladığında çağırır. */
+  onTabActivated() {
+    this._renderControls();
+    if (!this._loadedOnce) {
+      this._loadedOnce = true;
+      this._refetch();
     }
+  },
+
+  /* ── Sekme çubuğu kontrolleri: snipe + sırala ─────────── */
+  _buildControlsHTML() {
+    const snipeTitle = this._snipe
+      ? 'Snipe: showing selected coin\'s news — click to show general news'
+      : 'Snipe: showing general news — click to lock to selected coin';
+    const sortArrow = this._sortOrder === 'desc' ? '↑' : '↓';
+    const sortTitle = this._sortOrder === 'desc' ? 'Newest first' : 'Oldest first';
+    return `
+      <button class="bsp-icon-btn bsp-snipe-btn${this._snipe ? ' active' : ''}" id="news-snipe-btn" title="${snipeTitle}">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.2"/><path d="M8 1v2.4M8 12.6V15M1 8h2.4M12.6 8H15" stroke-linecap="round"/></svg>
+      </button>
+      <button class="bsp-sort-btn" id="news-sort-btn" title="${sortTitle}">${sortArrow}</button>`;
+  },
+
+  _renderControls() {
+    const el = document.getElementById('news-tabbar-controls');
+    if (!el) return;
+    el.innerHTML = this._buildControlsHTML();
+    el.querySelector('#news-snipe-btn')?.addEventListener('click', () => {
+      this._snipe = !this._snipe;
+      this._renderControls();
+      this._refetch();
+    });
+    el.querySelector('#news-sort-btn')?.addEventListener('click', () => {
+      this._sortOrder = this._sortOrder === 'desc' ? 'asc' : 'desc';
+      this._renderControls();
+      this.renderNews('dp-news-tab', [...this._lastNewsData].reverse(), this._emptyMsg());
+      this._lastNewsData.reverse(); // önbellek de aynı sırada kalsın
+    });
+  },
+
+  _emptyMsg() {
+    return this._snipe
+      ? `${this._activeSymbol || 'Coin'} için haber bulunamadı.`
+      : 'Bu kategoride haber bulunamadı.';
+  },
+
+  _refetch() {
+    if (this._snipe) this.fetchCoinNews(this._activeSymbol);
+    else this.fetchGeneralNews();
   },
 
   async fetchCryptoCompare(categories = '') {
@@ -104,11 +131,11 @@ const NewsAPI = {
   renderNews(containerId, newsData, emptyMsg = "Bu kategoride haber bulunamadı.") {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     container.innerHTML = '';
-    
+
     if (!newsData || !Array.isArray(newsData) || newsData.length === 0) {
-      container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:11px;">${emptyMsg}</div>`;
+      container.innerHTML = `<div class="gnp-loading">${emptyMsg}</div>`;
       return;
     }
 
@@ -118,11 +145,11 @@ const NewsAPI = {
     items.forEach(news => {
       const card = document.createElement('div');
       card.className = 'news-card';
-      
+
       const sourceName = news.source_info?.name || news.source;
       const timeAgo = this.getTimeAgo(news.published_on);
       const cleanTitleEN = news.title.trim();
-      
+
       card.innerHTML = `
         <div class="news-meta">
           <span class="news-source">${sourceName}</span>
@@ -151,35 +178,36 @@ const NewsAPI = {
     });
   },
 
-  async fetchGlobalNews() {
+  /** Snipe KAPALI — genel piyasa haberleri (eski "Global News" panelinin yerini alıyor). */
+  async fetchGeneralNews() {
+    const container = document.getElementById('dp-news-tab');
+    if (container) container.innerHTML = `<div class="gnp-loading">Haberler yükleniyor...</div>`;
+
     const data = await this.fetchCryptoCompare('Market,Trading,Blockchain');
-    this.renderNews('gnp-global', data);
+    this._lastNewsData = this._sortOrder === 'desc' ? data : [...data].reverse();
+    this.renderNews('dp-news-tab', this._lastNewsData, this._emptyMsg());
   },
 
-  async fetchExchangeNews() {
-    const data = await this.fetchCryptoCompare('Exchange');
-    this.renderNews('gnp-exchange', data);
-  },
-
+  /** Snipe AÇIK — sadece seçili coinin haberleri. */
   async fetchCoinNews(symbol) {
-    // If no symbol is provided or active, try to fetch empty msg
-    // Ensure we parse something like BTCUSDT to BTC
     let baseAsset = symbol;
     if (symbol && symbol.endsWith('USDT')) {
       baseAsset = symbol.replace('USDT', '');
     }
-    
-    // Select dp-news-tab
+    this._activeSymbol = baseAsset;
+
     const container = document.getElementById('dp-news-tab');
     if (container) container.innerHTML = `<div class="gnp-loading">${baseAsset || 'Coin'} haberleri aranıyor...</div>`;
-    
+
     if (!baseAsset) {
+      this._lastNewsData = [];
       this.renderNews('dp-news-tab', [], "Coin seçilmedi.");
       return;
     }
 
     const data = await this.fetchCryptoCompare(baseAsset);
-    this.renderNews('dp-news-tab', data, `${baseAsset} için haber bulunamadı.`);
+    this._lastNewsData = this._sortOrder === 'desc' ? data : [...data].reverse();
+    this.renderNews('dp-news-tab', this._lastNewsData, this._emptyMsg());
   }
 };
 

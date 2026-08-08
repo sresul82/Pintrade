@@ -22,35 +22,6 @@ window.initChartCore = function() {
     });
   });
 
-  // ── Global Navbar Tools ──────────────────────────────────
-  const navTfBtn = document.getElementById('nav-tf');
-  if (navTfBtn) {
-    navTfBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
-      const active = pm.getActivePane();
-      if (!active) return;
-      
-      const setTf = (tf) => {
-        active.setTF(tf);
-        EventBus.emit('tf:change', { sourceIdx: active.idx, tf: tf });
-      };
-
-      const menu = makeMenu([
-        { label: 'Candles', action: () => setType('candle') },
-        { label: 'Bars',    action: () => setType('bar') },
-        { label: 'Line',    action: () => setType('line') },
-        { label: 'Area',    action: () => setType('area') },
-      ]);
-      document.body.appendChild(menu);
-      requestAnimationFrame(() => {
-        menu.classList.add('open');
-        const rect = navChartTypeBtn.getBoundingClientRect();
-        positionMenu(menu, rect.left, rect.bottom + 4);
-      });
-    });
-  }
-
   // ── Bridge: symbol:change from navbar / State.setSymbol ──────
   // When sourceIdx is missing (navbar search), update the active pane
   EventBus.on('symbol:change', ({ sourceIdx, symbol, exchange }) => {
@@ -165,44 +136,6 @@ window.initChartCore = function() {
       }
     }
   });
-
-  // ── Bridge: index.html static sync toggles → SyncManager ───────
-  // The layout menu in index.html has: input[data-sync="symbol|interval|crosshair|time"]
-  // Wire them directly to sm.set() so they actually control sync state
-  {
-    const syncMap = { symbol: 'symbol', interval: 'interval', crosshair: 'crosshair', time: 'time' };
-    document.querySelectorAll('input[data-sync]').forEach(cb => {
-      const key = syncMap[cb.dataset.sync];
-      if (!key) return;
-      // Set initial visual state from current sm.opts
-      _applyToggleVisual(cb, sm.opts[key]);
-      // Wire change
-      cb.addEventListener('change', () => {
-        sm.set(key, cb.checked);
-        _applyToggleVisual(cb, cb.checked);
-      });
-    });
-  }
-
-  // ── Helper: update the custom toggle-slider visual ──────────────
-  function _applyToggleVisual(cb, checked) {
-    cb.checked = !!checked;
-    const slider = cb.nextElementSibling; // .toggle-slider span
-    if (!slider) return;
-    if (checked) {
-      slider.style.backgroundColor = 'var(--accent-blue)';
-      slider.style.boxShadow = '0 0 8px rgba(0,243,255,0.6)'; // Parlama efekti eklendi!
-      const circle = slider.querySelector('.toggle-circle');
-      if (circle) circle.style.transform = 'translateX(14px)';
-    } else {
-      slider.style.backgroundColor = 'var(--bg-tertiary)';
-      slider.style.boxShadow = 'none'; // Kapalıyken gölge yok
-      const circle = slider.querySelector('.toggle-circle');
-      if (circle) circle.style.transform = 'translateX(0)';
-    }
-  }
-
-
 
   // Restore saved layout from State (F5 persistence)
   let savedLayout = '1';

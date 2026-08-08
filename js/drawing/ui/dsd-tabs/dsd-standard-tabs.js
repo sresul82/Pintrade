@@ -453,14 +453,14 @@ window.DSDStandardTabs = (() => {
         <label class="dsd-label">Text alignment</label>
         <div style="display:flex; gap:8px;">
           <select class="dsd-select" id="dsd-textAlignV">
-            <option value="top"    ${(s.textAlignV==='top'    || (!s.textAlignV && d.tool !== 'vline'))?'selected':''}>Top</option>
-            <option value="middle" ${(s.textAlignV==='middle' || (!s.textAlignV && d.tool === 'vline'))?'selected':''}>Middle</option>
+            <option value="top"    ${(s.textAlignV==='top'    || (!s.textAlignV && d.tool !== 'vline' && d.tool !== 'channel'))?'selected':''}>Top</option>
+            <option value="middle" ${(s.textAlignV==='middle' || (!s.textAlignV && (d.tool === 'vline' || d.tool === 'channel')))?'selected':''}>${d.tool === 'channel' ? 'Inside' : 'Middle'}</option>
             <option value="bottom" ${s.textAlignV==='bottom'                   ?'selected':''}>Bottom</option>
           </select>
           <select class="dsd-select" id="dsd-textAlignH">
-            <option value="left"   ${s.textAlignH==='left'                     ?'selected':''}>Left</option>
-            <option value="center" ${(s.textAlignH==='center' || !s.textAlignH)?'selected':''}>Center</option>
-            <option value="right"  ${s.textAlignH==='right'                    ?'selected':''}>Right</option>
+            <option value="left"   ${s.textAlignH==='left' ? 'selected' : ''}>Left</option>
+            ${d.tool === 'vline' ? '' : `<option value="center" ${(s.textAlignH==='center' || !s.textAlignH)?'selected':''}>Center</option>`}
+            <option value="right"  ${(s.textAlignH==='right' || (d.tool==='vline' && !s.textAlignH)) ? 'selected' : ''}>Right</option>
           </select>
         </div>
       </div>
@@ -514,7 +514,7 @@ window.DSDStandardTabs = (() => {
         </div>`;
     }
 
-    // p1only: hray, crossline, vwap — one price + one bar
+    // p1only: hray, crossline — one price + one bar
     if (mode === 'p1only') {
       return `
         <div class="dsd-coords-grid">

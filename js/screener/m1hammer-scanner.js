@@ -1,14 +1,31 @@
 /**
  * M1HammerScanner
- * Binance Futures USDT coinlerini tarar.
- * Tetikleme: 5m kapanışında (her 5 dakikada bir).
+ *
+ * FAZ 1 (Görev 4, 2026-08-07) — REST polling'den WebSocket'e taşındı.
+ * Eskiden 5 dakikada bir ~500 sembol × 5 timeframe = ~2500 REST isteği
+ * atıyordu (IP ban sebebiydi, 34 saniyede banlanmıştı). Şimdi:
+ *   - Sadece TEST_SYMBOLS'taki küçük, sabit bir sembol kümesi taranıyor.
+ *   - Geçmiş veri (BARS kadar mum) tek seferlik REST backfill ile çekilir,
+ *     ortak BotEngine.queueRestRequest() kuyruğu üzerinden (Görev 5).
+ *   - Ondan sonra canlı güncellemeler MarketDataStore'un paylaşılan kline
+ *     WebSocket'inden gelir (Görev 5) — kendi ayrı bağlantımız yok artık,
+ *     REST'e bir daha dönülmüyor.
+ * Binance'te FR'deki gibi "tüm market" kline stream'i YOK — her sembol×tf
+ * için ayrı stream adı gerekiyor (sym@kline_5m). Bu yüzden tüm piyasaya
+ * (~500 sembol) genişlemek MarketDataStore'un paylaşılan bağlantısında bile
+ * pratik değil (200 stream/bağlantı sınırı) — bu, ayrı bir "Faz 2" kararı,
+ * kullanıcı onayı olmadan TEST_SYMBOLS büyütülmemeli.
+ *
  * Sinyal kriteri: 5m RSI < 30 (bull) veya > 70 (bear) ZORUNLU.
  * Timeframe'ler: 5m, 15m, 1h, 4h, 1D
  * WT: 5m/15m/1h/4h/1D — cross olduğunda değer gelir, yoksa null
+ *
+ * NOT: calcSRSI hâlâ O(n²) (bkz. calcRSI'yi döngü içinde tekrar tekrar
+ * çağırması) — 8 sembolde maliyeti önemsiz, ama TEST_SYMBOLS tüm markete
+ * genişlerse (Faz 2) önce bu optimize edilmeli.
  */
 const M1HammerScanner = (() => {
 
-  const BASE = 'https://fapi.binance.com';
   const RSI_PERIOD  = 14;
   const SRSI_PERIOD = 14;
   const SRSI_K      = 3;
@@ -17,8 +34,32 @@ const M1HammerScanner = (() => {
   const WT_AVG_LEN  = 21;  // Average Length
   const MAX_SIGNALS = 500;
 
-  let _running = false;
-  let _timer   = null;
+  // Her timeframe için gereken minimum bar sayısı + pay.
+  const BARS       = RSI_PERIOD * 2 + SRSI_K + SRSI_D + WT_CH_LEN + WT_AVG_LEN + 10;
+  const BUFFER_CAP = BARS + 20; // canlı akışta buffer bu boyutu aşmasın
+
+  // ⚠️ Faz 1 test kümesi — 8 yüksek hacimli coin. Görev 4'ün "küçük alt
+  // kümeyle başla, IP ban kontrolü yaparak genişlet" talimatı gereği burada
+  // sabit tutuluyor. Genişletme ayrı bir kullanıcı onayı ister.
+  const TEST_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT'];
+  const TIMEFRAMES   = ['5m', '15m', '1h', '4h', '1d'];
+
+  let _started    = false;
+  let _stopped    = true;
+
+  // Buffer: "SYM_tf" -> { closes:[], highs:[], lows:[] }
+  const _buf = new Map();
+  function _bufKey(sym, tf) { return `${sym}_${tf}`; }
+  function _getBuf(sym, tf) {
+    const k = _bufKey(sym, tf);
+    if (!_buf.has(k)) _buf.set(k, { closes: [], highs: [], lows: [] });
+    return _buf.get(k);
+  }
+  function _pushBar(sym, tf, h, l, c) {
+    const b = _getBuf(sym, tf);
+    b.closes.push(c); b.highs.push(h); b.lows.push(l);
+    if (b.closes.length > BUFFER_CAP) { b.closes.shift(); b.highs.shift(); b.lows.shift(); }
+  }
 
   // RSI hesapla (Wilder yöntemi)
   function calcRSI(closes) {
@@ -43,13 +84,11 @@ const M1HammerScanner = (() => {
   // Stochastic RSI hesapla — son bar'ın K değeri
   function calcSRSI(closes) {
     if (closes.length < RSI_PERIOD * 2 + SRSI_K + SRSI_D) return null;
-    // Tüm RSI değerlerini hesapla
     const rsiArr = [];
     for (let i = RSI_PERIOD; i < closes.length; i++) {
       rsiArr.push(calcRSI(closes.slice(0, i + 1)));
     }
     if (rsiArr.length < SRSI_PERIOD + SRSI_K + SRSI_D - 2) return null;
-    // Stoch RSI
     const stochArr = [];
     for (let i = SRSI_PERIOD - 1; i < rsiArr.length; i++) {
       const slice = rsiArr.slice(i - SRSI_PERIOD + 1, i + 1);
@@ -57,18 +96,15 @@ const M1HammerScanner = (() => {
       const maxR = Math.max(...slice);
       stochArr.push(maxR === minR ? 0 : (rsiArr[i] - minR) / (maxR - minR) * 100);
     }
-    // K = SMA(stoch, SRSI_K)
     if (stochArr.length < SRSI_K) return null;
     const k = stochArr.slice(-SRSI_K).reduce((a, b) => a + b, 0) / SRSI_K;
     return Math.round(k);
   }
 
   // WaveTrend hesapla — son bar'da cross var mı, cross değeri ne?
-  // Returns: { val: number, crossed: true/false } veya null
   function calcWT(hlc3Arr) {
     if (hlc3Arr.length < WT_CH_LEN + WT_AVG_LEN + 4) return null;
 
-    // ESA = EMA(hlc3, CH_LEN)
     function ema(arr, len) {
       const k = 2 / (len + 1);
       let e = arr[0];
@@ -76,8 +112,7 @@ const M1HammerScanner = (() => {
       return e;
     }
 
-    // WT1 ve WT2 dizilerini hesapla (son 5 bar yeterli)
-    const wt1Arr = [], wt2Arr = [];
+    const wt1Arr = [];
     const needed = WT_CH_LEN + WT_AVG_LEN + 5;
     const slice = hlc3Arr.slice(-needed);
 
@@ -87,20 +122,16 @@ const M1HammerScanner = (() => {
       const dArr = window.map(v => Math.abs(v - esa));
       const d = ema(dArr, WT_CH_LEN);
       const ci = d !== 0 ? (slice[i] - esa) / (0.015 * d) : 0;
-      // WT1 için yeterli ci birikince
       wt1Arr.push(ci);
     }
 
     if (wt1Arr.length < WT_AVG_LEN + 2) return null;
 
-    // WT1 = EMA(ci, AVG_LEN) — son 2 değer
     const wt1Prev = ema(wt1Arr.slice(-WT_AVG_LEN - 1, -1), WT_AVG_LEN);
     const wt1Curr = ema(wt1Arr.slice(-WT_AVG_LEN), WT_AVG_LEN);
-    // WT2 = SMA(WT1, 4)
     const wt2Prev = wt1Arr.slice(-5, -1).reduce((a, b) => a + b, 0) / 4;
     const wt2Curr = wt1Arr.slice(-4).reduce((a, b) => a + b, 0) / 4;
 
-    // Cross tespiti
     const bullCross = wt1Prev <= wt2Prev && wt1Curr > wt2Curr;
     const bearCross = wt1Prev >= wt2Prev && wt1Curr < wt2Curr;
 
@@ -112,82 +143,110 @@ const M1HammerScanner = (() => {
     };
   }
 
-  // Binance kline çek
+  function _hlc3(b) {
+    return b.closes.map((c, i) => (b.highs[i] + b.lows[i] + c) / 3);
+  }
+
+  // Binance kline REST — SADECE tek seferlik backfill için, proxy üzerinden
+  // (server.js CORS proxy'si — doğrudan fapi.binance.com'a gitmiyoruz).
   async function fetchKlines(symbol, interval, limit) {
-    const url = `${BASE}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const base = (typeof AppConfig !== 'undefined' && AppConfig?.API?.binance?.restFutures)
+      || 'https://fapi.binance.com/api/binance/futures';
+    const url = `${base}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}&_t=${Date.now()}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`kline fetch failed: ${symbol} ${interval}`);
+    if (res.status === 429 || res.status === 418) {
+      throw new Error(`BAN_SIGNAL_${res.status}`);
+    }
+    if (!res.ok) throw new Error(`kline fetch failed: ${symbol} ${interval} (HTTP ${res.status})`);
     return res.json();
   }
 
-  // Tek coin tara
-  async function scanSymbol(symbol, currentFR) {
-    // Her timeframe için gereken bar sayısı
-    const BARS = RSI_PERIOD * 2 + SRSI_K + SRSI_D + WT_CH_LEN + WT_AVG_LEN + 10;
+  /** Tek seferlik geçmiş veri doldurma. TEST_SYMBOLS × TIMEFRAMES kadar
+   *  istek atar (8×5=40), BotEngine'in paylaşılan kuyruğu üzerinden (Görev 5)
+   *  — diğer botlarla aynı rate-limit bütçesini paylaşır. 429/418 görürse
+   *  BotEngine kuyruğu TÜM botlar için duraklar, biz de hemen dururuz. */
+  async function _backfill() {
+    const total = TEST_SYMBOLS.length * TIMEFRAMES.length;
+    console.log(`[M1Hammer] Backfill başlıyor — ${total} REST isteği (tek seferlik, ortak BotEngine kuyruğu üzerinden, sonrası WS).`);
+    let ok = 0;
 
-    // Paralel çek: 5m, 15m, 1h, 4h, 1D
-    const [k5m, k15m, k1h, k4h, k1d] = await Promise.all([
-      fetchKlines(symbol, '5m',  BARS),
-      fetchKlines(symbol, '15m', BARS),
-      fetchKlines(symbol, '1h',  BARS),
-      fetchKlines(symbol, '4h',  BARS),
-      fetchKlines(symbol, '1d',  BARS),
-    ]);
+    for (const sym of TEST_SYMBOLS) {
+      for (const tf of TIMEFRAMES) {
+        try {
+          const kl = await BotEngine.queueRestRequest(() => fetchKlines(sym, tf, BARS));
+          const b = _getBuf(sym, tf);
+          b.closes = kl.map(k => parseFloat(k[4]));
+          b.highs  = kl.map(k => parseFloat(k[2]));
+          b.lows   = kl.map(k => parseFloat(k[3]));
+          ok++;
+        } catch (err) {
+          if (String(err.message).startsWith('BAN_SIGNAL')) {
+            console.error(`[M1Hammer] ⛔⛔⛔ BAN/RATE-LIMIT sinyali (${err.message}) — backfill DURDURULDU (BotEngine kuyruğu tüm botlar için duraklatıldı). Muhtemel VPN paylaşımlı IP etkisi. M1HammerScanner.stop() zaten çağrıldı, devam etmeden önce durumu bildir.`);
+            stop();
+            return false;
+          }
+          console.warn(`[M1Hammer] Backfill hata (${sym} ${tf}):`, err.message);
+        }
+      }
+    }
 
-    const closes5m  = k5m.map(k => parseFloat(k[4]));
-    const closes15m = k15m.map(k => parseFloat(k[4]));
-    const closes1h  = k1h.map(k => parseFloat(k[4]));
-    const closes4h  = k4h.map(k => parseFloat(k[4]));
-    const closes1d  = k1d.map(k => parseFloat(k[4]));
+    console.log(`[M1Hammer] Backfill tamam — ${ok}/${total} istek başarılı.`);
+    return true;
+  }
 
-    const hlc3_5m  = k5m.map(k  => (parseFloat(k[2]) + parseFloat(k[3]) + parseFloat(k[4])) / 3);
-    const hlc3_15m = k15m.map(k => (parseFloat(k[2]) + parseFloat(k[3]) + parseFloat(k[4])) / 3);
-    const hlc3_1h  = k1h.map(k  => (parseFloat(k[2]) + parseFloat(k[3]) + parseFloat(k[4])) / 3);
-    const hlc3_4h  = k4h.map(k  => (parseFloat(k[2]) + parseFloat(k[3]) + parseFloat(k[4])) / 3);
-    const hlc3_1d  = k1d.map(k  => (parseFloat(k[2]) + parseFloat(k[3]) + parseFloat(k[4])) / 3);
+  function getFRMap() {
+    const map = {};
+    try {
+      const signals = typeof scalpFRMonitor !== 'undefined'
+        ? scalpFRMonitor.getSignals?.() || []
+        : [];
+      signals.forEach(s => { map[s.symbol] = s.currentFR; });
+    } catch (e) {}
+    return map;
+  }
 
-    // RSI
-    const rsi5m  = calcRSI(closes5m);
-    const rsi15m = calcRSI(closes15m);
-    const rsi1h  = calcRSI(closes1h);
-    const rsi4h  = calcRSI(closes4h);
-    const rsi1d  = calcRSI(closes1d);
+  function _computeSignal(sym) {
+    const c5  = _getBuf(sym, '5m');
+    const c15 = _getBuf(sym, '15m');
+    const c1h = _getBuf(sym, '1h');
+    const c4h = _getBuf(sym, '4h');
+    const c1d = _getBuf(sym, '1d');
 
-    // 5m RSI zorunlu kontrol
+    const rsi5m = calcRSI(c5.closes);
     if (rsi5m === null) return null;
     const isBull = rsi5m < 30;
     const isBear = rsi5m > 70;
-    if (!isBull && !isBear) return null;
+    if (!isBull && !isBear) return null; // 5m RSI zorunlu kriteri
 
-    // SRSI
-    const srsi5m  = calcSRSI(closes5m);
-    const srsi15m = calcSRSI(closes15m);
-    const srsi1h  = calcSRSI(closes1h);
-    const srsi4h  = calcSRSI(closes4h);
+    const rsi15m = calcRSI(c15.closes);
+    const rsi1h  = calcRSI(c1h.closes);
+    const rsi4h  = calcRSI(c4h.closes);
+    const rsi1d  = calcRSI(c1d.closes);
 
-    // WT — sadece cross olduğunda değer gelir
-    const wt5m  = calcWT(hlc3_5m);
-    const wt15m = calcWT(hlc3_15m);
-    const wt1h  = calcWT(hlc3_1h);
-    const wt4h  = calcWT(hlc3_4h);
-    const wt1d  = calcWT(hlc3_1d);
+    const srsi5m  = calcSRSI(c5.closes);
+    const srsi15m = calcSRSI(c15.closes);
+    const srsi1h  = calcSRSI(c1h.closes);
+    const srsi4h  = calcSRSI(c4h.closes);
+
+    const wt5m  = calcWT(_hlc3(c5));
+    const wt15m = calcWT(_hlc3(c15));
+    const wt1h  = calcWT(_hlc3(c1h));
+    const wt4h  = calcWT(_hlc3(c4h));
+    const wt1d  = calcWT(_hlc3(c1d));
 
     const wtDirection = isBull ? 'bull' : 'bear';
 
-    // Boost value: (currentPrice - prevPrice) / prevPrice * 100
-    const currentPrice = closes5m[closes5m.length - 1];
-    const prevPrice    = closes5m[closes5m.length - 2];
-    const boostValue   = prevPrice !== 0
-      ? ((currentPrice - prevPrice) / prevPrice) * 100
-      : 0;
+    const currentPrice = c5.closes[c5.closes.length - 1];
+    const prevPrice    = c5.closes[c5.closes.length - 2];
+    const boostValue   = prevPrice ? ((currentPrice - prevPrice) / prevPrice) * 100 : 0;
 
     return {
-      symbol,
+      symbol: sym,
       exchange: 'bn',
       boostValue,
       currentPrice,
       prevPrice,
-      fr: currentFR ?? null,
+      fr: getFRMap()[sym] ?? null,
       rsi5m,  rsi15m, rsi1h,  rsi4h,  rsi1d,
       srsi5m, srsi15m, srsi1h, srsi4h,
       wt5m:  wt5m  ? wt5m.val  : null,
@@ -200,99 +259,56 @@ const M1HammerScanner = (() => {
     };
   }
 
-  // Tüm USDT futures sembollerini al
-  async function fetchAllSymbols() {
-    const res = await fetch(`${BASE}/fapi/v1/exchangeInfo`);
-    const data = await res.json();
-    return data.symbols
-      .filter(s => s.quoteAsset === 'USDT' && s.status === 'TRADING' && s.contractType === 'PERPETUAL')
-      .map(s => s.symbol);
+  function _upsertSignal(sig) {
+    const existing = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
+    const idx = existing.findIndex(s => s.symbol === sig.symbol);
+    if (idx >= 0) existing[idx] = sig; else existing.unshift(sig);
+    window.m1HammerSignals = existing.slice(0, MAX_SIGNALS);
+    if (window.BotSignalsPanel) BotSignalsPanel.render();
   }
 
-  // Mevcut FR değerlerini al (screener'dan)
-  function getFRMap() {
-    const map = {};
-    try {
-      const signals = typeof scalpFRMonitor !== 'undefined'
-        ? scalpFRMonitor.getSignals?.() || []
-        : [];
-      signals.forEach(s => { map[s.symbol] = s.currentFR; });
-    } catch (e) {}
-    return map;
+  // Görev 5: kendi özel WS bağlantımız yok artık — MarketDataStore'un
+  // paylaşılan kline stream'ine abone oluyoruz. Reconnect/backoff mantığı
+  // da MarketDataStore tarafında merkezi olarak yönetiliyor.
+  function _onKlineBar(bar) {
+    if (!bar.isFinal) return; // sadece kapanan bar işlenir
+    _pushBar(bar.symbol, bar.interval, bar.high, bar.low, bar.close);
+    const sig = _computeSignal(bar.symbol);
+    if (sig) _upsertSignal(sig);
   }
 
-  // Ana tarama döngüsü
-  async function _scan() {
-    if (_running) return;
-    _running = true;
-    console.log('[M1Hammer] Tarama başladı...');
-
-    try {
-      const [symbols, frMap] = await Promise.all([
-        fetchAllSymbols(),
-        Promise.resolve(getFRMap()),
-      ]);
-
-      // Rate limit aşmamak için gruplar halinde tara (5'er paralel)
-      const BATCH = 5;
-      const newSignals = [];
-
-      for (let i = 0; i < symbols.length; i += BATCH) {
-        const batch = symbols.slice(i, i + BATCH);
-        const results = await Promise.allSettled(
-          batch.map(sym => scanSymbol(sym, frMap[sym] ?? null))
-        );
-        results.forEach(r => {
-          if (r.status === 'fulfilled' && r.value) newSignals.push(r.value);
-        });
-      }
-
-      // Mevcut sinyallerle birleştir (aynı symbol varsa güncelle, yoksa ekle)
-      const existing = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
-      const merged = [...newSignals];
-      existing.forEach(old => {
-        if (!merged.find(n => n.symbol === old.symbol)) merged.push(old);
-      });
-
-      // MAX_SIGNALS sınırı — en yeni kalır
-      window.m1HammerSignals = merged
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, MAX_SIGNALS);
-
-      console.log(`[M1Hammer] ${newSignals.length} sinyal bulundu.`);
-
-      // Panel'i güncelle
-      if (window.BotSignalsPanel) BotSignalsPanel.render();
-
-    } catch (err) {
-      console.error('[M1Hammer] Tarama hatası:', err);
-    } finally {
-      _running = false;
-    }
+  function _subscribeAll() {
+    TEST_SYMBOLS.forEach(sym => {
+      TIMEFRAMES.forEach(tf => MarketDataStore.subscribeKlines(sym, tf, _onKlineBar));
+    });
+    console.log(`[M1Hammer] MarketDataStore kline stream'ine abone olundu (${TEST_SYMBOLS.length * TIMEFRAMES.length} stream, ${TEST_SYMBOLS.join(', ')})`);
   }
 
-  // 5m kapanışında tetikle
-  function _scheduleNext() {
-    const now = Date.now();
-    const ms5m = 5 * 60 * 1000;
-    const nextClose = Math.ceil(now / ms5m) * ms5m + 2000; // +2sn kapanış toleransı
-    const delay = nextClose - now;
-    _timer = setTimeout(() => {
-      _scan();
-      _scheduleNext();
-    }, delay);
-    console.log(`[M1Hammer] Sonraki tarama: ${Math.round(delay / 1000)}s sonra`);
+  function _unsubscribeAll() {
+    TEST_SYMBOLS.forEach(sym => {
+      TIMEFRAMES.forEach(tf => MarketDataStore.unsubscribeKlines(sym, tf, _onKlineBar));
+    });
   }
 
-  function start() {
-    window.m1HammerSignals = [];
-    _scan();         // Hemen bir kere çalıştır
-    _scheduleNext(); // 5m kapanışlarına sync et
+  async function start() {
+    if (_started) { console.log('[M1Hammer] zaten çalışıyor.'); return; }
+    _started = true;
+    _stopped = false;
+    window.m1HammerSignals = Array.isArray(window.m1HammerSignals) ? window.m1HammerSignals : [];
+
+    console.log(`[M1Hammer] FAZ 1 test modu — ${TEST_SYMBOLS.length} sembol: ${TEST_SYMBOLS.join(', ')}`);
+
+    const backfillOk = await _backfill();
+    if (!backfillOk) { _started = false; return; }
+
+    _subscribeAll();
   }
 
   function stop() {
-    if (_timer) clearTimeout(_timer);
-    _running = false;
+    _stopped = true;
+    _started = false;
+    _unsubscribeAll();
+    console.log('[M1Hammer] Durduruldu.');
   }
 
   return { start, stop };

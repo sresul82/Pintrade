@@ -2,9 +2,9 @@
  * PinTrade V2.4 - Drawing Forecast and Measurement Tools Module
  *
  * Handles rendering for:
- *   - FORECASTING (Long/Short Position, Position Forecast, Bar Pattern, Ghost Feed, Sector)
+ *   - FORECASTING (Long/Short Position)
  *   - PRICE & DATE (Price Range, Date Range, Date & Price Range)
- *   - VOLUME-BASED (Anchored VWAP, Fixed Range Vol Profile, Anchored Vol Profile)
+ *   - VOLUME-BASED (Fixed Range Vol Profile, Anchored Vol Profile)
  *   - Measurement (Measure Tool / Cetvel)
  */
 
@@ -181,11 +181,6 @@ window.DrawingForecast = (() => {
       }
     }
 
-  function _drawPosForecast(ctx, d, pane)    { /* Placeholder */ }
-  function _drawBarPattern(ctx, d, pane)     { /* Placeholder */ }
-  function _drawGhostFeed(ctx, d, pane)      { /* Placeholder */ }
-  function _drawSector(ctx, d, pane)         { /* Placeholder */ }
-
   // ── PRICE & DATE (Aralıklar) ─────────────────────────────
 
   function _drawPriceRange(ctx, d, pane)     { /* Placeholder */ }
@@ -194,54 +189,15 @@ window.DrawingForecast = (() => {
 
   // ── VOLUME-BASED (Hacim Tabanlı) ─────────────────────────
 
-  function _drawAnchoredVWAP(ctx, d, pane) {
-      const candles = pane.candlesData;
-      if (!candles || candles.length === 0) return;
-      const toSec = t => typeof t === 'object'
-        ? new Date(t.year, t.month - 1, t.day).getTime() / 1000 : t;
-      const anchorT = toSec(d.p1.time);
-      let cumVol = 0, cumVP = 0;
-      const pts = [];
-      for (const c of candles) {
-        if (toSec(c.time) < anchorT) continue;
-        const tp  = (c.high + c.low + c.close) / 3;
-        const vol = c.volume || 1;
-        cumVol += vol; cumVP += tp * vol;
-        const vwap = cumVP / cumVol;
-        const px = pane.chart.timeScale().timeToCoordinate(c.time);
-        const py = pane.series.priceToCoordinate(vwap);
-        if (px !== null && py !== null) pts.push({ x: px, y: py });
-      }
-      if (pts.length < 2) return;
-      ctx.save();
-      ctx.strokeStyle = d.style?.color || '#2962ff';
-      ctx.lineWidth = d.style?.width || 2;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(pts[0].x, pts[0].y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = d.style?.color || '#2962ff';
-      ctx.fill();
-      ctx.restore();
-    }
-
   function _drawFixedVolProf(ctx, d, pane)   { /* Placeholder */ }
   function _drawAnchVolProf(ctx, d, pane)    { /* Placeholder */ }
 
   return {
     drawMeasureTool:    _drawMeasureTool,
     drawPosition:       _drawPosition,
-    drawPosForecast:    _drawPosForecast,
-    drawBarPattern:     _drawBarPattern,
-    drawGhostFeed:      _drawGhostFeed,
-    drawSector:         _drawSector,
     drawPriceRange:     _drawPriceRange,
     drawDateRange:      _drawDateRange,
     drawDatePriceRange: _drawDatePriceRange,
-    drawAnchoredVWAP:   _drawAnchoredVWAP,
     drawFixedVolProf:   _drawFixedVolProf,
     drawAnchVolProf:    _drawAnchVolProf,
   };

@@ -5,7 +5,7 @@
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 var(--navbar-padding-x);
   gap: 2px;
   flex-shrink: 0;
   z-index: 100;
@@ -724,13 +724,30 @@
   height: 34px; /* Tüm konteynerlerle aynı standart yükseklik */
   padding: 0 4px; /* Daraltıldı: flex sığsın diye */
   gap: 4px; /* Daraltıldı: Elemanlar arası boşluğu kıstık */
-  max-width: var(--coin-detail-width); /* Watchlist ile senkronize ama esneyebilir */
+  /* Watchlist paneliyle BİREBİR aynı genişlik — sol ve sağ kenarlar hizalı.
+     Eskiden max-width idi, o yüzden içerik azken 480px yerine ~430px'e
+     sıkışıp sol kenar watchlist'in içinde kalıyordu. */
+  width: var(--coin-detail-width);
+  max-width: var(--coin-detail-width);
   min-width: 0;
   justify-content: space-between;
-  margin-right: var(--sidebar-width, 44px); 
-  flex-shrink: 1; /* Taştığında küçülebilir olsun (Bug 3 fixed) */
+  /* Sağ kenar, dikey ikon çubuğunun sol kenarıyla hizalansın.
+     Eskiden --sidebar-width (40px) kullanılıyordu ama çubuk 44px — 4px kayma.
+     Navbar'ın kendi sağ padding'i de düşülüyor, yoksa 8px daha kayıyor. */
+  margin-right: calc(var(--right-sidebar-width) - var(--navbar-padding-x));
+  flex-shrink: 1;
   box-sizing: border-box;
   overflow: hidden; /* Olur da taşarsa dışarı sarkmasını engeller */
+}
+
+/* Dar ekranda (< 1300px) navbar'ın tamamı sığmıyor. Orada hizayı bırakıp
+   eski esnek davranışa dönüyoruz — yoksa navbar taşıyor.
+   1300px eşiği, dosyanın altındaki mevcut responsive breakpoint ile aynı. */
+@media (max-width: 1299px) {
+  .nb-coin-details {
+    width: auto;
+    flex-shrink: 1;
+  }
 }
 
 .nb-cd-item {
@@ -740,6 +757,16 @@
   text-align: center;
   gap: 2px;
   min-width: 52px; /* 65px'ten daraltıldı, UI sığsın diye */
+}
+
+/* SYMBOL kutusu: artan genişliği bu emsin, yani kutu sola doğru büyüsün.
+   Diğer alanlar (PRICE, CHANGE, FR...) sabit kalır. */
+.nb-cd-item:first-child {
+  flex: 1 1 auto;
+  align-items: flex-start;
+  text-align: left;
+  padding-left: 6px;
+  min-width: 72px;
 }
 
 .nb-cd-label {

@@ -437,11 +437,11 @@ window.PropertyToolbar = (() => {
         : '<line x1="2" y1="8" x2="22" y2="8" stroke="#a3a6af" stroke-width="2"/>';
 
     const isFibo = _drawing.tool && _drawing.tool.startsWith('fib');
-    const isPosition = ['longpos', 'shortpos', 'posforecast'].includes(_drawing.tool);
+    const isPosition = ['longpos', 'shortpos'].includes(_drawing.tool);
 
     const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'triangle', 'arc'].includes(_drawing.tool);
-    const hasText = !['arrowdraw', 'regression', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'curve', 'doublecurve', 'polyline', 'pathtool', 'trendangle', 'crossline'].includes(_drawing.tool);
-    const hasAlert = !['rotatedrect', 'triangle', 'polyline', 'pathtool', 'circle', 'arc', 'curve', 'doublecurve'].includes(_drawing.tool);
+    const hasText = !['arrowdraw', 'regression', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'pathtool', 'trendangle', 'crossline'].includes(_drawing.tool);
+    const hasAlert = !['rotatedrect', 'triangle', 'pathtool', 'circle', 'arc'].includes(_drawing.tool);
 
     _panel = document.createElement('div');
     _panel.id = 'pt-toolbar';
@@ -1275,7 +1275,7 @@ window.PropertyToolbar = (() => {
         const drawings = State.getDrawings(data.symbol);
         _drawing = drawings.find(d => d.id === data.id) || null;
         if (_drawing) {
-          const isPos = ['longpos','shortpos','posforecast'].includes(_drawing.tool);
+          const isPos = ['longpos','shortpos'].includes(_drawing.tool);
           // For position tools: toolbar appears above the TOP edge of the shape
           let tx = data.x || window.innerWidth / 2;
           let ty = data.y || window.innerHeight / 2;

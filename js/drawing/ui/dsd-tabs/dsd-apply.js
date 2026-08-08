@@ -193,7 +193,11 @@ window.DSDApply = (() => {
     const fibCheckboxes = overlay.querySelectorAll('.js-fib-active:not([class*="js-sf-"])');
     if (fibCheckboxes.length > 0) {
        s.fibLevels = s.fibLevels || [];
-       if (s.fibLevels.length !== 24) s.fibLevels = new Array(24).fill(null).map(()=>({v:0,color:'#000',active:false}));
+       // Eskiden burada sabit 24 bekleniyordu — liste artık (Fib Time Zone
+       // hariç) 12 satıra indirildiği için bu koşul HER apply'da tutuyor ve
+       // diziyi 24 boş satıra sıfırlıyordu. Artık ekrandaki gerçek checkbox
+       // sayısına göre boyutlandırılıyor.
+       if (s.fibLevels.length !== fibCheckboxes.length) s.fibLevels = new Array(fibCheckboxes.length).fill(null).map(()=>({v:0,color:'#000',active:false}));
        fibCheckboxes.forEach((cb, i) => { s.fibLevels[i].active = cb.checked; });
        overlay.querySelectorAll('.js-fib-val:not([class*="js-sf-"])').forEach((inp, i) => { s.fibLevels[i].v = parseFloat(inp.value) || 0; });
        overlay.querySelectorAll('.js-fib-color:not([class*="js-sf-"])').forEach((swatch, i) => { s.fibLevels[i].color = swatch.dataset.color; });
@@ -229,7 +233,7 @@ window.DSDApply = (() => {
        }
     }
 
-    if (['longpos', 'shortpos', 'posforecast'].includes(drawing.tool)) {
+    if (['longpos', 'shortpos'].includes(drawing.tool)) {
       if (get('dsd-pos-accSize')) s.accSize = parseFloat(get('dsd-pos-accSize').value) || 10000;
       if (get('dsd-pos-risk')) s.risk = parseFloat(get('dsd-pos-risk').value);
       if (get('dsd-pos-risk-type')) s.riskType = get('dsd-pos-risk-type').value;

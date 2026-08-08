@@ -27,18 +27,13 @@ const DrawingSettingsDialog = (() => {
     infoline:      'Info Line',
     flattopbottom: 'Flat Top/Bottom',
     regression:    'Regression Trend',
-    vwap:          'Anchored VWAP',
     'fib-ret':     'Fib Retracement',
     'fib-ext':     'Fib Extension',
     'fib-channel': 'Fib Channel',
     'fib-timezone':'Fib Time Zone',
-    'fib-circles': 'Fib Circles',
     'fib-speedfan':'Fib Speed Resistance Fan',
-    'fib-timebased':'Trend-Based Fib Time',
-    'fib-spiral':  'Fib Spiral',
     longpos:       'Long Position',
     shortpos:      'Short Position',
-    posforecast:   'Forecast',
     rotatedrect:   'Rotated Rectangle',
     circle:        'Circle',
     ellipse:       'Ellipse',
@@ -47,9 +42,6 @@ const DrawingSettingsDialog = (() => {
     arrowdown:     'Arrow Down',
     triangle:      'Triangle',
     arc:           'Arc',
-    curve:         'Curve',
-    doublecurve:   'Double Curve',
-    polyline:      'Polyline',
     pathtool:      'Path',
     note:          'Note',
     callout:       'Callout',
@@ -83,20 +75,15 @@ const DrawingSettingsDialog = (() => {
     regression:   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasInputs:true, coordsMode:'p2'       },
     flattopbottom:{ priceLabel:false, extend:true, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:true, hasFlatTopStyle:true, coordsMode:'p3' },
     rect:         { priceLabel:false, extend:true,  midpoint:true, stats:false, capArrows:false, hasFill:true, hasText:true, coordsMode:'p2'       },
-    vwap:         { priceLabel:true,  extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, coordsMode:'p1only'   },
     // Fibo
     'fib-ret':    { isFibo:true, coordsMode:'p2' },
     'fib-ext':    { isFibo:true, coordsMode:'p3' },
     'fib-channel':{ isFibo:true, coordsMode:'p3' },
     'fib-timezone':{ isFibo:true, coordsMode:'p2' },
-    'fib-circles':{ isFibo:true, coordsMode:'p2' },
     'fib-speedfan': { isFibo:true, coordsMode:'p2' },
-    'fib-timebased': { isFibo:true, coordsMode:'p3' },
-    'fib-spiral':  { isFibo:true, coordsMode:'p2' },
     // Positions
     'longpos':    { isPos:true, coordsMode:'p3' },
     'shortpos':   { isPos:true, coordsMode:'p3' },
-    'posforecast':{ isPos:true, coordsMode:'p3' },
     'rotatedrect':{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
     'circle':     { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p2' },
     'ellipse':    { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p2' },
@@ -105,9 +92,6 @@ const DrawingSettingsDialog = (() => {
     'arrowdown':  { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:false, coordsMode:'p1only' },
     'triangle':   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
     'arc':        { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
-    'curve':      { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:false, coordsMode:'p3' },
-    'doublecurve':{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:false, coordsMode:'p4' },
-    'polyline':   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:false, coordsMode:'multi' },
     'pathtool':   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:false, coordsMode:'multi' },
     'texttool':   { isTextTool:true, hasText:true, coordsMode:'p1only' },
     'note':       { isAnnotation:true, hasText:true, coordsMode:'p2' },
@@ -328,8 +312,12 @@ const DrawingSettingsDialog = (() => {
         dialog.style.position = 'fixed';
         dialog.style.margin = '0';
         dialog.style.left = savedPos.left + 'px';
-        dialog.style.top = savedPos.top + 'px';
-        
+        // Kaydedilmiş konum navbar'ın üstündeyse (40px'ten az), ilk anda o
+        // konumla çizip bir RAF sonra düzeltmek yerine baştan sınırlı
+        // veriyoruz — yoksa açılışta navbar'ın üstüne taşan bir kare (flash)
+        // görünüyordu, sonra RAF ile aşağı "zıplıyordu".
+        dialog.style.top = Math.max(40, savedPos.top) + 'px';
+
         requestAnimationFrame(() => {
           let px = dialog.offsetLeft;
           let py = dialog.offsetTop;
@@ -338,7 +326,11 @@ const DrawingSettingsDialog = (() => {
           if (px + pw > window.innerWidth) px = window.innerWidth - pw - 4;
           if (py + ph > window.innerHeight) py = window.innerHeight - ph - 4;
           px = Math.max(4, px);
-          py = Math.max(4, py);
+          // DSDUtils.makeDraggable sürüklerken üst sınırı 40px tutuyor (navbar
+          // yüksekliği ~38px) — burada da AYNI sınır kullanılmalı, yoksa eski
+          // kaydedilmiş bir konum (navbar sürükleme koruması eklenmeden önceki)
+          // panel her açılışta navbar'ın üstüne taşıyordu.
+          py = Math.max(40, py);
           dialog.style.left = px + 'px';
           dialog.style.top = py + 'px';
         });
@@ -1390,7 +1382,11 @@ const DrawingSettingsDialog = (() => {
                  if (swatch.classList.contains('js-sf-price-col')) lvlArr = drawing.style.priceLevels = new Array(7).fill(null).map(()=>({v:0,color:'#000',active:false,width:1,style:'solid'}));
                  else lvlArr = drawing.style.timeLevels = new Array(7).fill(null).map(()=>({v:0,color:'#000',active:false,width:1,style:'solid'}));
               } else {
-                 lvlArr = drawing.style.fibLevels = new Array(24).fill(null).map(()=>({v:0,color:'#000',active:false,width:1,style:'solid'}));
+                 // Fib Timezone hariç (farklı birim: bar sayısı) liste 2.272
+                 // üstü kaldırıldığı için 12 satır (bkz. dsd-fibo-tabs.js) —
+                 // bu fallback de aynı boyutta kalmalı, yoksa panel yeniden şişer.
+                 const fallbackSize = drawing.tool === 'fib-timezone' ? 11 : 12;
+                 lvlArr = drawing.style.fibLevels = new Array(fallbackSize).fill(null).map(()=>({v:0,color:'#000',active:false,width:1,style:'solid'}));
               }
             }
             lvlArr[idx].color = newColor;
@@ -1552,9 +1548,16 @@ const DrawingSettingsDialog = (() => {
       </svg>`;
     };
 
-    const row = (cbId, label, swatchClass, color, width, lineStyle, previewId, opacity) => `
+    // BUG: `cbId.replace('reg-show-', 'show'+...)` bir "replace" değil bir
+    // "prepend" gibi davranıyordu — örn. 'reg-show-up'.replace('reg-show-',
+    // 'showUp') → 'showUpup' (var olmayan bir property). `s['showUpup']`
+    // hep `undefined` olduğundan `!== false` hep `true` çıkıyor, yani bu
+    // checkbox HER ZAMAN işaretli görünüyordu — kullanıcı "Up"/"Down"/"Base"
+    // kutusunu kapatıp kaydetse bile (çizim doğru gizleniyordu, sadece
+    // diyalog tekrar açılınca checkbox yanlışlıkla işaretli gösteriliyordu).
+    const row = (cbId, label, swatchClass, color, width, lineStyle, previewId, opacity, styleKey) => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
-        <input id="${cbId}" type="checkbox" ${(s[cbId.replace('reg-show-','show'+(cbId.includes('base')?'Base':cbId.includes('up')?'Up':'Down'))] !== false) ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
+        <input id="${cbId}" type="checkbox" ${(s[styleKey] !== false) ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
         <label for="${cbId}" style="color:#d1d4dc;font-size:13px;min-width:46px;cursor:pointer;">${label}</label>
         <div class="dsd-reg-line-combo ${swatchClass}" data-color="${color}" data-width="${width}" data-linestyle="${lineStyle}" data-opacity="${opacity ?? 0.1}"
           style="display:flex;align-items:center;gap:4px;background:#1e222d;border:1px solid #363c4e;border-radius:4px;padding:3px 7px;cursor:pointer;">
@@ -1565,9 +1568,9 @@ const DrawingSettingsDialog = (() => {
 
     return `
       <div style="padding:8px 0;">
-        ${row('reg-show-base','Base','js-reg-line-base', baseColor, baseWidth, baseStyle, 'reg-prev-base', s.baseOpacity ?? 0.1)}
-        ${row('reg-show-up',  'Up',  'js-reg-line-up',   upColor,   upWidth,   upStyle,   'reg-prev-up',   s.upOpacity   ?? 0.1)}
-        ${row('reg-show-down','Down','js-reg-line-down',  downColor, downWidth, downStyle, 'reg-prev-down', s.downOpacity ?? 0)}
+        ${row('reg-show-base','Base','js-reg-line-base', baseColor, baseWidth, baseStyle, 'reg-prev-base', s.baseOpacity ?? 0.1, 'showBase')}
+        ${row('reg-show-up',  'Up',  'js-reg-line-up',   upColor,   upWidth,   upStyle,   'reg-prev-up',   s.upOpacity   ?? 0.1, 'showUp')}
+        ${row('reg-show-down','Down','js-reg-line-down',  downColor, downWidth, downStyle, 'reg-prev-down', s.downOpacity ?? 0, 'showDown')}
         <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a2e39;">
           <input id="reg-extend-right" type="checkbox" ${extRight?'checked':''} style="width:16px;height:16px;cursor:pointer;">
           <label for="reg-extend-right" style="color:#d1d4dc;font-size:13px;cursor:pointer;">Extend lines</label>

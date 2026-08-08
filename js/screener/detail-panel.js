@@ -5,6 +5,172 @@
  */
 const DetailPanel = (() => {
 
+  // ── Detail panel yüksekliği ─────────────────────────
+  // Model: screener (#wl-list) her zaman SABİT bir yüksekliğe (px) kilitlenir,
+  //   detail-panel geri kalan alanı doldurur (flex:1). Bu tek mekanizma hem
+  //   otomatik varsayılanlar hem de kullanıcının fare ile sürüklemesi için
+  //   kullanılıyor — sürükleme sırasında sadece bu px değeri değişiyor.
+  //
+  // Otomatik varsayılan (kullanıcı hiç sürüklememişse):
+  //   • "Coin Detail" / "News": içerik yüksekliği JS ile ölçülüp
+  //     (borderTop+resizeBar+tabsBar+içerik) screener'ın NE KADAR ALMAMASI
+  //     gerektiği hesaplanır, geri kalanı screener'a verilir.
+  //     Not: .detail-body { flex:1 1 0% } olduğu için parent'ın height'ı
+  //     "auto" bırakılırsa içerik 0'a çöküyor — bu yüzden saf CSS flex
+  //     yerine JS ölçümü kullanılıyor.
+  //   • "Bot Signals": tam SCREENER_ROWS_ON_BOT satır (içerik uzun, daha
+  //     fazla alandan faydalanıyor).
+  //
+  // Kullanıcı #detail-resize'ı sürüklerse TEK bir ortak yükseklik olarak
+  // kaydedilir (sekmeye göre değil) — hangi sekmede sürüklenirse sürüklensin,
+  // diğer sekmelere geçince aynı hizadan açılır. Tutamaca çift tıklamak bu
+  // ortak kaydı siler, her sekme kendi otomatik değerine döner.
+  const SCREENER_ROWS_ON_BOT = 20;
+  const CONTENT_EL_ID = { detail: 'dp-detail-tab', news: 'dp-news-tab' };
+  const LS_MANUAL_HEIGHT = 'pintrade_dp_wl_height';
+  const MIN_WL_ROWS = 3;      // screener sürüklenirken bu kadar satırın altına inmesin
+  const MIN_DP_BUFFER = 4;    // Coin Detail içeriğinin altında bırakılan pay (px) — 3-5px arası
+
+  function _measureRowHeight() {
+    const row = document.querySelector('.wl-row');
+    if (row) return row.getBoundingClientRect().height;
+    return 22; // henüz hiç satır render edilmemişse makul bir varsayılan
+  }
+
+  function _loadManualHeight() {
+    const v = parseFloat(localStorage.getItem(LS_MANUAL_HEIGHT));
+    return isNaN(v) ? null : v;
+  }
+  function _saveManualHeight(px) {
+    try { localStorage.setItem(LS_MANUAL_HEIGHT, String(Math.round(px))); } catch (e) {}
+  }
+  function _clearManualHeight() {
+    try { localStorage.removeItem(LS_MANUAL_HEIGHT); } catch (e) {}
+  }
+
+  /** screener'ı tam olarak wlHeightPx'e sabitler, detail-panel kalanı alır. */
+  function _lockWlHeight(wlHeightPx) {
+    const dpPanel = document.getElementById('detail-panel');
+    const wlList  = document.getElementById('wl-list');
+    if (!dpPanel || !wlList) return;
+    wlList.style.flex       = `0 0 ${Math.round(wlHeightPx)}px`;
+    dpPanel.style.height    = '';
+    dpPanel.style.flex      = '1 1 auto';
+    dpPanel.style.maxHeight = 'none';
+  }
+
+  // Coin Detail'in TAM sığdığı yükseklik (borderTop+resize+tabsBar+içerik).
+  // Sürükleme sınırı bunu kullanıyor — hangi sekmede olursanız olun, panel bu
+  // değerin altına inemez, yani Coin Detail'e geçince içerik asla kırpılmaz.
+  // Not: #dp-detail-tab display:none iken scrollHeight 0 döner, bu yüzden
+  // sadece Coin Detail GÖRÜNÜRKEN ölçülüp önbelleğe alınıyor; diğer
+  // sekmelerdeki sürüklemeler bu önbellekteki son bilinen değeri kullanır.
+  let _coinDetailFitHeightCache = null;
+
+  function _measureCoinDetailFitHeight() {
+    const tabsBar   = document.querySelector('.detail-tabs');
+    const resizeBar = document.getElementById('detail-resize');
+    const contentEl = document.getElementById('dp-detail-tab');
+    const borderTop = 2; // .detail-panel { border-top: 2px } — box-sizing:border-box
+    const contentH  = contentEl ? contentEl.scrollHeight : 0;
+    const tabsH     = tabsBar   ? tabsBar.getBoundingClientRect().height   : 0;
+    const resizeH   = resizeBar ? resizeBar.getBoundingClientRect().height : 0;
+    return Math.ceil(borderTop + resizeH + tabsH + contentH);
+  }
+
+  function _applyDetailLayout(tabId) {
+    const dpPanel   = document.getElementById('detail-panel');
+    const wlList    = document.getElementById('wl-list');
+    const tabsBar   = document.querySelector('.detail-tabs');
+    const resizeBar = document.getElementById('detail-resize');
+    if (!dpPanel || !wlList) return;
+
+    // Coin Detail her göründüğünde taze ölç + önbelleğe al (sürükleme
+    // sınırı diğer sekmelerdeyken de bu önbelleği kullanacak).
+    if (tabId === 'detail') {
+      _coinDetailFitHeightCache = _measureCoinDetailFitHeight();
+    }
+
+    // Kullanıcı daha önce sürükleyip kaydettiyse (sekmeden bağımsız, ortak) onu kullan.
+    const manual = _loadManualHeight();
+    if (manual !== null) {
+      _lockWlHeight(manual);
+      return;
+    }
+
+    if (tabId === 'signals') {
+      _lockWlHeight(_measureRowHeight() * SCREENER_ROWS_ON_BOT);
+      return;
+    }
+
+    // Coin Detail / News: içeriği ölç, panele o kadar yükseklik ver,
+    // screener kalanı doldursun (CSS varsayılanı: flex:1 1 0%).
+    wlList.style.flex = '';
+
+    const contentEl = document.getElementById(CONTENT_EL_ID[tabId] || CONTENT_EL_ID.detail);
+    const borderTop = 2; // .detail-panel { border-top: 2px } — box-sizing:border-box
+    const contentH  = contentEl ? contentEl.scrollHeight : 0;
+    const tabsH     = tabsBar   ? tabsBar.getBoundingClientRect().height   : 0;
+    const resizeH   = resizeBar ? resizeBar.getBoundingClientRect().height : 0;
+
+    dpPanel.style.flex      = '0 1 auto';
+    dpPanel.style.maxHeight = ''; // CSS'teki %80 tavan güvenlik ağı olarak kalsın
+    dpPanel.style.height    = Math.ceil(borderTop + resizeH + tabsH + contentH) + 'px';
+  }
+
+  // ── Fare ile sürükleme ───────────────────────────────
+  let _drag = null; // { startY, startWlHeight, minH, maxH }
+
+  function _activeTabId() {
+    return document.querySelector('.detail-tab.active')?.dataset.tab || 'detail';
+  }
+
+  function _initResizeDrag() {
+    const resizeBar = document.getElementById('detail-resize');
+    const wlList    = document.getElementById('wl-list');
+    const dpPanel   = document.getElementById('detail-panel');
+    if (!resizeBar || !wlList || !dpPanel) return;
+
+    resizeBar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const wlHeaderH  = document.querySelector('.wl-header')?.getBoundingClientRect().height || 0;
+      const colHeaderH = document.getElementById('wl-col-header')?.getBoundingClientRect().height || 0;
+      const rightPanel = document.getElementById('right-panel');
+      const available  = (rightPanel?.getBoundingClientRect().height || 0) - wlHeaderH - colHeaderH;
+      // Aşağı sürüklemenin sınırı: Coin Detail içeriği + küçük bir pay.
+      // Önbellek hiç dolmadıysa (çok erken bir tıklama) makul bir varsayılana düş.
+      const minDpSpace = (_coinDetailFitHeightCache ?? 300) + MIN_DP_BUFFER;
+
+      _drag = {
+        startY:        e.clientY,
+        startWlHeight: wlList.getBoundingClientRect().height,
+        minH:          _measureRowHeight() * MIN_WL_ROWS,
+        maxH:          Math.max(0, available - minDpSpace),
+      };
+      document.body.classList.add('dp-resizing');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!_drag) return;
+      const delta = e.clientY - _drag.startY;
+      const h = Math.min(_drag.maxH, Math.max(_drag.minH, _drag.startWlHeight + delta));
+      _lockWlHeight(h);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!_drag) return;
+      _saveManualHeight(wlList.getBoundingClientRect().height);
+      document.body.classList.remove('dp-resizing');
+      _drag = null;
+    });
+
+    // Çift tıklama: ortak manuel yüksekliği unut, her sekme kendi otomatik değerine döner.
+    resizeBar.addEventListener('dblclick', () => {
+      _clearManualHeight();
+      _applyDetailLayout(_activeTabId());
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────
   function _fmt(v) {
     if (v == null || isNaN(v)) return '—';
@@ -80,6 +246,18 @@ const DetailPanel = (() => {
   let _currentSym = null;
   let _currentExchange = 'binance';
   let _pollCount = 0; // Her 10sn artir, RSI kadansini kontrol etmek icin
+
+  // ── loadSymbol çakışma koruması ───────────────────────────────────
+  // loadSymbol() birbirinden bağımsız 3 yerden tetikleniyor: init(),
+  // 'funding:loaded' ve 'symbol:change' event'leri. Fonksiyon async
+  // olduğu için üçü de kendi fetch paketini (~12-15 istek) gönderiyordu
+  // ve açılışta 4 kata kadar gereksiz REST trafiği oluşuyordu.
+  //  - _loadInFlightKey : aynı coin+borsa için yükleme sürerken ikinci
+  //                       çağrı hiç başlatılmaz.
+  //  - _loadToken       : farklı bir coin istendiğinde eski (bayat)
+  //                       yüklemenin sonucu ekrana yazılmaz.
+  let _loadInFlightKey = null;
+  let _loadToken = 0;
 
   // ── Paylasilan RSI hesaplayici ─────────────────────
   function _calcRsi(closes, period = 14) {
@@ -337,6 +515,13 @@ const DetailPanel = (() => {
     }
 
     if (window.FloatingPanel) FloatingPanel.syncAll();
+
+    // Coin Detail içeriği ilk panel yüksekliği hesaplanırken (init sırasında)
+    // henüz placeholder ("—") haldeydi; gerçek veri geldikten sonra ölçümü
+    // tazeliyoruz. Kullanıcı elle sürüklediyse (_loadManualHeight() dolu)
+    // _applyDetailLayout zaten o değeri kullanır, otomatik ölçüm devreye
+    // girmez — mevcut sürüklenmiş boyut bozulmaz.
+    if (_activeTabId() === 'detail') _applyDetailLayout('detail');
   }
 
   // ── Load data for a symbol ────────────────────────
@@ -588,6 +773,15 @@ const DetailPanel = (() => {
   }
 
   async function loadSymbol(sym, exchange = 'binance') {
+    const loadKey = `${sym.replace(/USDT$/, '')}|${exchange}`;
+
+    // Aynı coin+borsa için zaten bir yükleme sürüyorsa ikinciyi başlatma.
+    // (Açılışta init/funding:loaded/symbol:change üçü de aynı coini istiyor.)
+    if (_loadInFlightKey === loadKey) return;
+
+    _loadInFlightKey = loadKey;
+    const myToken = ++_loadToken;   // bu yüklemenin sıra numarası
+
     _currentSym = sym.replace(/USDT$/, '');
     _currentExchange = exchange;
     sym = sym.replace(/USDT$/, '');
@@ -791,11 +985,19 @@ const DetailPanel = (() => {
           if (coinResp.ok) cgData = await coinResp.json();
         }
       } catch {}
-      console.log('frIntervalText:', frIntervalText);
+
+      // Bu yükleme sürerken kullanıcı başka bir coine geçtiyse sonuç bayat —
+      // ekrana yazma, yoksa yeni coinin verisinin üstüne eskisi biner.
+      if (myToken !== _loadToken) return;
+
       update({ sym, price, changePct, spotPrice, frPct, nextFundingTime, frIntervalText, oi, oiHistory, vol24h, lsRatio, rsi: rsiData, cgData, exchange });
       _startPolling();
     } catch (e) {
       console.error('[DetailPanel] Load error:', e);
+    } finally {
+      // Sadece bu yükleme hâlâ güncel olanıysa kilidi bırak; aksi halde
+      // daha yeni bir loadSymbol çalışıyordur, onun kilidini silme.
+      if (myToken === _loadToken) _loadInFlightKey = null;
     }
   }
 
@@ -816,12 +1018,50 @@ const DetailPanel = (() => {
         if (detailTab) detailTab.style.display = tabId === 'detail' ? 'block' : 'none';
         if (signalsTab) signalsTab.style.display = tabId === 'signals' ? 'block' : 'none';
         if (newsTab) newsTab.style.display = tabId === 'news' ? 'block' : 'none';
+
+        // Bot Signals'ın SE/arama/snipe/sırala kontrolleri sekme çubuğunda
+        // yaşıyor (bkz. bot-signals-panel.js) — sadece o sekme aktifken görünür.
+        const tabbarControls = document.getElementById('bsp-tabbar-controls');
+        if (tabbarControls) {
+          tabbarControls.style.display = tabId === 'signals' ? 'flex' : 'none';
+          if (tabId === 'signals' && window.BotSignalsPanel) BotSignalsPanel.render();
+        }
+
+        // News'in snipe/sırala kontrolleri de aynı yerde yaşıyor (bkz. news-api.js).
+        const newsControls = document.getElementById('news-tabbar-controls');
+        if (newsControls) {
+          newsControls.style.display = tabId === 'news' ? 'flex' : 'none';
+          if (tabId === 'news' && window.NewsAPI) NewsAPI.onTabActivated();
+        }
+
+        _applyDetailLayout(tabId);
       });
+    });
+    _applyDetailLayout('detail'); // sayfa yüklenince varsayılan sekme
+    _initResizeDrag();
+
+    // Web fontlar (JetBrains Mono vb.) display:swap ile asenkron yükleniyor.
+    // İlk ölçüm genelde fallback font metrikleriyle (biraz daha uzun) alınıyor;
+    // gerçek font yüklenince metin kısalabiliyor ve panelin altında boşluk
+    // kalıyordu. Fontlar hazır olunca tek seferlik yeniden ölçüyoruz.
+    document.fonts?.ready?.then(() => {
+      if (_activeTabId() === 'detail') _applyDetailLayout('detail');
     });
 
     // Popout button (floating panel toggle)
     document.getElementById('detail-popout')?.addEventListener('click', () => {
       if (window.FloatingPanel) FloatingPanel.toggle();
+    });
+
+    // L/S ve OI Değişimi kartlarındaki popout ikonları — boş floating window
+    // açıyor, içerik düzenlemesi sonraki bir işte yapılacak.
+    document.getElementById('dp-ls-popout')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.MiniFloatingWindow) MiniFloatingWindow.toggle('ls', 'LONG / SHORT');
+    });
+    document.getElementById('dp-oi-popout')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.MiniFloatingWindow) MiniFloatingWindow.toggle('oi', 'OI DEĞİŞİMİ');
     });
 
     // Listen for symbol change
@@ -841,6 +1081,13 @@ const DetailPanel = (() => {
     // ── ScalpFR Signals Tab ───────────────────────────────────────────
     if (typeof BotSignalsPanel !== 'undefined') {
       BotSignalsPanel.init();
+
+      // ── FAZ 1 (Görev 4, 2026-08-07) — küçük sabit alt kümeyle yeniden açıldı ──
+      // Eski REST polling (2026-07-31'de burada kapatılmıştı — ~2500 istek/5dk,
+      // 34 saniyede ban) artık m1hammer-scanner.js'de WebSocket'e taşındı.
+      // TEST_SYMBOLS sadece 8 sembolle sınırlı, backfill tek seferlik ve
+      // 429/418 (BAN_SIGNAL) görürse otomatik durur. Genişletme ayrı onay ister
+      // (bkz. m1hammer-scanner.js başlığı ve dokumentasyon/gorevler/siradaki-gorevler.md).
       if (window.M1HammerScanner) M1HammerScanner.start();
     }
 
@@ -880,5 +1127,5 @@ const DetailPanel = (() => {
     });
   }
 
-  return { init, update, loadSymbol };
+  return { init, update, loadSymbol, applyLayout: _applyDetailLayout };
 })();

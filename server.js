@@ -25,12 +25,38 @@ app.use((req, res, next) => {
 // ==========================================
 const MONGODB_URI = process.env.MONGODB_URI;
 
+function printLocalModeBanner(reason) {
+  console.warn('');
+  console.warn('╔══════════════════════════════════════════════════════════════╗');
+  console.warn('║  ⚠️  LOKAL MOD — veritabanı YOK                              ║');
+  console.warn('╚══════════════════════════════════════════════════════════════╝');
+  console.warn(`   Sebep: ${reason}`);
+  console.warn('');
+  console.warn('   ✅ ÇALIŞAN ÖZELLİKLER');
+  console.warn('      • Grafik + çoklu panel + tüm çizim araçları');
+  console.warn('      • Screener (canlı fiyat / değişim / FR / hacim)');
+  console.warn('      • Coin detay paneli, bot sinyalleri, arama');
+  console.warn('      • Çizimler tarayıcıda saklanır (localStorage)');
+  console.warn('');
+  console.warn('   ❌ ÇALIŞMAYAN ÖZELLİKLER (MongoDB gerektiriyor)');
+  console.warn('      • Çizim bulut senkronu        /api/sync/drawings');
+  console.warn('      • Funding Rate geçmişi        /api/history/fr');
+  console.warn('      • OI + hacim geçmişi          /api/history/market');
+  console.warn('      • Kayıtlı mum verisi          /api/history/candles');
+  console.warn('      • Arka plan veri toplayıcı (FR/OI/mum)');
+  console.warn('      → Tarayıcı konsolunda "Preload hatası" uyarıları normaldir.');
+  console.warn('');
+  console.warn('   Açmak için: .env.example dosyasını .env olarak kopyalayıp');
+  console.warn('   MONGODB_URI değerini doldurun.');
+  console.warn('');
+}
+
 if (MONGODB_URI) {
   mongoose.connect(MONGODB_URI)
-    .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
-    .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
+    .then(() => console.log('✅ MongoDB Bağlantısı Başarılı — tüm özellikler aktif'))
+    .catch(err => printLocalModeBanner(`MongoDB'ye bağlanılamadı — ${err.message}`));
 } else {
-  console.warn('⚠️ MONGODB_URI tanımlı değil, lokal modda çalışılıyor.');
+  printLocalModeBanner('.env dosyasında MONGODB_URI tanımlı değil');
 }
 
 // ── Çizimler (Kalıcı) ───────────────────────────────────────────────
@@ -89,6 +115,34 @@ const candleSchema = new mongoose.Schema({
 // Unique index: aynı mum iki kez yazılmasın
 candleSchema.index({ exchange: 1, symbol: 1, interval: 1, openTime: 1 }, { unique: true });
 const Candle = mongoose.model('Candle', candleSchema);
+
+// ── L/S Metrikleri (Long/Short — 60 Saatlik TTL, MarketData ile aynı desen) ──
+// NOT: takerlongshortRatio yanıtında "symbol" alanı YOKTUR (diğer 3 endpoint'te
+// var) — server.js'in premiumIndex'te olmayan "openInterest" alanını okuyup
+// sessizce 0 yazdığı geçmiş hataya (bkz. collectBinanceData) düşmemek için
+// her alan gerçek Binance yanıtından doğrulanarak eşlendi.
+const lsMetricsSchema = new mongoose.Schema({
+  exchange:              { type: String, required: true },  // 'binance' (faz 2: 'bybit')
+  symbol:                { type: String, required: true },  // 'BTCUSDT'
+  timestamp:              { type: Date,   required: true },
+  globalRatio:            { type: Number },   // globalLongShortAccountRatio — TÜM traderlar, hesap sayısı
+  globalLongPct:          { type: Number },
+  globalShortPct:         { type: Number },
+  topPositionRatio:       { type: Number },   // topLongShortPositionRatio — TOP traderlar, pozisyon değeri
+  topPositionLongPct:     { type: Number },
+  topPositionShortPct:    { type: Number },
+  topAccountRatio:        { type: Number },   // topLongShortAccountRatio — TOP traderlar, hesap sayısı
+  topAccountLongPct:      { type: Number },
+  topAccountShortPct:     { type: Number },
+  takerBuySellRatio:      { type: Number },   // takerlongshortRatio — taker alım/satım hacim oranı
+  takerBuyVol:            { type: Number },
+  takerSellVol:           { type: Number },
+  createdAt:              { type: Date,   default: Date.now }
+});
+lsMetricsSchema.index({ exchange: 1, symbol: 1, timestamp: -1 });
+// TTL: 60 saat — MarketData'nın 48-72 saat aralığının ortası
+lsMetricsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 60 });
+const LSMetrics = mongoose.model('LSMetrics', lsMetricsSchema);
 
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
@@ -288,6 +342,78 @@ async function collectBinanceCandles() {
   }
 }
 
+// ── Binance: L/S Metrikleri (her 5dk, sabit coin listesi) ────────────
+// Kom1/Kom2/Kom3 motorları henüz bu veriyi okumuyor ve şu an kimse tüm
+// 526 USDT perpetual'i tarama ihtiyacı doğurmuyor — bu yüzden tam market
+// taraması yerine backtest pipeline'ının izlediği sabit coin listesiyle
+// sınırlandırıldı. Tam market taraması FAZ 2: Kom1/2/3 gerçekten watchlist
+// tabanlı canlı tarama ihtiyacı doğurduğunda ele alınacak.
+//
+// NOT: Bu liste backtest pipeline'ının tam ~30 coin listesinin YERİNE
+// GEÇMEZ — sadece kullanıcının verdiği 8 örnek coin (hepsi Binance
+// futures'ta doğrulandı). "+ sonradan eklenenler" kısmı netleşince bu
+// diziye eklenmesi yeterli.
+const LS_COLLECTOR_SYMBOLS = [
+  'BANKUSDT', 'AKEUSDT', 'DEXEUSDT', 'TUSDT', 'SOMIUSDT', 'GUNUSDT', 'ARXUSDT', 'ZORAUSDT',
+];
+
+async function collectLSData() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    const symbols = LS_COLLECTOR_SYMBOLS;
+
+    const now = new Date();
+    const docs = [];
+
+    const BATCH = 5;
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      const batch = symbols.slice(i, i + BATCH);
+      await Promise.allSettled(batch.map(async (sym) => {
+        try {
+          const [global, topPos, topAcc, taker] = await Promise.all([
+            fetchJson('fapi.binance.com', `/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=1`),
+            fetchJson('fapi.binance.com', `/futures/data/topLongShortPositionRatio?symbol=${sym}&period=5m&limit=1`),
+            fetchJson('fapi.binance.com', `/futures/data/topLongShortAccountRatio?symbol=${sym}&period=5m&limit=1`),
+            fetchJson('fapi.binance.com', `/futures/data/takerlongshortRatio?symbol=${sym}&period=5m&limit=1`),
+          ]);
+          const g = Array.isArray(global) ? global[0] : null;
+          const tp = Array.isArray(topPos) ? topPos[0] : null;
+          const ta = Array.isArray(topAcc) ? topAcc[0] : null;
+          const tk = Array.isArray(taker)  ? taker[0]  : null;
+          if (!g && !tp && !ta && !tk) return;
+
+          docs.push({
+            exchange:  'binance',
+            symbol:    sym,
+            timestamp: now,
+            globalRatio:         g  ? parseFloat(g.longShortRatio)  : null,
+            globalLongPct:       g  ? parseFloat(g.longAccount)     : null,
+            globalShortPct:      g  ? parseFloat(g.shortAccount)    : null,
+            topPositionRatio:    tp ? parseFloat(tp.longShortRatio) : null,
+            topPositionLongPct:  tp ? parseFloat(tp.longAccount)    : null,
+            topPositionShortPct: tp ? parseFloat(tp.shortAccount)   : null,
+            topAccountRatio:     ta ? parseFloat(ta.longShortRatio) : null,
+            topAccountLongPct:   ta ? parseFloat(ta.longAccount)    : null,
+            topAccountShortPct:  ta ? parseFloat(ta.shortAccount)   : null,
+            takerBuySellRatio:   tk ? parseFloat(tk.buySellRatio)   : null,
+            takerBuyVol:         tk ? parseFloat(tk.buyVol)         : null,
+            takerSellVol:        tk ? parseFloat(tk.sellVol)        : null,
+            createdAt: now
+          });
+        } catch { /* sessizce geç — tek sembol hatası turu durdurmasın */ }
+      }));
+      await sleep(250); // Rate limit koruması — 4 endpoint × batch eş zamanlı gidiyor
+    }
+
+    if (docs.length > 0) {
+      await LSMetrics.insertMany(docs, { ordered: false }).catch(() => {});
+    }
+    console.log(`[Collector] L/S metrikleri: ${docs.length}/${symbols.length} sembol güncellendi`);
+  } catch (e) {
+    console.error('[Collector] L/S hatası:', e.message);
+  }
+}
+
 // ── Zamanlayıcılar ──────────────────────────────────────────────────
 // DB bağlandıktan sonra başlat
 mongoose.connection.once('open', () => {
@@ -297,11 +423,13 @@ mongoose.connection.once('open', () => {
   collectBinanceData();
   collectBybitData();
   collectBinanceCandles();
+  collectLSData();
 
-  // Her 1 veya 5 dakikada bir tekrarla
-  setInterval(collectBinanceData,   1 * 60 * 1000); // 1 dakika — bot sinyalleri için
-  setInterval(collectBybitData,     1 * 60 * 1000); // 1 dakika
+  // Her 1, 5 veya 10 dakikada bir tekrarla
+  setInterval(collectBinanceData,   1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
+  setInterval(collectBybitData,     1 * 60 * 1000);  // 1 dakika
   setInterval(collectBinanceCandles, 5 * 60 * 1000); // Mumlar 5dk yeterli
+  setInterval(collectLSData,        5 * 60 * 1000);  // L/S — sabit 8 coinlik liste, hafif bütçe
 });
 
 // ==========================================
@@ -410,6 +538,32 @@ app.get('/api/history/market/:exchange/:symbol', async (req, res) => {
   }
 });
 
+// ── L/S Geçmiş Verisi ─────────────────────────────────────────────────
+// GET /api/history/ls/:exchange/:symbol?hours=60
+app.get('/api/history/ls/:exchange/:symbol', async (req, res) => {
+  try {
+    const { exchange, symbol } = req.params;
+    const hours  = Math.min(parseInt(req.query.hours) || 48, 60);
+    const since  = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const sym    = symbol.toUpperCase().endsWith('USDT') ? symbol.toUpperCase() : symbol.toUpperCase() + 'USDT';
+
+    const records = await LSMetrics.find(
+      { exchange, symbol: sym, timestamp: { $gte: since } },
+      {
+        timestamp: 1, _id: 0,
+        globalRatio: 1, globalLongPct: 1, globalShortPct: 1,
+        topPositionRatio: 1, topPositionLongPct: 1, topPositionShortPct: 1,
+        topAccountRatio: 1, topAccountLongPct: 1, topAccountShortPct: 1,
+        takerBuySellRatio: 1, takerBuyVol: 1, takerSellVol: 1,
+      }
+    ).sort({ timestamp: 1 }).lean();
+
+    res.json(records);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Mum Verisi ───────────────────────────────────────────────────────
 // GET /api/history/candles/:exchange/:symbol?interval=5m&limit=500
 app.get('/api/history/candles/:exchange/:symbol', async (req, res) => {
@@ -442,12 +596,12 @@ app.get('/health', (req, res) => {
 // ==========================================
 // 5. Binance Proxy Rotaları
 // ==========================================
-app.get('/api/binance/futures/*', (req, res) => {
+app.get('/api/binance/futures/*splat', (req, res) => {
   const path = req.url.replace('/api/binance/futures', '');
   proxyRequest('fapi.binance.com', path, res);
 });
 
-app.get('/api/binance/spot/*', (req, res) => {
+app.get('/api/binance/spot/*splat', (req, res) => {
   const path = req.url.replace('/api/binance/spot', '');
   proxyRequest('api.binance.com', path, res);
 });

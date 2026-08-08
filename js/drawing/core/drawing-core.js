@@ -29,10 +29,23 @@ window.DrawingManager = (() => {
   let _toolStyles = {};
 
   function _getToolStyle(tool) {
-    if (tool.startsWith('fib-')) return {};
     // Load from State if not in local cache
     if (!_toolStyles || Object.keys(_toolStyles).length === 0) {
       _toolStyles = State.get('drawingStyles') || {};
+    }
+    if (tool.startsWith('fib-')) {
+      // BUG (2026-08-01): Fib araçları burada HER ZAMAN taze varsayılan
+      // seviyelerle dönüyordu — diğer tüm araçların kullandığı "son
+      // kullanılan ayarı hatırla" (_toolStyles) yoluna hiç uğramıyordu.
+      // Kullanıcı Trend Line'da rengi değiştirip yeni bir Trend Line
+      // çizdiğinde son ayar korunuyor ama Fibo'da hep sıfırlanıyordu —
+      // artık aynı mekanizmayı kullanıyor: önce son kaydedilmiş ayar var mı
+      // bak, yoksa (hiç kullanılmamışsa) DSDFiboTabs'ın varsayılanına düş.
+      if (_toolStyles[tool]) return JSON.parse(JSON.stringify(_toolStyles[tool]));
+      const fibLevels = window.DSDFiboTabs?.getDefaultLevels
+        ? window.DSDFiboTabs.getDefaultLevels(tool)
+        : [];
+      return { fibLevels };
     }
     // If we have a saved style for this tool, clone it
     if (_toolStyles[tool]) return JSON.parse(JSON.stringify(_toolStyles[tool]));
@@ -49,7 +62,10 @@ window.DrawingManager = (() => {
     // Otherwise return a generic default
     if (tool === 'hray') return { color: '#2962ff', width: 1, lineStyle: 'solid', extendLeft: false, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
     if (tool === 'hline') return { color: '#2962ff', width: 1, lineStyle: 'solid', textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'top' };
-    if (tool === 'vline') return { color: '#2962ff', width: 1, lineStyle: 'solid', textOrientation: 'vertical', timeLabel: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'center', textAlignV: 'middle' };
+    // textAlignH: 'right' (Center kaldırıldı — inline metin düzenleme ve
+    // çizgiyi sağa/sola sürükleme özellikleriyle çakışıyordu, bkz.
+    // dsd-standard-tabs.js renderTextTab).
+    if (tool === 'vline') return { color: '#2962ff', width: 1, lineStyle: 'solid', textOrientation: 'vertical', timeLabel: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)', textAlignH: 'right', textAlignV: 'middle' };
     if (tool === 'crossline') return { color: '#2962ff', width: 1, lineStyle: 'solid', priceLabel: true, timeLabel: true, textColor: '#ffffff', fillColor: 'rgba(41, 137, 255, 0.2)' };
     if (tool === 'flattopbottom') return { color: '#FF9800', width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, capLeft: 'normal', capRight: 'normal', showPrices: true, priceColor: '#2962ff', priceFontSize: 12, priceBold: false, priceItalic: false, background: true, bgColor: '#FF9800', bgOpacity: 15, textColor: '#ffffff' };
     if (tool === 'regression') return {
@@ -66,7 +82,9 @@ window.DrawingManager = (() => {
       baseOpacity: 0.1,
       fillColor: 'rgba(41, 137, 255, 0.2)'
     };
-    if (tool === 'channel') return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(9, 105, 218, 0.2)', textColor: '#ffffff', priceLabel: true, textAlignH: 'center', textAlignV: 'top' };
+    // textAlignV: 'middle' ("Inside") — kullanıcı isteğiyle varsayılan
+    // TradingView'daki gibi kanalın 0.5 (orta) seviyesinin üzerinde.
+    if (tool === 'channel') return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(9, 105, 218, 0.2)', textColor: '#ffffff', priceLabel: true, textAlignH: 'center', textAlignV: 'middle' };
     return { color: '#2962ff', width: 1, lineStyle: 'solid' };
   }
 
@@ -159,7 +177,7 @@ window.DrawingManager = (() => {
         _selectedId = hitId;
         // For position tools, calculate topY so toolbar can appear above the shape
         let topY = e.clientY;
-        if (['longpos', 'shortpos', 'posforecast'].includes(hitDrawing.tool)) {
+        if (['longpos', 'shortpos'].includes(hitDrawing.tool)) {
           const a = _pt2xy(hitDrawing.p1, pane);
           const b = hitDrawing.p2 ? { y: pane.series.priceToCoordinate(hitDrawing.p2.price) } : null;
           const c = hitDrawing.p3 ? { y: pane.series.priceToCoordinate(hitDrawing.p3.price) } : null;
@@ -287,13 +305,6 @@ window.DrawingManager = (() => {
       return true;
     }
 
-    // ── Single-point VWAP anchor ────────────────────────
-    if (_activeTool === 'vwap') {
-      _finishDrawing(pane.symbol, { tool: 'vwap', p1: pt, id: _uid(), style: { ..._lastDrawingStyle } });
-      _lastPointerdownClaimed = true;
-      return true;
-    }
-
     // ── Single-point Markers ────────────────────────────
     if (['arrowmarker', 'arrowup', 'arrowdown'].includes(_activeTool)) {
       _finishDrawing(pane.symbol, { tool: _activeTool, p1: pt, id: _uid(), style: _getToolStyle(_activeTool) });
@@ -305,9 +316,8 @@ window.DrawingManager = (() => {
     const TWO_PT_TOOLS = [
       'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
       'infoline', 'regression',
-      'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral',
-      'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed',
-      'cyclic-lines', 'time-cycles', 'sine-line',
+      'fib-ret', 'fib-timezone', 'fib-speedfan',
+      'cyclic-lines',
       'circle', 'ellipse',
       'note', 'callout', 'pricenote'
     ];
@@ -355,8 +365,8 @@ window.DrawingManager = (() => {
 
     // ── Three-point drawing tools (click-click-click) ───
     const THREE_PT_TOOLS = [
-      'flattopbottom', 'fib-ext', 'fib-channel', 'fib-timebased',
-      'rotatedrect', 'triangle', 'arc', 'curve', 'channel'
+      'flattopbottom', 'fib-ext', 'fib-channel',
+      'rotatedrect', 'triangle', 'arc', 'channel'
     ];
     if (THREE_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
@@ -375,30 +385,8 @@ window.DrawingManager = (() => {
       return true;
     }
 
-    // ── Four-point drawing tools (click-click-click-click) ───
-    const FOUR_PT_TOOLS = ['doublecurve'];
-    if (FOUR_PT_TOOLS.includes(_activeTool)) {
-      if (!_inProgress) {
-        _inProgress = { tool: _activeTool, symbol: pane.symbol, p1: pt, p2: pt, p3: null, p4: null, id: _uid(), style: _getToolStyle(_activeTool) };
-      } else if (!_inProgress.p3) {
-        _inProgress.p2 = pt;
-        _inProgress.p3 = pt;
-      } else if (!_inProgress.p4) {
-        _inProgress.p3 = pt;
-        _inProgress.p4 = pt;
-      } else {
-        _inProgress.p4 = pt;
-        const finished = { ..._inProgress };
-        _inProgress = null;
-        _finishDrawing(pane.symbol, finished);
-      }
-      requestRedrawAll();
-      _lastPointerdownClaimed = true;
-      return true;
-    }
-
     // ── Multi-point drawing tools (click-click-...-click) ──
-    const MULTI_PT_TOOLS = ['polyline', 'pathtool'];
+    const MULTI_PT_TOOLS = ['pathtool'];
     if (MULTI_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
         _inProgress = { tool: _activeTool, symbol: pane.symbol, points: [pt, pt], id: _uid(), style: _getToolStyle(_activeTool) };
@@ -425,7 +413,7 @@ window.DrawingManager = (() => {
       return true;
     }
 
-    if (['longpos', 'shortpos', 'posforecast'].includes(_activeTool)) {
+    if (['longpos', 'shortpos'].includes(_activeTool)) {
       const candles = pane.candlesData || [];
       let p2Time = pt.time;
       if (candles.length > 1) {
@@ -480,7 +468,7 @@ window.DrawingManager = (() => {
         const dy = y - _dragState.startY;
 
         if (_dragState.hitType === 'p1') {
-          if (['longpos', 'shortpos', 'posforecast'].includes(d.tool)) {
+          if (['longpos', 'shortpos'].includes(d.tool)) {
             const origP1X = _timeToX(pane, _dragState.origP1.time);
             const origP1Y = pane.series.priceToCoordinate(_dragState.origP1.price);
             const origP2X = _timeToX(pane, _dragState.origP2.time);
@@ -867,7 +855,7 @@ window.DrawingManager = (() => {
           pane.cvs.style.cursor = 'crosshair';
         } else if (ht) {
           const tool = htDrawing ? htDrawing.tool : '';
-          const isPos = ['longpos', 'shortpos', 'posforecast'].includes(tool);
+          const isPos = ['longpos', 'shortpos'].includes(tool);
           if (ht === 'line' || ht === 'body' || ht === 'rect_body' || ht === 'midpoint' || ht === 'vline_midpoint') {
             // texttool/note/callout: always text cursor when selected; trendline/ray/extended/infoline: text only over hint area
             const hintTools = ['trendline', 'ray', 'extended', 'infoline', 'hline', 'hray'];
@@ -1592,15 +1580,28 @@ window.DrawingManager = (() => {
         Object.values(State.get('drawings') || {}).forEach(list => {
           const d = (list || []).find(x => x.id === _selectedId);
           if (d && d.style) {
-            if (!d.tool.startsWith('fib-')) {
-              const styleToSave = JSON.parse(JSON.stringify(d.style));
-              delete styleToSave.text;
-              _toolStyles[d.tool] = styleToSave;
-              State.set('drawingStyles', _toolStyles);
-            }
+            // Fib araçları eskiden burada hariç tutuluyordu — bu yüzden
+            // ayar panelinde yapılan hiçbir değişiklik "son kullanılan ayar"
+            // olarak hatırlanmıyordu, her yeni Fib hep sıfırdan (varsayılan)
+            // çiziliyordu. Trend Line ve diğer tüm araçlar zaten bu şekilde
+            // çalışıyordu — Fib de artık aynı yolu kullanıyor.
+            const styleToSave = JSON.parse(JSON.stringify(d.style));
+            delete styleToSave.text;
+            _toolStyles[d.tool] = styleToSave;
+            State.set('drawingStyles', _toolStyles);
           }
         });
       }
+      // BUG (2026-08-01): Ayar diyaloğundaki OK/tik/değer değişiklikleri
+      // (dsd-apply.js → DSDApply.applyFromForm) `drawing` objesini YERİNDE
+      // (mutate ederek) güncelliyor — bu obje `State`'in kendi `_state.drawings`
+      // dizisiyle aynı referans olduğu için değişiklik aynı sekme/oturumda
+      // hemen görünüyordu. Ama hiçbir yerde `State.set('drawings', ...)`
+      // çağrılmadığı için `save()` (localStorage + bulut senkron) hiç tetiklenmiyordu
+      // — yani sayfa yenilenince (veya başka bir cihazda açılınca) tüm
+      // menü değişiklikleri kayboluyordu. Artık her ayar kaydında `drawings`
+      // de açıkça persist ediliyor.
+      State.set('drawings', State.get('drawings'));
       requestRedrawAll();
     });
 
@@ -1703,7 +1704,7 @@ window.DrawingManager = (() => {
 
     if (_inProgress) {
       // For multi-point tools: if we have enough points, finish instead of discard
-      if (['polyline', 'pathtool'].includes(_inProgress.tool) && _inProgress.points && _inProgress.points.length > 2) {
+      if (_inProgress.tool === 'pathtool' && _inProgress.points && _inProgress.points.length > 2) {
         _inProgress.points.pop(); // remove the tracking cursor point
         const finished = { ..._inProgress };
         _inProgress = null;
@@ -1845,7 +1846,7 @@ window.DrawingManager = (() => {
     if (noGenericAnchors.includes(d.tool)) return;
 
     const pts = [];
-    if (['longpos', 'shortpos', 'posforecast'].includes(d.tool)) {
+    if (['longpos', 'shortpos'].includes(d.tool)) {
       if (d.p1 && d.p2 && d.p3) {
         const a = _pt2xy(d.p1, pane);
         const b = _pt2xy(d.p2, pane);
@@ -2037,21 +2038,15 @@ window.DrawingManager = (() => {
     if (d.tool === 'flagmark') window.DrawingAnnotations.drawFlagMark(ctx, d, pane, d.id === _hoverDrawingId, selected);
     if (d.tool === 'tableanno') window.DrawingAnnotations.drawTableAnno(ctx, d, pane, d.id === _hoverDrawingId, selected);
     if (d.tool === 'icon') window.DrawingAnnotations.drawIcon(ctx, d, pane, d.id === _hoverDrawingId, selected);
-    // ── Fibonacci & Gann ──
+    // ── Fibonacci ──
     if (d.tool === 'fib-ret') window.DrawingFibo.drawFibRet(ctx, d, pane);
     if (d.tool === 'fib-ext') window.DrawingFibo.drawFibExt(ctx, d, pane);
     if (d.tool === 'fib-channel') window.DrawingFibo.drawFibChannel(ctx, d, pane);
-    if (d.tool === 'fib-timezone') window.DrawingFibo.drawFibTimezone(ctx, d, pane);
-    if (d.tool === 'fib-circles') window.DrawingFibo.drawFibCircles(ctx, d, pane);
+    if (d.tool === 'fib-timezone') window.DrawingFibo.drawFibTimezone(ctx, d, pane, selected);
     if (d.tool === 'fib-speedfan') window.DrawingFibo.drawFibSpeedfan(ctx, d, pane);
-    if (d.tool === 'fib-timebased') window.DrawingFibo.drawFibTimebased(ctx, d, pane);
-    if (d.tool === 'fib-spiral') window.DrawingFibo.drawFibSpiral(ctx, d, pane);
     if (d.tool === 'fib-arcs') window.DrawingFibo.drawFibArcs(ctx, d, pane);
     if (d.tool === 'fib-wedge') window.DrawingFibo.drawFibWedge(ctx, d, pane);
     if (d.tool === 'pitchfan') window.DrawingFibo.drawPitchfan(ctx, d, pane);
-    if (d.tool === 'gann-fan') window.DrawingFibo.drawGannFan(ctx, d, pane);
-    if (d.tool === 'gann-box') window.DrawingFibo.drawGannBox(ctx, d, pane);
-    if (d.tool === 'gann-sq' || d.tool === 'gann-sqfixed') window.DrawingFibo.drawGannSquare(ctx, d, pane);
     // ── Geometric Shapes & Arrows ──
     if (d.tool === 'brush') window.DrawingShapes.drawBrush(ctx, d, pane);
     if (d.tool === 'highlighter') window.DrawingShapes.drawHighlighter(ctx, d, pane);
@@ -2060,10 +2055,7 @@ window.DrawingManager = (() => {
     if (d.tool === 'circle') window.DrawingShapes.drawCircle(ctx, d, pane);
     if (d.tool === 'ellipse') window.DrawingShapes.drawEllipse(ctx, d, pane);
     if (d.tool === 'triangle') window.DrawingShapes.drawTriangle(ctx, d, pane);
-    if (d.tool === 'curve') window.DrawingShapes.drawCurve(ctx, d, pane);
-    if (d.tool === 'doublecurve') window.DrawingShapes.drawDoubleCurve(ctx, d, pane);
     if (d.tool === 'arc') window.DrawingShapes.drawArc(ctx, d, pane);
-    if (d.tool === 'polyline') window.DrawingShapes.drawPolyline(ctx, d, pane);
     if (d.tool === 'pathtool') window.DrawingShapes.drawPathTool(ctx, d, pane);
     if (d.tool === 'arrowmarker') window.DrawingShapes.drawArrowMarker(ctx, d, pane);
     if (d.tool === 'arrowdraw') window.DrawingShapes.drawArrow(ctx, d, pane);
@@ -2073,27 +2065,14 @@ window.DrawingManager = (() => {
     if (d.tool === 'measure') window.DrawingForecast.drawMeasureTool(ctx, d, pane);
     if (d.tool === 'longpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'long');
     if (d.tool === 'shortpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'short');
-    if (d.tool === 'posforecast') window.DrawingForecast.drawPosForecast(ctx, d, pane);
-    if (d.tool === 'barpattern') window.DrawingForecast.drawBarPattern(ctx, d, pane);
-    if (d.tool === 'ghostfeed') window.DrawingForecast.drawGhostFeed(ctx, d, pane);
-    if (d.tool === 'sector') window.DrawingForecast.drawSector(ctx, d, pane);
     if (d.tool === 'pricerange') window.DrawingForecast.drawPriceRange(ctx, d, pane);
     if (d.tool === 'daterange') window.DrawingForecast.drawDateRange(ctx, d, pane);
     if (d.tool === 'datepricerange') window.DrawingForecast.drawDatePriceRange(ctx, d, pane);
-    if (d.tool === 'vwap') window.DrawingForecast.drawAnchoredVWAP(ctx, d, pane);
     if (d.tool === 'fixedvolprof') window.DrawingForecast.drawFixedVolProf(ctx, d, pane);
     if (d.tool === 'anchvolprof') window.DrawingForecast.drawAnchVolProf(ctx, d, pane);
 
     // ── Patterns & Elliott Waves ──
     if (d.tool === 'cyclic-lines') window.DrawingPatterns.drawCyclicLines(ctx, d, pane);
-    if (d.tool === 'time-cycles') window.DrawingPatterns.drawTimeCycles(ctx, d, pane);
-    if (d.tool === 'sine-line') window.DrawingPatterns.drawSineLine(ctx, d, pane);
-    if (d.tool === 'xabcd') window.DrawingPatterns.drawXABCD(ctx, d, pane);
-    if (d.tool === 'cypher') window.DrawingPatterns.drawCypher(ctx, d, pane);
-    if (d.tool === 'headshoulders') window.DrawingPatterns.drawHeadShoulders(ctx, d, pane);
-    if (d.tool === 'abcdpat') window.DrawingPatterns.drawABCD(ctx, d, pane);
-    if (d.tool === 'trianglepat') window.DrawingPatterns.drawTrianglePattern(ctx, d, pane);
-    if (d.tool === 'threedrives') window.DrawingPatterns.drawThreeDrives(ctx, d, pane);
     if (d.tool === 'elliott-impulse') window.DrawingPatterns.drawElliottImpulse(ctx, d, pane);
     if (d.tool === 'elliott-correct') window.DrawingPatterns.drawElliottCorrect(ctx, d, pane);
     if (d.tool === 'elliott-tri') window.DrawingPatterns.drawElliottTriangle(ctx, d, pane);
@@ -2247,11 +2226,6 @@ window.DrawingManager = (() => {
   // Draws centre line + ±1 std-dev channel bands.
 
 
-  // ── Anchored VWAP ─────────────────────────────────────────
-  // Cumulative VWAP starting from the anchor candle (p1.time) to the end of data.
-  // Single-point tool — only p1 is used (the anchor).
-
-
   // ── New Drawing Implementations ───────────────────────────
 
 
@@ -2401,9 +2375,28 @@ window.DrawingManager = (() => {
   function _hitTest(x, y, d, pane) {
     if (!_isDrawingVisible(d, pane)) return false;
 
+    // BUG: fiyat/zaman cetveli şeridine yapılan tıklamalar burada
+    // engellenmiyordu. `onMouseDown`'daki `rawTime === null || rawPrice ===
+    // null` kontrolü bunu engellediğini varsayıyordu, ama
+    // `series.coordinateToPrice(y)` geçerli aralığın dışında bile ASLA
+    // null dönmüyor — sınırın ötesi için ekstrapole edilmiş (ama anlamsız)
+    // bir fiyat veriyor. Sonuç: zaman cetveli şeridine (canvas'ın altındaki
+    // ~22px) yapılan bir tıklama `rawPrice` dolu olduğu için null kontrolünü
+    // atlatıp doğrudan hit-test'e ulaşıyordu — orada (ekranda görünmeyen,
+    // cetvelin altında kalan) bir Fibonacci seviyesi varsa "görünmez"
+    // biçimde seçilebiliyordu. Trend line'larda bu daha az fark ediliyordu
+    // çünkü genelde daha az çizgi bu dar şeride denk geliyordu, ama altta
+    // yatan kontrol eksikliği tüm araçlar için aynıydı. Çözüm: hit-test'in
+    // TEK giriş noktasında, çizim alanının (drawingCanvas) gerçek
+    // sınırlarının dışındaki her tıklamayı en baştan reddet.
+    const _W = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+    const _H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
+    const _scaleW = pane.priceSide === 'left' ? (pane.chart.priceScale('left').width() || 0) : 0;
+    if (x < _scaleW || x > _scaleW + _W || y < 0 || y > _H) return false;
+
     const tolerance = 10;
 
-    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-spiral', 'gann-fan', 'gann-box', 'gann-sq', 'gann-sqfixed', 'cyclic-lines', 'time-cycles', 'sine-line', 'fib-ext', 'fib-channel', 'fib-timebased', 'triangle', 'arc', 'curve', 'doublecurve'].includes(d.tool)) {
+    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-speedfan', 'cyclic-lines', 'fib-ext', 'fib-channel', 'triangle', 'arc'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && Math.hypot(x - a.x, y - a.y) <= tolerance) return 'p1';
@@ -2460,72 +2453,48 @@ window.DrawingManager = (() => {
 
     // ── Regression Trend özel hit test ───────────────
     if (d.tool === 'regression' && d.p1 && d.p2) {
-      const candles = pane.candlesData;
-      if (!candles || candles.length < 3) return false;
-
-      const toSec = t => typeof t === 'object'
-        ? new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0).getTime() / 1000 : t;
-
-      const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
-      const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
-      const inRange = candles.filter(c => { const ct = toSec(c.time); return ct >= tMin && ct <= tMax; });
-      if (inRange.length < 3) return false;
+      // Tek doğruluk kaynağı — çizim fonksiyonuyla (drawing-trend.js
+      // _drawRegressionTrend) AYNI hesaplama. Burada ayrı bir kopya
+      // YAZILMIYOR; iki bağımsız kopyanın birbirinden sapması (Fibonacci
+      // araçlarında defalarca yaşandı) artık yapısal olarak imkânsız.
+      const reg = window.DrawingTrend.computeRegression(d, pane);
+      if (!reg) return false;
+      const { n, slope, intercept, stdDev, points } = reg;
 
       const s = d.style || {};
-      const src = s.source || 'close';
-      const getPrice = c => {
-        if (src === 'open')  return c.open;
-        if (src === 'high')  return c.high;
-        if (src === 'low')   return c.low;
-        if (src === 'hl2')   return (c.high + c.low) / 2;
-        if (src === 'hlc3')  return (c.high + c.low + c.close) / 3;
-        if (src === 'ohlc4') return (c.open + c.high + c.low + c.close) / 4;
-        return c.close;
-      };
 
-      const n = inRange.length;
-      let sx = 0, sy = 0, sxy = 0, sx2 = 0;
-      inRange.forEach((c, i) => { const p = getPrice(c); sx += i; sy += p; sxy += i * p; sx2 += i * i; });
-      const denom = n * sx2 - sx * sx;
-      if (denom === 0) return false;
-      const slope     = (n * sxy - sx * sy) / denom;
-      const intercept = (sy - slope * sx) / n;
+      // Anchor noktaları: center line'ın başı ve sonu
+      const p1pt = points[0];
+      const p2pt = points[points.length - 1];
+      const p1cy = pane.series.priceToCoordinate(p1pt.regPrice);
+      const p2cy = pane.series.priceToCoordinate(p2pt.regPrice);
 
-      let sqDev = 0;
-      inRange.forEach((c, i) => { const res = getPrice(c) - (slope * i + intercept); sqDev += res * res; });
-      const stdDev = Math.sqrt(sqDev / (n - 2));
-
-      // Anchor noktaları: center line'ın başı (i=0) ve sonu (i=n-1)
-      const p1cx  = _timeToX(pane, inRange[0].time);
-      const p1reg = slope * 0 + intercept;
-      const p1cy  = pane.series.priceToCoordinate(p1reg);
-
-      const p2cx  = _timeToX(pane, inRange[n - 1].time);
-      const p2reg = slope * (n - 1) + intercept;
-      const p2cy  = pane.series.priceToCoordinate(p2reg);
-
-      if (p1cx != null && p1cy != null && Math.hypot(x - p1cx, y - p1cy) <= tolerance * 1.5) return 'reg_p1';
-      if (p2cx != null && p2cy != null && Math.hypot(x - p2cx, y - p2cy) <= tolerance * 1.5) return 'reg_p2';
+      if (p1cy != null && Math.hypot(x - p1pt.cx, y - p1cy) <= tolerance * 1.5) return 'reg_p1';
+      if (p2cy != null && Math.hypot(x - p2pt.cx, y - p2cy) <= tolerance * 1.5) return 'reg_p2';
 
       // Çizgi hit: center, upper, lower band'ların herhangi birine yakın mı
+      // BUG: burada sadece `useUpperDev`/`useLowerDev` (sapma DEĞERİNİN
+      // hesaba katılıp katılmadığı) kontrol ediliyordu — çizim tarafı
+      // (drawing-trend.js _drawRegressionTrend) ise `useUpper && showUp`
+      // (yani ayrıca "Up"/"Down"/"Base" GÖRÜNÜRLÜK checkbox'ını da)
+      // kontrol ediyor. Sonuç: kullanıcı "Up" (showUp) kutusunu kapatıp
+      // çizgiyi görünmez yapsa bile, o görünmeyen çizgi hâlâ tıklanabilir
+      // kalıyordu. Çizim fonksiyonuyla birebir aynı koşullar kullanıldı.
       const upperDev = s.upperDev ?? 2;
       const lowerDev = s.lowerDev ?? 2;
-      const useUpper = s.useUpperDev !== false;
-      const useLower = s.useLowerDev !== false;
-
-      const points = inRange.map((c, i) => {
-        const cx = _timeToX(pane, c.time);
-        const regPrice = slope * i + intercept;
-        return { cx, regPrice };
-      }).filter(p => p.cx != null && isFinite(p.cx));
+      const useUpper = s.useUpperDev !== false && s.showUp !== false;
+      const useLower = s.useLowerDev !== false && s.showDown !== false;
+      const useBase  = s.showBase !== false;
 
       for (let i = 0; i < points.length - 1; i++) {
         const pa = points[i], pb = points[i + 1];
 
         // Center line
-        const cya = pane.series.priceToCoordinate(pa.regPrice);
-        const cyb = pane.series.priceToCoordinate(pb.regPrice);
-        if (cya != null && cyb != null && _distToSegment(x, y, pa.cx, cya, pb.cx, cyb) <= tolerance) return 'reg_body';
+        if (useBase) {
+          const cya = pane.series.priceToCoordinate(pa.regPrice);
+          const cyb = pane.series.priceToCoordinate(pb.regPrice);
+          if (cya != null && cyb != null && _distToSegment(x, y, pa.cx, cya, pb.cx, cyb) <= tolerance) return 'reg_body';
+        }
 
         // Upper band
         if (useUpper) {
@@ -2553,9 +2522,11 @@ window.DrawingManager = (() => {
           const extBars  = (extEndX - last.cx) / pxPerBar;
           const extPrice = slope * ((n - 1) + extBars) + intercept;
 
-          const cya = pane.series.priceToCoordinate(last.regPrice);
-          const cyb = pane.series.priceToCoordinate(extPrice);
-          if (cya != null && cyb != null && _distToSegment(x, y, last.cx, cya, extEndX, cyb) <= tolerance) return 'reg_body';
+          if (useBase) {
+            const cya = pane.series.priceToCoordinate(last.regPrice);
+            const cyb = pane.series.priceToCoordinate(extPrice);
+            if (cya != null && cyb != null && _distToSegment(x, y, last.cx, cya, extEndX, cyb) <= tolerance) return 'reg_body';
+          }
 
           if (useUpper) {
             const uya = pane.series.priceToCoordinate(last.regPrice + upperDev * stdDev);
@@ -2718,7 +2689,7 @@ window.DrawingManager = (() => {
     }
 
     // Position tools — anchor lines take priority over body
-    if (['longpos', 'shortpos', 'posforecast'].includes(d.tool) && d.p1 && d.p2 && d.p3) {
+    if (['longpos', 'shortpos'].includes(d.tool) && d.p1 && d.p2 && d.p3) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       const tY = pane.series?.priceToCoordinate(d.p2.price);
@@ -2747,11 +2718,6 @@ window.DrawingManager = (() => {
         }
       }
     }
-    if (d.p1 && d.tool === 'vwap') {
-      const a = _pt2xy(d.p1, pane);
-      if (a && Math.hypot(x - a.x, y - a.y) <= tolerance * 1.5) return 'p1';
-    }
-
     if (d.tool === 'hline' || d.tool === 'crossline' || d.tool === 'hray') {
       if (d.price != null && isFinite(d.price)) {
         const ly = pane.series.priceToCoordinate(d.price);
@@ -2788,12 +2754,9 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (['vwap', 'arrowmarker', 'arrowup', 'arrowdown'].includes(d.tool) && d.p1) {
+    if (['arrowmarker', 'arrowup', 'arrowdown'].includes(d.tool) && d.p1) {
       const a = _pt2xy(d.p1, pane);
-      if (a) {
-        if (d.tool === 'vwap' && Math.hypot(x - a.x, y - a.y) <= tolerance * 1.5) return 'p1';
-        if (d.tool !== 'vwap' && Math.hypot(x - a.x, y - a.y) <= 20) return 'p1'; // slightly larger hit area for markers
-      }
+      if (a && Math.hypot(x - a.x, y - a.y) <= 20) return 'p1'; // slightly larger hit area for markers
     }
 
     if (d.tool === 'triangle' && d.p1 && d.p2 && d.p3) {
@@ -2817,7 +2780,7 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (['curve', 'arc'].includes(d.tool) && d.p1 && d.p2 && d.p3) {
+    if (d.tool === 'arc' && d.p1 && d.p2 && d.p3) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       const c = _pt2xy(d.p3, pane);
@@ -2827,26 +2790,14 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (d.tool === 'doublecurve' && d.p1 && d.p2 && d.p3 && d.p4) {
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane);
-      const c = _pt2xy(d.p3, pane);
-      const p4 = _pt2xy(d.p4, pane);
-      if (a && b && c && p4) {
-        if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
-        if (_distToSegment(x, y, b.x, b.y, c.x, c.y) <= tolerance) return 'line';
-        if (_distToSegment(x, y, c.x, c.y, p4.x, p4.y) <= tolerance) return 'line';
-      }
-    }
-
-    if (['polyline', 'pathtool'].includes(d.tool) && d.points && d.points.length >= 2) {
+    if (d.tool === 'pathtool' && d.points && d.points.length >= 2) {
       const pts = d.points.map(pt => _pt2xy(pt, pane)).filter(Boolean);
       for (let i = 0; i < pts.length - 1; i++) {
         if (_distToSegment(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) <= tolerance) return 'line';
       }
     }
 
-    if (['trendline', 'ray', 'extended', 'channel', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-ext', 'fib-channel', 'fib-timezone', 'fib-circles', 'fib-speedfan', 'fib-timebased', 'fib-spiral'].includes(d.tool)) {
+    if (['trendline', 'ray', 'extended', 'channel', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-ext', 'fib-channel', 'fib-timezone', 'fib-speedfan'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (!a || !b) return false;
@@ -2953,6 +2904,11 @@ window.DrawingManager = (() => {
       if (d.tool.startsWith('fib') || d.tool.includes('pitch')) {
         const s = d.style || {};
         const activeLevels = _getFibLevels(s).filter(l => l.active !== false);
+        // "Reverse" varsayılan kapalı — çizim tarafıyla (drawing-fibo.js)
+        // BİREBİR aynı varsayılan olmalı. Bu ikisi daha önce iki kez
+        // birbirinden bağımsız kopya formüllerle hesaplandığı için
+        // birbirinden sapmıştı (aynı hata sınıfı tekrar tekrar çıktı) —
+        // artık ikisi de tek kaynağı (DrawingFibo.fibAxis) çağırıyor.
         const reverse = !!s.fibReverse;
         const extendLeft = !!s.extendLeft;
         const extendRight = !!s.extendRight;
@@ -2974,22 +2930,6 @@ window.DrawingManager = (() => {
               if (extendLeft) { const ext = _extendToEdge(lx2, ly2, lx1, ly1, W, H); lx1 = ext.x; ly1 = ext.y; }
               if (extendRight) { const ext = _extendToEdge(lx1, ly1, lx2, ly2, W, H); lx2 = ext.x; ly2 = ext.y; }
               if (_distToSegment(x, y, lx1, ly1, lx2, ly2) <= tolerance) return 'line';
-            }
-          }
-          return false;
-        }
-
-        if (d.tool === 'fib-timebased') {
-          if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
-          if (d.p3) {
-            const c = _pt2xy(d.p3, pane);
-            if (c) {
-              if (_distToSegment(x, y, b.x, b.y, c.x, c.y) <= tolerance) return 'line';
-              const dx = b.x - a.x;
-              for (const lvl of activeLevels) {
-                const lx = c.x + dx * lvl.v;
-                if (Math.abs(x - lx) <= tolerance) return 'line';
-              }
             }
           }
           return false;
@@ -3017,16 +2957,21 @@ window.DrawingManager = (() => {
         }
 
         if (d.tool === 'fib-ret') {
-          const yDiff = b.y - a.y;
-          const effYDiff = reverse ? -yDiff : yDiff;
-          
+          // Tek doğruluk kaynağı — çizim fonksiyonuyla (drawing-fibo.js)
+          // AYNI hesaplama. Burada ayrı bir kopya YAZILMIYOR; iki bağımsız
+          // kopyanın birbirinden sapması (bu dosyada iki kez yaşandı) artık
+          // yapısal olarak imkânsız.
+          const yAxis = window.DrawingFibo.fibAxis(a.y, b.y, reverse);
+          const effP1Y = yAxis.base;
+          const effYDiff = yAxis.span;
+
           const extendLeft = !!s.extendLeft;
           const extendRight = !!s.extendRight;
           const leftX = extendLeft ? -100 : Math.min(a.x, b.x);
           const rightX = extendRight ? W + 100 : Math.max(a.x, b.x);
 
           for (const lvl of activeLevels) {
-            const ly = a.y + effYDiff * lvl.v;
+            const ly = effP1Y + effYDiff * lvl.v;
             if (_distToSegment(x, y, leftX, ly, rightX, ly) <= tolerance) return 'line';
           }
           return false;
@@ -3043,10 +2988,13 @@ window.DrawingManager = (() => {
         }
 
         if (d.tool === 'fib-speedfan') {
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const effP1Y = reverse ? b.y : a.y;
-          const effDY = reverse ? -dy : dy;
+          // Çizimle (drawing-fibo.js _drawFibSpeedfan) BİREBİR aynı eksen
+          // kuralı: ilk tıklanan nokta (a/p1 — fan'ın kaynağı) "1", ikinci
+          // nokta (b/p2) "0". Fan'ın geometrik kaynağı her zaman a'da kalır.
+          const yAxis = window.DrawingFibo.fibAxis(a.y, b.y, reverse);
+          const xAxis = window.DrawingFibo.fibAxis(a.x, b.x, reverse);
+          const priceYAt = (v) => yAxis.base + yAxis.span * v;
+          const timeXAt  = (v) => xAxis.base + xAxis.span * v;
 
           let priceLevels = d.style.priceLevels;
           let timeLevels = d.style.timeLevels;
@@ -3058,50 +3006,14 @@ window.DrawingManager = (() => {
           const actTime = timeLevels.filter(l => l && l.active !== false);
 
           for (const lvl of actPrice) {
-            let pricePoint = { x: b.x, y: effP1Y + effDY * lvl.v };
-            let extPrice = _extendToEdge(a.x, effP1Y, pricePoint.x, pricePoint.y, W, H);
-            if (_distToSegment(x, y, a.x, effP1Y, extPrice.x, extPrice.y) <= Math.max(tolerance, 5)) return 'line';
+            let pricePoint = { x: b.x, y: priceYAt(lvl.v) };
+            let extPrice = _extendToEdge(a.x, a.y, pricePoint.x, pricePoint.y, W, H);
+            if (_distToSegment(x, y, a.x, a.y, extPrice.x, extPrice.y) <= Math.max(tolerance, 5)) return 'line';
           }
           for (const lvl of actTime) {
-            if (lvl.v === 0) continue;
-            let timePoint = { x: a.x + dx * lvl.v, y: b.y };
-            let extTime = _extendToEdge(a.x, effP1Y, timePoint.x, timePoint.y, W, H);
-            if (_distToSegment(x, y, a.x, effP1Y, extTime.x, extTime.y) <= Math.max(tolerance, 5)) return 'line';
-          }
-          return false;
-        }
-
-        if (d.tool === 'fib-circles') {
-          const baseRadius = Math.hypot(b.x - a.x, b.y - a.y);
-          const dist = Math.hypot(x - a.x, y - a.y);
-          if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
-          for (const lvl of activeLevels) {
-            const r = baseRadius * lvl.v;
-            if (Math.abs(dist - r) <= tolerance) return 'line';
-          }
-          return false;
-        }
-
-        if (d.tool === 'fib-spiral') {
-          if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
-
-          const baseRadius = Math.hypot(b.x - a.x, b.y - a.y);
-          if (baseRadius < 1) return false;
-
-          const startAngle = Math.atan2(b.y - a.y, b.x - a.x);
-          const dx = x - a.x;
-          const dy = y - a.y;
-          const dist = Math.hypot(dx, dy);
-
-          let angle = Math.atan2(dy, dx);
-          let t = angle - startAngle;
-          while (t < 0) t += Math.PI * 2;
-
-          for (let k = 0; k <= 3; k++) {
-            const currentT = t + k * Math.PI * 2;
-            if (currentT > Math.PI * 6) break;
-            const r = baseRadius * Math.pow(1.618033988749895, currentT / (Math.PI / 2));
-            if (Math.abs(dist - r) <= Math.max(tolerance, 10)) return 'line';
+            let timePoint = { x: timeXAt(lvl.v), y: b.y };
+            let extTime = _extendToEdge(a.x, a.y, timePoint.x, timePoint.y, W, H);
+            if (_distToSegment(x, y, a.x, a.y, extTime.x, extTime.y) <= Math.max(tolerance, 5)) return 'line';
           }
           return false;
         }

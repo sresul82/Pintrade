@@ -313,55 +313,6 @@ window.DrawingShapes = (() => {
       ctx.setLineDash([]);
     }
 
-  function _drawCurve(ctx, d, pane) {
-      if (!d.p1 || !d.p2 || !d.p3) return;
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane); // control point
-      const c = _pt2xy(d.p3, pane);
-      if (!a || !b || !c) return;
-  
-      const s = d.style || {};
-      const lineWidth = parseInt(s.width) || 1;
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = s.color || '#0969da';
-      
-      const style = s.lineStyle || 'solid';
-      const lineDash = style === 'dashed' ? [6 * lineWidth, 6 * lineWidth] : style === 'dotted' ? [2 * lineWidth, 4 * lineWidth] : [];
-      ctx.setLineDash(lineDash);
-      
-      ctx.globalAlpha = ((s.opacity ?? 100) / 100);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.quadraticCurveTo(b.x, b.y, c.x, c.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-  function _drawDoubleCurve(ctx, d, pane) {
-      if (!d.p1 || !d.p2 || !d.p3 || !d.p4) return;
-      const a = _pt2xy(d.p1, pane);
-      const b = _pt2xy(d.p2, pane); // control 1
-      const c = _pt2xy(d.p3, pane); // control 2
-      const e = _pt2xy(d.p4, pane); // end point
-      if (!a || !b || !c || !e) return;
-  
-      const s = d.style || {};
-      const lineWidth = parseInt(s.width) || 1;
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = s.color || '#0969da';
-      
-      const style = s.lineStyle || 'solid';
-      const lineDash = style === 'dashed' ? [6 * lineWidth, 6 * lineWidth] : style === 'dotted' ? [2 * lineWidth, 4 * lineWidth] : [];
-      ctx.setLineDash(lineDash);
-      
-      ctx.globalAlpha = ((s.opacity ?? 100) / 100);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.bezierCurveTo(b.x, b.y, c.x, c.y, e.x, e.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
   function _drawArc(ctx, d, pane) {
       if (!d.p1 || !d.p2 || !d.p3) return;
       const a = _pt2xy(d.p1, pane);
@@ -414,62 +365,6 @@ window.DrawingShapes = (() => {
         ctx.stroke();
       }
       ctx.setLineDash([]);
-    }
-
-  function _drawPolyline(ctx, d, pane) {
-      if (!d.points || d.points.length < 2) return;
-      const pts = d.points.map(pt => _pt2xy(pt, pane)).filter(Boolean);
-      if (pts.length < 2) return;
-  
-      const s = d.style || {};
-      const lineWidth = parseInt(s.width) || 1;
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = s.color || '#0969da';
-      
-      const style = s.lineStyle || 'solid';
-      const lineDash = style === 'dashed' ? [6 * lineWidth, 6 * lineWidth] : style === 'dotted' ? [2 * lineWidth, 4 * lineWidth] : [];
-      ctx.setLineDash(lineDash);
-      
-      ctx.globalAlpha = ((s.opacity ?? 100) / 100);
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-  
-      // Draw end caps
-      if (pts.length > 1) {
-        const capLeft = s.capLeft || 'normal';
-        const capRight = s.capRight || 'normal';
-        
-        const pFirst = pts[0];
-        const pSecond = pts[1];
-        const pLast = pts[pts.length - 1];
-        const pPrev = pts[pts.length - 2];
-        const r = Math.max(3, lineWidth * 2);
-  
-        // Left cap
-        if (capLeft === 'arrow') {
-          _drawArrowHead(ctx, pSecond, pFirst);
-        } else {
-          ctx.beginPath();
-          ctx.arc(pFirst.x, pFirst.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = s.color || '#0969da';
-          ctx.fill();
-        }
-  
-        // Right cap
-        if (capRight === 'arrow') {
-          _drawArrowHead(ctx, pPrev, pLast);
-        } else {
-          ctx.beginPath();
-          ctx.arc(pLast.x, pLast.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = s.color || '#0969da';
-          ctx.fill();
-        }
-      }
     }
 
   function _drawPathTool(ctx, d, pane) {
@@ -661,10 +556,7 @@ function _drawArrowHead(ctx, from, to) {
     drawCircle: _drawCircle,
     drawEllipse: _drawEllipse,
     drawTriangle: _drawTriangle,
-    drawCurve: _drawCurve,
-    drawDoubleCurve: _drawDoubleCurve,
     drawArc: _drawArc,
-    drawPolyline: _drawPolyline,
     drawPathTool: _drawPathTool,
     drawArrowMarker: _drawArrowMarker,
     drawArrow: _drawArrow,

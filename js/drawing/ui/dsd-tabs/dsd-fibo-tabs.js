@@ -4,40 +4,17 @@
  */
 window.DSDFiboTabs = (() => {
 
-function renderFibStyleTab(d) {
-    const s = d.style || {};
-    const color = s.color || '#58a6ff';
-    const width = s.width || 1;
-    const dash  = JSON.stringify(s.dash || []);
-    
-    const extLeft = !!s.extendLeft;
-    const extRight = !!s.extendRight;
-    const useOneColor = s.useOneColor || '#4caf50';
-    const useOneActive = s.useOneColor && s.useOneColor !== false;
-    const fibBg = s.fibBg !== false;
-    const fibBgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
-    const fibReverse = !!s.fibReverse;
-    const fibPrices = s.fibPrices !== false;
-    const fibLevelsMode = s.fibLevelsType !== false;
-    const fibLevelsModeVal = s.fibLevelsMode || 'Values';
-    const fibLabelsH = s.fibLabelsH || 'Left';
-    const fibLabelsV = s.fibLabelsV || 'Middle';
-    const fibFontSize = s.fibFontSize || 12;
-    const fibLogScale = !!s.fibLogScale;
-
-    const tlActive = s.trendLineActive !== false;
-    const tlColor = s.trendLineColor || color;
-    const tlWidth = s.trendLineWidth || width;
-    const tlDash = s.trendLineDash || dash;
-    const lvlDash = s.levelsDash || dash;
-    const lvlWidth = s.levelsWidth || width;
-    
-    const tlDashStr = Array.isArray(tlDash) ? JSON.stringify(tlDash) : tlDash;
-    const lvlDashStr = Array.isArray(lvlDash) ? JSON.stringify(lvlDash) : lvlDash;
-
-    
+// Bir fibo aracının varsayılan seviye listesini üretir (2.272 üstü kesme
+// dahil — bkz. aşağıdaki not). Hem ayar diyaloğu (renderFibStyleTab) hem
+// de bir çizim İLK OLUŞTURULDUĞUNDA (drawing-core.js _getToolStyle)
+// tarafından çağrılıyor — ikisi ayrı ayrı hesaplarsa (eskiden olduğu gibi)
+// taze çizilmiş bir Fib, ayar diyaloğu hiç açılmadan sadece 7 satırlık
+// (1.618 dahil olmayan) kısır bir varsayılana düşüyordu; 1.618 gibi
+// "varsayılan aktif" bir seviye ilk çizimde görünmüyor, ancak diyalog
+// açılıp kapanınca (o an gerçek varsayılan hesaplanınca) beliriyordu.
+function _computeDefaultFibLevels(tool) {
     let defaultLevels = [];
-    if (d.tool === 'fib-timezone') {
+    if (tool === 'fib-timezone') {
       defaultLevels = [
         { v: 0, color: '#787b86', active: true },
         { v: 1, color: '#2962ff', active: true },
@@ -51,21 +28,7 @@ function renderFibStyleTab(d) {
         { v: 55, color: '#607d8b', active: true },
         { v: 89, color: '#795548', active: true }
       ];
-    } else if (d.tool === 'fib-timebased') {
-      defaultLevels = [
-        { v: 0, color: '#787b86', active: true },
-        { v: 0.382, color: '#f44336', active: true },
-        { v: 0.5, color: '#4caf50', active: false },
-        { v: 0.618, color: '#4caf50', active: true },
-        { v: 1, color: '#00bcd4', active: true },
-        { v: 1.382, color: '#00bcd4', active: true },
-        { v: 1.618, color: '#787b86', active: true },
-        { v: 2, color: '#2962ff', active: true },
-        { v: 2.382, color: '#e91e63', active: true },
-        { v: 2.618, color: '#9c27b0', active: true },
-        { v: 3, color: '#673ab7', active: true }
-      ];
-    } else if (d.tool === 'fib-speedfan') {
+    } else if (tool === 'fib-speedfan') {
       defaultLevels = [
         { v: 0, color: '#787b86', active: true },
         { v: 0.25, color: '#f44336', active: true },
@@ -86,8 +49,8 @@ function renderFibStyleTab(d) {
         { v: 1, color: '#787b86', active: true },
         { v: 1.618, color: '#9c27b0', active: true },
         { v: 2.618, color: '#e91e63', active: true },
-        { v: 3.618, color: '#9c27b0', active: d.tool === 'fib-channel' ? true : false },
-        { v: 4.236, color: '#e91e63', active: d.tool === 'fib-channel' ? true : false },
+        { v: 3.618, color: '#9c27b0', active: tool === 'fib-channel' ? true : false },
+        { v: 4.236, color: '#e91e63', active: tool === 'fib-channel' ? true : false },
         { v: 1.272, color: '#4caf50', active: false },
         { v: 1.414, color: '#f44336', active: false },
         { v: 2.272, color: '#ff9800', active: false },
@@ -103,9 +66,65 @@ function renderFibStyleTab(d) {
         { v: 4.764, color: '#ff9800', active: false }
       ];
     }
+
+    // 2.272 üstündeki seviyeler menüye sığmıyordu — kullanıcı isteğiyle TÜM
+    // fibo araçlarında kaldırıldı — TEK istisna: fib-timezone (farklı birim,
+    // bar sayısı — bkz. çağıran yerdeki not).
+    if (tool !== 'fib-timezone') {
+      defaultLevels = defaultLevels.filter(l => l.v <= 2.272);
+    }
+    return defaultLevels;
+}
+
+function renderFibStyleTab(d) {
+    const s = d.style || {};
+    const color = s.color || '#58a6ff';
+    const width = s.width || 1;
+    const dash  = JSON.stringify(s.dash || []);
     
+    const extLeft = !!s.extendLeft;
+    const extRight = !!s.extendRight;
+    const useOneColor = s.useOneColor || '#4caf50';
+    const useOneActive = s.useOneColor && s.useOneColor !== false;
+    const fibBg = s.fibBg !== false;
+    const fibBgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
+    // "Reverse" kutusu varsayılan KAPALI — kullanıcı bunu açmasa da ilk
+    // tıklanan nokta zaten seviye 1 olur (bkz. drawing-fibo.js _fibAxis).
+    const fibReverse = !!s.fibReverse;
+    const fibPrices = s.fibPrices !== false;
+    const fibLevelsMode = s.fibLevelsType !== false;
+    const fibLevelsModeVal = s.fibLevelsMode || 'Values';
+    const fibLabelsH = s.fibLabelsH || 'Left';
+    const fibLabelsV = s.fibLabelsV || 'Top';
+    const fibFontSize = s.fibFontSize || 12;
+    const fibLogScale = !!s.fibLogScale;
+
+    const tlActive = s.trendLineActive !== false;
+    const tlColor = s.trendLineColor || color;
+    const tlWidth = s.trendLineWidth || width;
+    const tlDash = s.trendLineDash || dash;
+    const lvlDash = s.levelsDash || dash;
+    const lvlWidth = s.levelsWidth || width;
+    
+    const tlDashStr = Array.isArray(tlDash) ? JSON.stringify(tlDash) : tlDash;
+    const lvlDashStr = Array.isArray(lvlDash) ? JSON.stringify(lvlDash) : lvlDash;
+
+    
+    let defaultLevels = _computeDefaultFibLevels(d.tool);
+    const applyCap = d.tool !== 'fib-timezone';
+
     if (!s.fibLevels || s.fibLevels.length === 0) {
       s.fibLevels = defaultLevels;
+    } else if (applyCap) {
+      // Bu çizim yeni koddan ÖNCE oluşturulmuş olabilir — o zamanki
+      // fibLevels dizisi hâlâ eski (24 uzunluğunda, 2.272 üstü dahil)
+      // kaydedilmiş olabilir. Ayrıca drawing-settings-dialog.js'teki bazı
+      // eski yol renkli düğmeye tıklanınca diziyi 24 boş (v:0, color:'#000',
+      // active:false) satırla dolduruyordu — bunlar da "boş" satırlar
+      // olarak görünüyordu. İkisini de burada temizliyoruz ki panel her
+      // açılışta (eski çizimler dahil) doğru boyutta kalsın.
+      s.fibLevels = s.fibLevels.filter(l => l.v <= 2.272 && l.color !== '#000');
+      if (s.fibLevels.length === 0) s.fibLevels = defaultLevels;
     }
     const levels = s.fibLevels;
     const isFibChannel = d.tool === 'fib-channel';
@@ -116,10 +135,18 @@ function renderFibStyleTab(d) {
     
     let html = '';
     
+    // Seviye satırlarındaki (checkbox + değer kutusu + renk) düzenle aynı
+    // hizaya gelsinler diye üstteki etiketli satırlar (Trend line/Extend/
+    // Use one color/Background/Levels/Labels/Font size) hepsi FIB_LABEL_W
+    // genişliğini paylaşıyor. Değer, gerçek diyalog DOM'unda ölçülerek
+    // bulundu: seviye satırlarındaki ilk sütun renk kutusu satır
+    // başlangıcından 115px sonra başlıyor (checkbox+değer kutusu+gap'ler).
+    const FIB_LABEL_W = 107;
+
     if (!isFibChannel && d.tool !== 'fib-speedfan') {
       html += `
       <div class="dsd-row" style="margin-bottom:8px;">
-        <label class="dsd-checkbox-label" style="width:120px;">
+        <label class="dsd-checkbox-label" style="width:${FIB_LABEL_W}px;">
           <input type="checkbox" id="dsd-tl-active" ${tlActive ? 'checked' : ''}> Trend line
         </label>
         <div class="dsd-row-controls">
@@ -129,23 +156,34 @@ function renderFibStyleTab(d) {
       `;
     }
 
-    html += `
+    // Fib Time Zone çizgileri her zaman ekranın tam dikey boyunu (yTop=0 →
+    // yBottom=H) kaplayacak şekilde çiziliyor (bkz. drawing-fibo.js
+    // _drawFibTimezone) — "Extend left/right" burada anlamsız, hiçbir
+    // zaman okunmuyordu bile. Fib Channel da aynı şekilde extendLeft/
+    // extendRight'ı hiç okumuyordu (ölü ayar).
+    const isFibTimezone = d.tool === 'fib-timezone';
+
+    if (!isFibTimezone && !isFibChannel) {
+      html += `
       <div class="dsd-row" style="margin-bottom:12px;">
-        <label class="dsd-label" style="width:120px;">Extend</label>
-        <select class="dsd-select" id="dsd-fib-extend" style="width:140px;">
+        <label class="dsd-label" style="width:${FIB_LABEL_W}px; color:#d1d4dc;">Extend</label>
+        <select class="dsd-select" id="dsd-fib-extend" style="width:auto; flex:0 0 auto;">
           <option value="none" ${!extLeft && !extRight ? 'selected' : ''}>Don't extend</option>
           <option value="left" ${extLeft && !extRight ? 'selected' : ''}>Extend left</option>
           <option value="right" ${!extLeft && extRight ? 'selected' : ''}>Extend right</option>
           <option value="both" ${extLeft && extRight ? 'selected' : ''}>Extend both</option>
         </select>
       </div>
+      `;
+    }
 
+    html += `
       <div class="dsd-fib-levels" style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom:16px;">
     `;
     
     levels.forEach((lvl, i) => {
       html += `
-        <div class="dsd-row-inline" style="align-items:center; gap:8px; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
+        <div class="dsd-row-inline" style="align-items:center; gap:8px; margin-bottom:0; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
            <input type="checkbox" class="js-fib-active" data-idx="${i}" ${lvl.active ? 'checked' : ''}>
            <input type="number" class="dsd-input js-fib-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:70px; padding:2px 4px; border:1px solid #2a2e39;">
            <div class="dsd-color-swatch js-fib-color" data-idx="${i}" style="background:${lvl.color}; width:20px; height:20px; border-radius:3px; flex-shrink:0; cursor:pointer;" data-color="${lvl.color}"></div>
@@ -157,14 +195,14 @@ function renderFibStyleTab(d) {
       </div>
       
       <div class="dsd-row" style="margin-bottom:12px;">
-         <label class="dsd-checkbox-label" style="width:120px;">
+         <label class="dsd-checkbox-label" style="width:${FIB_LABEL_W}px;">
            <input type="checkbox" class="js-fib-useone-cb" id="dsd-fib-useonecolor-cb" ${useOneActive ? 'checked' : ''}> Use one color
          </label>
          <div class="dsd-color-swatch js-fib-onecolor" style="background:${useOneColor}; width:24px; height:24px; border-radius:3px; cursor:pointer;" data-color="${useOneColor}"></div>
       </div>
-      
+
       <div class="dsd-row" style="margin-bottom:12px; align-items:center;">
-         <label class="dsd-checkbox-label" style="width:120px;">
+         <label class="dsd-checkbox-label" style="width:${FIB_LABEL_W}px;">
            <input type="checkbox" id="dsd-fib-bg" ${fibBg ? 'checked' : ''}> Background
          </label>
          <style>
@@ -209,40 +247,44 @@ function renderFibStyleTab(d) {
          </label>
       </div>
       
-      <div class="dsd-row" style="margin-bottom:12px; gap:16px;">
-         <label class="dsd-checkbox-label" style="width:104px;">
+      <div class="dsd-row" style="margin-bottom:12px;">
+         <label class="dsd-checkbox-label" style="width:${FIB_LABEL_W}px;">
            <input type="checkbox" id="dsd-fib-levels-active" ${fibLevelsMode ? 'checked' : ''}> Levels
          </label>
-         <select class="dsd-select" id="dsd-fib-levels-mode" style="width:100px;">
+         <select class="dsd-select" id="dsd-fib-levels-mode" style="width:100px; flex:0 0 auto;">
             <option value="Values" ${fibLevelsModeVal==='Values'?'selected':''}>Values</option>
             <option value="Percents" ${fibLevelsModeVal==='Percents'?'selected':''}>Percents</option>
          </select>
       </div>
 
-      <div class="dsd-row" style="margin-bottom:12px; gap:16px;">
-         <label class="dsd-label" style="width:120px;">Labels</label>
-         <select class="dsd-select" id="dsd-fib-labels-h" style="width:80px;">
+      <div class="dsd-row" style="margin-bottom:12px;">
+         <label class="dsd-label" style="width:${FIB_LABEL_W}px; color:#d1d4dc;">Labels</label>
+         <select class="dsd-select" id="dsd-fib-labels-h" style="width:80px; flex:0 0 auto;">
             <option value="Left" ${fibLabelsH==='Left'?'selected':''}>Left</option>
             <option value="Center" ${fibLabelsH==='Center'?'selected':''}>Center</option>
             <option value="Right" ${fibLabelsH==='Right'?'selected':''}>Right</option>
          </select>
-         <select class="dsd-select" id="dsd-fib-labels-v" style="width:80px;">
+         ${isFibChannel ? '' : `
+         <select class="dsd-select" id="dsd-fib-labels-v" style="width:80px; flex:0 0 auto;">
             <option value="Top" ${fibLabelsV==='Top'?'selected':''}>Top</option>
             <option value="Middle" ${fibLabelsV==='Middle'?'selected':''}>Middle</option>
             <option value="Bottom" ${fibLabelsV==='Bottom'?'selected':''}>Bottom</option>
          </select>
+         `}
       </div>
-      
-      <div class="dsd-row" style="margin-bottom:12px; gap:16px;">
-         <label class="dsd-label" style="width:120px;">Font size</label>
-         <select class="dsd-select" id="dsd-fib-fontsize" style="width:80px;">
+
+      <div class="dsd-row" style="margin-bottom:12px;">
+         <label class="dsd-label" style="width:${FIB_LABEL_W}px; color:#d1d4dc;">Font size</label>
+         <!-- Genişlik, üstteki Labels satırının iki select'inin (80+8+80)
+              toplam genişliğiyle aynı olsun diye 168px sabitlendi. -->
+         <select class="dsd-select" id="dsd-fib-fontsize" style="width:168px; flex:0 0 auto;">
             ${[8,10,12,14,16,20,24,28,32].map(sz => `<option value="${sz}" ${fibFontSize==sz?'selected':''}>${sz}</option>`).join('')}
          </select>
       </div>
 
     `;
 
-    if (!isFibChannel) {
+    if (!isFibChannel && !isFibTimezone) {
        html += `
       <div class="dsd-row">
          <label class="dsd-checkbox-label" style="color:#a3a6af;">
@@ -290,6 +332,8 @@ function renderFibStyleTab(d) {
     const useOneActive = s.useOneColor && s.useOneColor !== false;
     const fibBg = s.fibBg !== false;
     const fibBgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
+    // "Reverse" kutusu varsayılan KAPALI — kullanıcı bunu açmasa da ilk
+    // tıklanan nokta zaten seviye 1 olur (bkz. drawing-fibo.js _fibAxis).
     const fibReverse = !!s.fibReverse;
     const gridStyle = s.gridStyle || 'dashed';
     const gridColor = s.gridColor || '#363c4e';
@@ -302,7 +346,7 @@ function renderFibStyleTab(d) {
     const renderLevel = (lvl, i, prefix) => {
        if (!lvl) return '<div></div>';
        return `
-        <div class="dsd-row-inline" style="align-items:center; gap:8px; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
+        <div class="dsd-row-inline" style="align-items:center; gap:8px; margin-bottom:0; opacity: ${lvl.active ? '1' : '0.4'}; transition: opacity 0.2s;">
            <input type="checkbox" class="js-fib-active js-sf-${prefix}" data-idx="${i}" ${lvl.active ? 'checked' : ''}>
            <input type="number" class="dsd-input js-fib-val js-sf-${prefix}-val" data-idx="${i}" value="${lvl.v}" step="0.001" style="width:70px; padding:2px 4px; border:1px solid #2a2e39;">
            <div class="dsd-color-swatch js-fib-color js-sf-${prefix}-col" data-idx="${i}" style="background:${lvl.color}; width:20px; height:20px; border-radius:3px; flex-shrink:0; cursor:pointer;" data-color="${lvl.color}"></div>
@@ -360,10 +404,10 @@ function renderFibStyleTab(d) {
 
     html += `
       <div class="dsd-row" style="margin-bottom:12px; align-items:center;">
-         <label class="dsd-checkbox-label" style="width:120px;">
+         <label class="dsd-checkbox-label" style="width:120px; flex-shrink:0;">
            <input type="checkbox" id="dsd-fib-bg" ${fibBg ? 'checked' : ''}> Background
          </label>
-         <div class="dsd-color-swatch js-fib-bg-color" style="background:${fibBgColorHex}; width:24px; height:24px; border-radius:3px; cursor:pointer; margin-right:8px;" data-color="${fibBgColorHex}"></div>
+         <div class="dsd-color-swatch js-fib-bg-color" style="background:${fibBgColorHex}; width:24px; height:24px; border-radius:3px; cursor:pointer; margin-right:8px; flex-shrink:0;" data-color="${fibBgColorHex}"></div>
          <style>
            .dsd-fib-opacity-slider {
              -webkit-appearance: none; height: 9px; border-radius: 4px; outline: none;
@@ -400,6 +444,7 @@ function renderFibStyleTab(d) {
 
   return {
     renderFibStyleTab,
-    renderFibSpeedfanTab
+    renderFibSpeedfanTab,
+    getDefaultLevels: _computeDefaultFibLevels,
   };
 })();

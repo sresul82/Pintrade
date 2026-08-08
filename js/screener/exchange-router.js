@@ -19,13 +19,6 @@ const ExchangeRouter = (() => {
     return ex === 'binance' ? 'bybit' : 'binance';
   }
 
-  // Screener tab adından exchange çıkar
-  // 'bn-screener' → 'binance' | 'bb-screener' → 'bybit'
-  function fromTab(tab) {
-    if (!tab) return getActive();
-    return tab.startsWith('bn') ? 'binance' : 'bybit';
-  }
-
   // Exchange → doğru ScalpFRMonitor instance
   function getMonitor(exchange) {
     return window.getScalpMonitor?.(exchange || getActive())
@@ -64,7 +57,6 @@ const ExchangeRouter = (() => {
   return {
     getActive,
     getOpposite,
-    fromTab,
     getMonitor,
     getPoller,
     getFundingInterval,

@@ -27,44 +27,387 @@
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
-.wl-close {
-  width: 24px;
-  height: 24px;
+/* .wl-close (sol üstteki ✕) kaldırıldı — panel sağdaki ikon çubuğundan
+   kapatılıyor, header'da yer kaplamasına gerek yoktu. */
+
+/* .wl-title (eski "Screener" başlığı) kaldırıldı — yerine arama kutusu geldi.
+   Stil, başka yerde kullanılırsa diye duruyor. */
+.wl-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* Screener exchange picker (BN/BB) */
+.wl-exchange-picker {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-.wl-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-
-.wl-tabs { display: flex; gap: 2px; flex: 1; }
-.wl-tab {
-  font-size: 9px;
-  color: var(--text-primary); font-weight: 700;
-  padding: 3px 7px;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  border: 1px solid transparent;
-}
-.wl-tab:hover { opacity: 1; }
-.wl-tab.active {
-  background: var(--bg-tertiary);
-  color: var(--text-primary); opacity: 1 !important; font-weight: 700;
-  border-color: var(--border-primary);
-}
-
-/* Search */
-.wl-search {
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-primary);
-  width: 100%;
-  padding: 6px 10px;
-  color: var(--text-primary);
+  gap: 4px;
   font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  user-select: none;
+}
+.wl-exchange-picker:hover { background: var(--bg-hover); }
+.wl-exchange-arrow { font-size: 7px; opacity: 0.6; }
+.wl-exchange-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 100px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  padding: 4px 0;
+}
+.wl-exchange-menu.open { display: flex; }
+.wl-exchange-item {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.wl-exchange-item:hover { background: var(--bg-hover); }
+.wl-exchange-item.active {
+  color: var(--accent-blue);
+  background: var(--accent-blue-bg);
+}
+
+/* ── Arama (header içinde, "Screener" başlığının yerinde) ── */
+.wl-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  display: flex;
+  align-items: center;
+}
+.wl-search {
+  width: 100%;
+  height: 24px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 0 22px 0 8px;   /* sağda ✕ için yer */
+  color: var(--text-primary);
+  font-size: 11px;
 }
 .wl-search::placeholder { color: var(--text-secondary); }
+.wl-search:focus {
+  border-color: var(--border-secondary);
+  background: var(--bg-hover);
+}
+
+/* Temizleme ✕ — sadece kutuda yazı varken görünür (JS .visible ekler) */
+.wl-search-clear {
+  position: absolute;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1;
+}
+.wl-search-clear.visible { display: flex; }
+.wl-search-clear:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ══════════════════════════════════════════════════════
+   LİSTE SEÇİCİ + SÜTUN SEÇİCİ (header dropdown'ları)
+   Tetikleyiciler borsa seçiciyle aynı görünümü paylaşır.
+══════════════════════════════════════════════════════ */
+.wl-list-picker,
+.wl-cols-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  user-select: none;
+}
+.wl-list-picker:hover,
+.wl-cols-picker:hover { background: var(--bg-hover); }
+
+.wl-list-picker > span:first-child {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wl-cols-picker { padding: 0 6px; }
+.wl-cols-dots { font-size: 14px; line-height: 1; }
+
+/* ── Menü kabuğu (ikisi ortak) ── */
+.wl-list-menu,
+.wl-cols-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  padding: 6px 0;
+  cursor: default;
+  font-weight: 400;
+}
+.wl-list-menu { width: 230px; max-height: 70vh; overflow-y: auto; }
+.wl-cols-menu { width: 165px; }
+.wl-list-menu.open,
+.wl-cols-menu.open { display: flex; }
+
+/* ── Ortak parçalar ── */
+.wl-lm-label {
+  padding: 6px 12px 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.wl-lm-sep-line {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px 0;
+}
+.wl-lm-section { display: flex; flex-direction: column; }
+.wl-lm-empty {
+  padding: 6px 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Liste satırı ── */
+.wl-lm-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.wl-lm-item:hover { background: var(--bg-hover); }
+.wl-lm-item.editing { cursor: default; padding: 4px 8px; }
+.wl-lm-item.editing:hover { background: transparent; }
+
+.wl-lm-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.wl-lm-item.active .wl-lm-dot { background: var(--accent-blue); }
+.wl-lm-item.active .wl-lm-name { color: var(--accent-blue); font-weight: 600; }
+
+.wl-lm-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ✎ / 🗑 — sadece satır hover'ında görünür */
+.wl-lm-actions { display: none; gap: 2px; flex-shrink: 0; }
+.wl-lm-item:hover .wl-lm-actions { display: flex; }
+.wl-lm-act {
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.wl-lm-act:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+/* Yeni liste / yeniden adlandırma input'u */
+.wl-lm-input {
+  width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+}
+
+.wl-lm-action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.wl-lm-action-row:hover { background: var(--bg-hover); color: var(--text-primary); }
+.wl-lm-plus { font-size: 13px; line-height: 1; }
+
+/* ── Sinyaller: Kom1 / Kom2 / Kom3 grupları ── */
+.wl-lm-groups { padding: 2px 12px 6px 24px; }
+.wl-lm-group-sep {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.wl-lm-group-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-primary);
+}
+.wl-lm-group-sym  { font-size: 10px; padding: 2px 0; color: var(--text-primary); }
+.wl-lm-group-empty{ font-size: 10px; padding: 2px 0; color: var(--text-muted); }
+
+/* ── Pazar filtresi (menü altı) ── */
+.wl-lm-market { padding: 2px 0 0; }
+.wl-lm-market-row {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.wl-lm-market-row:hover { background: var(--bg-hover); }
+.wl-lm-market-row.disabled { color: var(--text-muted); cursor: not-allowed; }
+.wl-lm-market-row.disabled:hover { background: transparent; }
+/* FUTURES: tek aktif pazar, tıklanacak bir şey yok — düz beyaz etiket */
+.wl-lm-market-row.plain {
+  color: var(--text-primary);
+  cursor: default;
+}
+.wl-lm-market-row.plain:hover { background: transparent; }
+.wl-lm-soon {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* ── Sütun seçici satırları ── */
+.wl-cm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.wl-cm-item:hover { background: var(--bg-hover); }
+.wl-cm-item.locked { cursor: not-allowed; color: var(--text-secondary); }
+.wl-cm-check {
+  width: 13px; height: 13px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-secondary);
+  border-radius: 3px;
+  font-size: 9px;
+  color: transparent;
+  flex-shrink: 0;
+}
+.wl-cm-check.on {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+.wl-cm-name { flex: 1; }
+.wl-cm-lock { font-size: 8px; opacity: 0.5; }
+
+/* ── Sütun menüsü: Change Type / Volume Type radio satırları ── */
+.wl-cm-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.wl-cm-radio:hover { background: var(--bg-hover); }
+.wl-cm-radio.soon { color: var(--text-secondary); }
+.wl-cm-radio-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border-secondary);
+  flex-shrink: 0;
+  position: relative;
+}
+.wl-cm-radio-dot.on { border-color: var(--accent-blue); }
+.wl-cm-radio-dot.on::after {
+  content: '';
+  position: absolute; inset: 2px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+}
+.wl-cm-radio .wl-lm-soon { margin-left: auto; }
+
+/* ── Satır sağ tık menüsü (coin'i listelere ekle/çıkar) ── */
+.wl-ctx-menu {
+  position: fixed;
+  min-width: 170px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  z-index: 200;
+  padding: 5px 0;
+}
+.wl-ctx-title {
+  padding: 5px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 4px;
+}
+.wl-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.wl-ctx-item:hover { background: var(--bg-hover); }
 
 /* ── Grid layout modes ─────────────────────────────── */
 .wl-col-header,
@@ -73,15 +416,29 @@
   grid-template-columns: var(--wl-cols, 1fr 80px 60px 60px 70px 70px 70px);
 }
 
+/* Sütun genişlikleri artık JS'ten geliyor (--wl-cols), çünkü kullanıcı
+   ⋮ menüsünden sütun açıp kapatabiliyor. Sabit 7 sütunluk eski kurallar
+   kaldırıldı — açık sütun sayısı değiştiğinde şablon da değişmeli. */
 #right-panel[data-wl-mode="screener"] .wl-col-header,
-#right-panel[data-wl-mode="screener"] .wl-row {
-  grid-template-columns: 80px 74px 62px 68px 48px 62px 56px;
-  padding-right: 6px;
-}
-
+#right-panel[data-wl-mode="screener"] .wl-row,
 #right-panel[data-wl-mode="all"] .wl-col-header,
 #right-panel[data-wl-mode="all"] .wl-row {
-  grid-template-columns: 82px 74px 62px 72px 48px 62px 56px;
+  grid-template-columns: var(--wl-cols, minmax(80px, 1fr) 74px 62px 68px 48px 62px 56px);
+}
+
+/* Symbol başlığı, altındaki coin isimleriyle aynı hizada olsun.
+   Önceden .wl-row'da padding: 3px 8px vardı ama başlıkta hiç padding
+   yoktu — başlık 8px sola kaymış görünüyordu. */
+.wl-col-header {
+  padding: 4px 8px;
+}
+#right-panel[data-wl-mode="screener"] .wl-row {
+  padding-right: 8px;
+}
+/* Başlık kaydırma çubuğunun dışında kalıyor; satırlar ise çubuk kadar
+   dar. Sağ kenarların hizalı kalması için başlığa çubuk genişliği eklendi. */
+#right-panel[data-wl-mode="screener"] .wl-col-header {
+  padding-right: calc(8px + var(--scrollbar-width));
 }
 .wl-col-sym   { display: flex; align-items: center; gap: 2px; cursor: pointer; }
 .wl-col-right { text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
@@ -208,8 +565,18 @@
   background: var(--border-secondary);
   cursor: row-resize;
   flex-shrink: 0;
+  position: relative;
 }
-.detail-resize:hover { background: var(--border-primary); }
+.detail-resize:hover,
+.detail-resize:active { background: var(--accent-blue, #58a6ff); }
+
+/* Sürükleme sırasında (mousedown → mouseup) body'ye eklenir:
+   metin seçimini engeller, imleç panel dışına çıksa bile row-resize kalır. */
+body.dp-resizing {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+body.dp-resizing * { user-select: none !important; }
 
 .detail-tabs {
   display: flex;
@@ -264,8 +631,31 @@
   background: var(--bg-primary);
 }
 
-#detail-popout {
+/* Sağ grup: [Bot Signals kontrolleri (koşullu)] + [popout butonu] — her
+   zaman sekme çubuğunun en sağında, aralarında boşluk olmadan bitişik. */
+.detail-tabs-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* Sekme çubuğu kontrol gruplarının (Bot Signals SE/arama/snipe/sırala,
+   News snipe/sırala) ortak GÖRSEL stili. Sadece görünüm için — JS render
+   hedeflerini seçerken kullanılmaz, o yüzden Bot Signals ile News birbirini
+   ezmez (her biri kendi ID'sine yazar).
+   .bsp-tabbar-controls-target: SADECE bot-signals-panel.js'in hedefleri
+   (#bsp-tabbar-controls docked, #fp-tabbar-controls floating) — o modülün
+   _renderTabbarControls()'u bu sınıfı sorgulayıp içeriğini yazıyor. */
+.tabbar-controls-group,
+.bsp-tabbar-controls-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#detail-popout {
   padding: 4px 8px;
   font-size: 14px;
   color: var(--text-secondary);
@@ -275,7 +665,7 @@
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
   line-height: 1;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 #detail-popout:hover {
@@ -632,6 +1022,27 @@
 .dp-oi-bars { display: flex; align-items: flex-end; gap: 3px; height: 38px; margin-top: 5px; }
 .dp-oi-bar  { flex: 1; border-radius: 2px 2px 0 0; }
 
+/* Kart içi "floating window'da aç" ikonu — L/S kartında absolute (üst sağ
+   köşe, L/S satırıyla aynı hizada), OI Değişimi kartında satır içi (flex,
+   başlıkla aynı satırda) kullanılıyor — bkz. index.html dp-ls-popout/dp-oi-popout. */
+.dp-card-popout {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary); /* Bot Signals'ın #detail-popout'u ile aynı beyazlık */
+  cursor: pointer;
+}
+.dp-card-popout:hover { background: var(--bg-hover); color: var(--text-primary); }
+
 /* Tooltip */
 .dp-tooltip-icon {
   position: relative;
@@ -806,7 +1217,13 @@
   padding: 0;
 }
 #wl-list {
-  flex: 1 1 auto;
+  /* flex-basis: 0% — .detail-body'deki ile aynı desen. "auto" olsaydı
+     676 satırın TAM (kırpılmamış) toplam yüksekliği (~14.000px) taban
+     alınırdı ve flex-shrink hesaplaması detail-panel'i neredeyse sıfıra
+     ezerdi (huge content-basis şurada da geçerli: overflow-y:auto olması
+     max-content hesaplamasını etkilemiyor). basis:0 ile grow:1 doğru
+     şekilde "kalan alanı doldur" davranışı veriyor. */
+  flex: 1 1 0%;
   min-height: 20%;
   overflow-y: auto;
 }

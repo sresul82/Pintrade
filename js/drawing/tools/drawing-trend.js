@@ -1127,10 +1127,21 @@ window.DrawingTrend = (() => {
           anchorY = (a.y + b.y) / 2;
         }
 
-        let levelV = 0;
-        if (textAlignV === 'middle') levelV = 0.5;
-        if (textAlignV === 'bottom') levelV = 1;
-        
+        // "Top"/"Bottom" artık v=0/v=1'e sabit değil — o an AKTİF olan
+        // seviyelerin en üsttekine/en, alttakine göre uyarlanıyor (kullanıcı
+        // üst/alt seviyeleri açıp kapadıkça metnin konumu da değişiyor).
+        // "Inside" (Middle) her zaman kanalın matematiksel ortası olan
+        // v=0.5'e göre — bu, 0.5 seviyesinin çizgisi görünür olsun ya da
+        // olmasın sabit bir referans.
+        let levelV;
+        if (textAlignV === 'top' || textAlignV === 'bottom') {
+          const activeLs = levels.filter(l => l.active);
+          const vs = activeLs.length > 0 ? activeLs.map(l => l.v) : [0, 1];
+          levelV = textAlignV === 'top' ? Math.min(...vs) : Math.max(...vs);
+        } else {
+          levelV = 0.5;
+        }
+
         anchorY += dy * levelV;
 
         ctx.save();
@@ -1144,17 +1155,17 @@ window.DrawingTrend = (() => {
         if (textAlignH === 'center') canvasAlign = 'center';
         ctx.textAlign = canvasAlign;
 
-        const offsetDist = 6; 
-        let yOffset = 0;
-        if (textAlignV === 'top') {
-          yOffset = -offsetDist;
-          ctx.textBaseline = 'bottom';
-        } else if (textAlignV === 'bottom') {
+        const offsetDist = 6;
+        let yOffset;
+        if (textAlignV === 'bottom') {
           yOffset = offsetDist;
           ctx.textBaseline = 'top';
         } else {
-          yOffset = 0;
-          ctx.textBaseline = 'middle';
+          // "Top" ve "Inside" (Middle) aynı davranışı paylaşıyor: metin
+          // referans çizginin (sırasıyla en üst aktif seviye / v=0.5)
+          // ÜZERİNDE duruyor — kullanıcı isteği: "0.5 çizgisi üstünde olsun".
+          yOffset = -offsetDist;
+          ctx.textBaseline = 'bottom';
         }
 
         const xShift = (canvasAlign === 'left') ? 4 : (canvasAlign === 'right') ? -4 : 0;
@@ -1431,88 +1442,105 @@ window.DrawingTrend = (() => {
     } catch(e) { /* render hatası diğer çizimleri etkilemesin */ }
   }
 
+  // ── TEK DOĞRULUK KAYNAĞI: Regression Trend'in OLS hesabı ────────────
+  // Daha önce bu hesap (candle filtreleme, slope/intercept/stdDev/points)
+  // hem burada (çizim) hem drawing-core.js'in hit-test'inde BAĞIMSIZ birer
+  // kopya olarak yazılıydı — Fibonacci araçlarında defalarca yaşadığımız
+  // "iki kopya birbirinden sapar" riskiyle aynı desen. Artık ikisi de
+  // SADECE bu fonksiyonu çağırıyor.
+  function _computeRegression(d, pane) {
+    if (!d.p1 || !d.p2) return null;
+    const s = d.style || {};
+
+    const candles = pane.candlesData;
+    if (!candles || candles.length === 0) return null;
+
+    const toSec = t => typeof t === 'object'
+      ? new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0).getTime() / 1000
+      : t;
+
+    const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
+    const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
+    const inRange = candles.filter(c => {
+      const ct = toSec(c.time);
+      return ct >= tMin && ct <= tMax;
+    });
+    if (inRange.length < 3) return null;
+
+    // — Source seçimi —
+    const src = s.source || 'close';
+    const getPrice = c => {
+      if (src === 'open')  return c.open;
+      if (src === 'high')  return c.high;
+      if (src === 'low')   return c.low;
+      if (src === 'hl2')   return (c.high + c.low) / 2;
+      if (src === 'hlc3')  return (c.high + c.low + c.close) / 3;
+      if (src === 'ohlc4') return (c.open + c.high + c.low + c.close) / 4;
+      return c.close;
+    };
+
+    const n = inRange.length;
+
+    // — OLS Linear Regression —
+    let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+    inRange.forEach((c, i) => {
+      const p = getPrice(c);
+      sx  += i;
+      sy  += p;
+      sxy += i * p;
+      sx2 += i * i;
+    });
+    const denom    = n * sx2 - sx * sx;
+    if (denom === 0) return null;
+    const slope     = (n * sxy - sx * sy) / denom;
+    const intercept = (sy - slope * sx) / n;
+
+    // — Standart Sapma (degrees of freedom = n-2) —
+    let sqDev = 0;
+    inRange.forEach((c, i) => {
+      const res = getPrice(c) - (slope * i + intercept);
+      sqDev += res * res;
+    });
+    const stdDev = Math.sqrt(sqDev / (n - 2));
+
+    // — Pearson's R —
+    const pearsonR = (() => {
+      const meanX = sx / n;
+      const meanY = sy / n;
+      let num = 0, dx2 = 0, dy2 = 0;
+      inRange.forEach((c, i) => {
+        const p  = getPrice(c);
+        const dx = i - meanX;
+        const dy = p - meanY;
+        num += dx * dy;
+        dx2 += dx * dx;
+        dy2 += dy * dy;
+      });
+      const div = Math.sqrt(dx2 * dy2);
+      return div === 0 ? 0 : num / div;
+    })();
+
+    // — Her mum için regression fiyatını x koordinatına çevir —
+    // Sadece inRange.length kadar nokta — pixel döngüsü yok
+    const points = inRange.map((c, i) => {
+      const regPrice = slope * i + intercept;
+      const cx = _timeToX(pane, c.time);
+      return { i, cx, regPrice };
+    }).filter(p => p.cx != null && isFinite(p.cx));
+
+    if (points.length < 2) return null;
+
+    return { inRange, n, slope, intercept, stdDev, pearsonR, points };
+  }
+
   function _drawRegressionTrend(ctx, d, pane) {
     try {
       if (!d.p1 || !d.p2) return;
       const s = d.style || {};
 
-      const candles = pane.candlesData;
-      if (!candles || candles.length === 0) return;
-
-      const toSec = t => typeof t === 'object'
-        ? new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0).getTime() / 1000
-        : t;
-
-      const tMin = Math.min(toSec(d.p1.time), toSec(d.p2.time));
-      const tMax = Math.max(toSec(d.p1.time), toSec(d.p2.time));
-      const inRange = candles.filter(c => {
-        const ct = toSec(c.time);
-        return ct >= tMin && ct <= tMax;
-      });
-      if (inRange.length < 3) return;
-
-      // — Source seçimi —
-      const src = s.source || 'close';
-      const getPrice = c => {
-        if (src === 'open')  return c.open;
-        if (src === 'high')  return c.high;
-        if (src === 'low')   return c.low;
-        if (src === 'hl2')   return (c.high + c.low) / 2;
-        if (src === 'hlc3')  return (c.high + c.low + c.close) / 3;
-        if (src === 'ohlc4') return (c.open + c.high + c.low + c.close) / 4;
-        return c.close;
-      };
-
-      const n = inRange.length;
-
-      // — OLS Linear Regression —
-      let sx = 0, sy = 0, sxy = 0, sx2 = 0;
-      inRange.forEach((c, i) => {
-        const p = getPrice(c);
-        sx  += i;
-        sy  += p;
-        sxy += i * p;
-        sx2 += i * i;
-      });
-      const denom    = n * sx2 - sx * sx;
-      if (denom === 0) return;
-      const slope     = (n * sxy - sx * sy) / denom;
-      const intercept = (sy - slope * sx) / n;
-
-      // — Standart Sapma (degrees of freedom = n-2) —
-      let sqDev = 0;
-      inRange.forEach((c, i) => {
-        const res = getPrice(c) - (slope * i + intercept);
-        sqDev += res * res;
-      });
-      const stdDev = Math.sqrt(sqDev / (n - 2));
-
-      // — Pearson's R —
-      const pearsonR = (() => {
-        const meanX = sx / n;
-        const meanY = sy / n;
-        let num = 0, dx2 = 0, dy2 = 0;
-        inRange.forEach((c, i) => {
-          const p  = getPrice(c);
-          const dx = i - meanX;
-          const dy = p - meanY;
-          num += dx * dy;
-          dx2 += dx * dx;
-          dy2 += dy * dy;
-        });
-        const div = Math.sqrt(dx2 * dy2);
-        return div === 0 ? 0 : num / div;
-      })();
-
-      // — Her mum için regression fiyatını x koordinatına çevir —
-      // Sadece inRange.length kadar nokta — pixel döngüsü yok
-      const points = inRange.map((c, i) => {
-        const regPrice = slope * i + intercept;
-        const cx = _timeToX(pane, c.time);
-        return { i, cx, regPrice };
-      }).filter(p => p.cx != null && isFinite(p.cx));
-
-      if (points.length < 2) return;
+      const reg = _computeRegression(d, pane);
+      if (!reg) return;
+      const { n, slope, intercept, stdDev, pearsonR, points } = reg;
 
       const upperDev = s.upperDev ?? 2;
       const lowerDev = s.lowerDev ?? 2;
@@ -1710,6 +1738,9 @@ window.DrawingTrend = (() => {
     drawChannel: _drawChannel,
     drawInfoLine: _drawInfoLine,
     drawFlatTopBottom: _drawFlatTopBottom,
-    drawRegressionTrend: _drawRegressionTrend
+    drawRegressionTrend: _drawRegressionTrend,
+    // Tek doğruluk kaynağı — drawing-core.js'in hit-test'i de BUNU
+    // çağırır, kendi kopyasını hesaplamaz.
+    computeRegression: _computeRegression
   };
 })();

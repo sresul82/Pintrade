@@ -5,7 +5,10 @@ class ChartPane {
     const s = savedState;
     this.symbol       = s.symbol      ?? DEFAULTS.symbol;
     this.exchange     = s.exchange    ?? (window.State ? State.get('activeExchange') : 'binance');
-    this.tf           = s.tf          ?? DEFAULTS.tf;
+    // Kaldırılan bir TF (45m/3H) eski localStorage pane state'inde kalmış
+    // olabilir — TF_LIST'te yoksa varsayılana düş, yanlış borsa verisi
+    // gösterilmesin (Bybit '45m' için sessizce 1H mumu çekiyordu).
+    this.tf           = (s.tf && TF_LIST.includes(s.tf)) ? s.tf : DEFAULTS.tf;
     this.chartType    = s.chartType   ?? DEFAULTS.chartType;
     this.scaleMode    = s.scaleMode   ?? DEFAULTS.scaleMode;
     this.priceSide    = s.priceSide   ?? DEFAULTS.priceSide;
@@ -148,7 +151,18 @@ class ChartPane {
       if (e.button !== 0) return; // Right-click / middle-click: skip, let contextmenu handle it
       if (window.DrawingManager) {
          const claimed = window.DrawingManager.onMouseDown(this, e);
-         if (claimed) { e.preventDefault(); e.stopPropagation(); }
+         if (claimed) {
+           e.preventDefault(); e.stopPropagation();
+           // Pointer capture: bir çizim sürüklenirken (özellikle "Extend
+           // right/left" ile ekran kenarına uzayan Fib seviye çizgileri gibi
+           // geniş hedeflerde) fare imleci `this.cvs` sınırlarının dışına
+           // çıkarsa, capture olmadan bırakılan (pointerup) olay bu elemente
+           // hiç ulaşmıyordu — `_dragState` hiç temizlenmiyor, çizim fareye
+           // "yapışık" kalıyordu (bir sonraki tıklamaya kadar). Capture ile
+           // imleç nereye giderse gitsin pointermove/pointerup bu elemente
+           // teslim edilmeye devam ediyor.
+           try { this.cvs.setPointerCapture(e.pointerId); } catch (_) {}
+         }
       }
     }, { capture: true });
 
@@ -161,6 +175,7 @@ class ChartPane {
 
     this.cvs.addEventListener('pointerup', e => {
       if (e.button !== 0) return;
+      try { if (this.cvs.hasPointerCapture?.(e.pointerId)) this.cvs.releasePointerCapture(e.pointerId); } catch (_) {}
       if (window.DrawingManager && window.DrawingManager.onMouseUp) {
         const claimed = window.DrawingManager.onMouseUp(this, e);
         // If the matching pointerdown was claimed by us, also claim the pointerup.

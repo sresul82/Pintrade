@@ -11,7 +11,14 @@ const FloatingPanel = (() => {
   let _visible     = false;
   let _fpContent   = null; // floating içerik container'ı
 
-  const PANEL_WIDTH = 420;
+  let _isResizing     = false;
+  let _resizeStartY   = 0;
+  let _resizeStartH   = 0;
+  const MIN_HEIGHT    = 180;
+
+  // 420px'te FR sinyal tablosunun (7 sütun) son sütunu (Saat) taşıp
+  // #fp-signals-content'in overflow-x:hidden'ı yüzünden kesiliyordu — genişletildi.
+  const PANEL_WIDTH = 460;
 
   function _createEl() {
     const div = document.createElement('div');
@@ -48,25 +55,65 @@ const FloatingPanel = (() => {
       <span style="font-size:10px;font-weight:600;color:var(--text-secondary);letter-spacing:0.5px;">
         ⠿ &nbsp;BOT SIGNALS
       </span>
-      <button id="fp-close" aria-label="Kapat" style="
-        background:transparent;border:none;color:var(--text-secondary);
-        font-size:15px;cursor:pointer;line-height:1;padding:0 2px;
-      ">✕</button>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <!-- Docked görünümdeki SE/arama/snipe/sırala kontrollerinin aynısı —
+             bkz. bot-signals-panel.js attachTabbarTarget() / _renderTabbarControls() -->
+        <div id="fp-tabbar-controls" class="bsp-tabbar-controls-target"></div>
+        <button id="fp-close" aria-label="Kapat" style="
+          background:transparent;border:none;color:var(--text-secondary);
+          font-size:15px;cursor:pointer;line-height:1;padding:0 2px;
+        ">✕</button>
+      </div>
     `;
 
     // İçerik alanı — BotSignalsPanel buraya render edecek
     const content = document.createElement('div');
     content.id = 'fp-signals-content';
-    content.style.cssText = 'flex:1; overflow-y:auto; overflow-x:hidden;';
+    // overflow-x:auto (hidden değil) — sütun genişlikleri artık sığacak
+    // şekilde ayarlandı ama ileride bir şey taşarsa sessizce kaybolmak
+    // yerine en azından yatay kaydırılabilsin.
+    content.style.cssText = 'flex:1; overflow-y:auto; overflow-x:auto; padding-bottom:6px;';
+
+    // Dikey resize tutamacı — alt kenar, sürükleyince div.style.height ayarlanır
+    const resizer = document.createElement('div');
+    resizer.id = 'fp-resize-handle';
+    resizer.style.cssText = `
+      position:absolute; left:0; right:0; bottom:0; height:7px;
+      cursor:ns-resize; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    `;
+    resizer.innerHTML = `<div style="width:32px; height:3px; border-radius:2px; background:var(--border-primary);"></div>`;
 
     div.appendChild(tb);
     div.appendChild(content);
+    div.appendChild(resizer);
     document.body.appendChild(div);
 
     _fpContent = content;
 
     // Kapat butonu
     document.getElementById('fp-close').addEventListener('click', hide);
+
+    // Vertical resize
+    resizer.addEventListener('mousedown', e => {
+      _isResizing   = true;
+      _resizeStartY = e.clientY;
+      _resizeStartH = div.getBoundingClientRect().height;
+      document.body.style.cursor = 'ns-resize';
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!_isResizing) return;
+      const top = div.getBoundingClientRect().top;
+      const maxHeight = window.innerHeight - top - 12;
+      const newHeight = Math.max(MIN_HEIGHT, Math.min(_resizeStartH + (e.clientY - _resizeStartY), maxHeight));
+      div.style.height = newHeight + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      if (!_isResizing) return;
+      _isResizing = false;
+      document.body.style.cursor = '';
+    });
 
     // Drag
     tb.addEventListener('mousedown', e => {
@@ -119,6 +166,7 @@ const FloatingPanel = (() => {
   }
 
   function show() {
+    const isFirstCreate = !_el;
     if (!_el) _el = _createEl();
     _el.style.display = 'flex';
     _visible = true;
@@ -129,6 +177,12 @@ const FloatingPanel = (() => {
     // BotSignalsPanel'e floating container'ı bildir → oraya render eder
     if (window.BotSignalsPanel?.addContainer) {
       BotSignalsPanel.addContainer(_fpContent);
+    }
+
+    // Başlık çubuğundaki SE/arama/snipe/sırala kontrolleri — #fp-tabbar-controls
+    // panel ilk kez oluşturulduğunda DOM'a giriyor, o yüzden sadece o an bağlanır.
+    if (isFirstCreate && window.BotSignalsPanel?.attachTabbarTarget) {
+      BotSignalsPanel.attachTabbarTarget(document.getElementById('fp-tabbar-controls'));
     }
   }
 

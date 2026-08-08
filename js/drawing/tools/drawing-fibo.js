@@ -27,6 +27,62 @@ window.DrawingFibo = (() => {
     return price.toFixed(2);
   }
 
+  // BUG: _drawFibSpeedfan bu fonksiyonu tanımsız bir global olarak
+  // çağırıyordu — `_extendToEdge` sadece drawing-core.js ve
+  // drawing-trend.js'in KENDİ kapalı (IIFE) scope'larında tanımlıydı, bu
+  // dosyanın (ayrı bir IIFE) erişimi yoktu. Sonuç: fan çizgileri
+  // hesaplanırken `ReferenceError` fırlıyordu, render döngüsündeki try/catch
+  // bunu yutuyordu — arkaplan dolgusu ve grid çiziliyordu ama asıl "fan"
+  // (merkezden ışınsal) çizgileri hiç çizilmiyordu (bkz. kullanıcı ekran
+  // görüntüsü: sadece renkli yatay bantlar + beyaz kesikli grid görünüyordu).
+  function _extendToEdge(x1, y1, x2, y2, w, h) {
+    const dx = x2 - x1, dy = y2 - y1;
+    if (dx === 0 && dy === 0) return { x: x2, y: y2 };
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (w - x1) / dx);
+    if (dx < 0) t = Math.min(t, -x1 / dx);
+    if (dy > 0) t = Math.min(t, (h - y1) / dy);
+    if (dy < 0) t = Math.min(t, -y1 / dy);
+    return { x: x1 + dx * t, y: y1 + dy * t };
+  }
+
+  // ── TEK DOĞRULUK KAYNAĞI: "ilk tıklanan nokta hangi seviyede?" ──────────
+  // Bu projede İKİ KEZ aynı hata sınıfı yaşandı: çizim (bu dosya) ile
+  // tıklama-algılama (drawing-core.js) birbirinden BAĞIMSIZ kopya formüllerle
+  // hesaplanıyordu, biri güncellenince diğeri unutuluyordu. Artık İKİSİ DE
+  // SADECE bu fonksiyonu çağırıyor — aralarında sapma fiziksel olarak
+  // mümkün değil.
+  //
+  // Varsayılan (reverse=false, yani "Reverse" kutusu İŞARETLİ DEĞİLKEN):
+  //   İLK tıklanan nokta (a) = seviye 1
+  //   İKİNCİ tıklanan nokta (b) = seviye 0
+  // Kullanıcı "Reverse" kutusunu işaretlerse klasik/ters okumaya döner:
+  //   a = seviye 0, b = seviye 1
+  //
+  // NOT: Bu davranış "Reverse" adlı kullanıcıya açık bir ayarı AÇMADAN elde
+  // ediliyor — checkbox varsayılan olarak kapalı kalır (kullanıcı bunu hiç
+  // istemedi, sadece "ilk tık = 1" istedi).
+  function _fibAxis(aVal, bVal, reverse) {
+    return reverse
+      ? { base: aVal, span: bVal - aVal }   // klasik: a=0, b=1
+      : { base: bVal, span: aVal - bVal };  // varsayılan: a=1, b=0
+  }
+
+  // Seviye satırındaki renk düğmesine tıklanınca açılan popup (bkz.
+  // drawing-settings-dialog.js js-fib-color handler) her seviye için
+  // `lvl.width`/`lvl.style` kaydediyordu, ama çizim fonksiyonları (Fib
+  // Speed Fan hariç) bunu HİÇ okumuyordu — sadece tüm seviyeler için
+  // ortak `s.levelsWidth`/`s.levelsStyle` kullanılıyordu. Yani bir
+  // seviyenin çizgi tipini/kalınlığını değiştirmenin çizim üzerinde
+  // hiçbir etkisi olmuyordu. Artık her seviye kendi width/style'ını
+  // (varsa) kullanıyor, yoksa ortak ayara düşüyor.
+  function _levelLineStyle(s, lvl) {
+    const width = lvl.width || s.levelsWidth || s.width || 1;
+    const style = lvl.style || s.levelsStyle || 'solid';
+    const dash  = style === 'dashed' ? [8, 5] : style === 'dotted' ? [3, 3] : [];
+    return { width, dash };
+  }
+
   // Common Fib Levels helper - extracted from core if needed or replicated here
   function _getFibLevels(styleObj) {
     // Standard default levels if none provided
@@ -39,8 +95,14 @@ window.DrawingFibo = (() => {
       { v: 0.786, color: '#64b5f6' },
       { v: 1, color: '#787b86' }
     ];
-    if (styleObj && styleObj.levels && Array.isArray(styleObj.levels)) {
-      return styleObj.levels;
+    // BUG (2026-08-01): burada yanlışlıkla `styleObj.levels` okunuyordu ama
+    // ayar diyaloğu (dsd-fibo-tabs.js) ve kaydetme mantığı (dsd-apply.js)
+    // her yerde `styleObj.fibLevels` kullanıyor. `.levels` hiçbir zaman
+    // set edilmediği için bu fonksiyon HER ZAMAN aşağıdaki sabit 7 seviyeye
+    // düşüyordu — kullanıcının menüde yaptığı hiçbir Level değişikliği
+    // (tik/değer/renk) grafiğe hiç yansımıyordu.
+    if (styleObj && styleObj.fibLevels && Array.isArray(styleObj.fibLevels)) {
+      return styleObj.fibLevels;
     }
     return defaults;
   }
@@ -58,23 +120,22 @@ window.DrawingFibo = (() => {
       const activeLevels = allLevels.filter(l => l.active !== false);
       // Sort by value
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
+      // "Reverse" kutusu varsayılan KAPALI — kapalıyken bile ilk tıklanan
+      // nokta seviye 1 olur (bkz. _fibAxis üstteki açıklama).
       const reverse = !!s.fibReverse;
-  
+
       const extendLeft  = !!s.extendLeft;
       const extendRight = !!s.extendRight;
       const W = pane.drawingCanvas.width  / (window.devicePixelRatio || 1);
       const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
       const leftX  = extendLeft  ? 0 : Math.min(p1.x, p2.x);
       const rightX = extendRight ? W : Math.max(p1.x, p2.x);
-  
-      const yDiff = p2.y - p1.y;
-      const priceDiff = d.p2.price - d.p1.price;
-  
+
       const fibBg    = s.fibBg !== false;
       const bgAlpha  = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
       const fontSize = s.fibFontSize || 11;
       const labelsH  = s.fibLabelsH  || 'Left';
-      const labelsV  = s.fibLabelsV  || 'Middle';
+      const labelsV  = s.fibLabelsV  || 'Top';
       const showPrices = s.fibPrices !== false;
       const levelMode  = s.fibLevelsMode || 'Values'; // 'Values' | 'Percents'
       const showLabels = s.fibLevelsType !== false;
@@ -92,17 +153,41 @@ window.DrawingFibo = (() => {
       ctx.stroke();
       ctx.restore();
   
-      const effP1Y = reverse ? p2.y : p1.y;
-      const effYDiff = reverse ? -yDiff : yDiff;
-      const effP1Price = reverse ? d.p2.price : d.p1.price;
-      const effPriceDiff = reverse ? -priceDiff : priceDiff;
-  
+      const yAxis = _fibAxis(p1.y, p2.y, reverse);
+      const priceAxis = _fibAxis(d.p1.price, d.p2.price, reverse);
+      const effP1Y = yAxis.base;
+      const effYDiff = yAxis.span;
+      const effP1Price = priceAxis.base;
+      const effPriceDiff = priceAxis.span;
+
+      // ── "Fib levels based on log scale" ───────────────────────
+      // Eskiden bu ayar (s.fibLogScale) hiç okunmuyordu — checkbox işaretini
+      // değiştirmenin çizim üzerinde HİÇBİR etkisi yoktu. Şimdi: kapalıyken
+      // seviyeler iki fiyat arasında ARİTMETİK (eşit fiyat farkı) aralıklarla,
+      // açıkken GEOMETRİK (eşit yüzde/oran) aralıklarla hesaplanıyor — ikinci
+      // yöntem düşük fiyatlı/log ölçekli grafiklerde daha anlamlı sonuç verir.
+      const logScale = !!s.fibLogScale;
+      const effP2Price = effP1Price + effPriceDiff;
+      function _fibPriceAt(v) {
+        if (logScale && effP1Price > 0 && effP2Price > 0) {
+          return effP1Price * Math.pow(effP2Price / effP1Price, v);
+        }
+        return effP1Price + effPriceDiff * v;
+      }
+      function _fibYAt(v) {
+        if (logScale && effP1Price > 0 && effP2Price > 0) {
+          const py = pane.series?.priceToCoordinate?.(_fibPriceAt(v));
+          if (py != null && isFinite(py)) return py;
+        }
+        return effP1Y + effYDiff * v;
+      }
+
       // ── Draw backgrounds between adjacent active levels ───────
       if (fibBg && sorted.length > 1) {
         ctx.save();
         for (let i = 1; i < sorted.length; i++) {
-          const prevY = effP1Y + effYDiff * sorted[i-1].v;
-          const thisY = effP1Y + effYDiff * sorted[i].v;
+          const prevY = _fibYAt(sorted[i-1].v);
+          const thisY = _fibYAt(sorted[i].v);
           ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : sorted[i].color) || '#4caf50';
           ctx.globalAlpha = bgAlpha;
           ctx.fillRect(leftX, Math.min(prevY, thisY), rightX - leftX, Math.abs(thisY - prevY));
@@ -110,26 +195,20 @@ window.DrawingFibo = (() => {
         ctx.restore();
       }
   
-      // ── Level line style ─────────────────────────────────────
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash
-                     : lvlStyle === 'dashed' ? [8, 5]
-                     : lvlStyle === 'dotted' ? [3, 3] : [];
-  
       // ── Label alignment helpers ───────────────────────────────
       const textX = labelsH === 'Right' ? rightX - 4 : labelsH === 'Center' ? (leftX + rightX) / 2 : leftX + 4;
       const textAlign = labelsH === 'Right' ? 'right' : labelsH === 'Center' ? 'center' : 'left';
-  
+
       ctx.save();
       ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
-  
+
       // ── Draw each active level ────────────────────────────────
       for (const lvl of sorted) {
-        const ly = effP1Y + effYDiff * lvl.v;
+        const ly = _fibYAt(lvl.v);
         if (ly < -20 || ly > H + 20) continue; // clip
-  
-        // Horizontal level line
+
+        // Horizontal level line — her seviye kendi width/style'ını kullanır
+        const { width: lvlWidth, dash: lvlDash } = _levelLineStyle(s, lvl);
         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         ctx.lineWidth   = lvlWidth;
         ctx.setLineDash(lvlDash);
@@ -146,14 +225,21 @@ window.DrawingFibo = (() => {
           ctx.textAlign = textAlign;
   
           const valStr   = showLabels ? (levelMode === 'Percents' ? `${(lvl.v * 100).toFixed(1)}%` : lvl.v.toFixed(3)) : '';
-          const priceAt  = effP1Price + effPriceDiff * lvl.v;
-          const priceStr = showPrices ? (showLabels ? ` (${priceAt.toFixed(2)})` : priceAt.toFixed(2)) : '';
+          const priceAt  = _fibPriceAt(lvl.v);
+          // Eskiden .toFixed(2) sabitti — düşük fiyatlı coinlerde (ör.
+          // 0.00001234) neredeyse tüm anlamlı basamakları siliyordu ve
+          // fiyat grafikteki gerçek fiyatı yansıtmıyormuş gibi görünüyordu.
+          // Artık grafiğin kendi dinamik ondalık formatlayıcısı kullanılıyor.
+          const priceStr = showPrices ? (showLabels ? ` (${_formatPrice(priceAt)})` : _formatPrice(priceAt)) : '';
           const label    = valStr + priceStr;
-  
+
+          // Eskiden "Middle" seçili olsa bile metin her zaman çizginin
+          // ÜSTÜNDE duruyordu (aynı Top gibi davranıyordu, textBaseline hiç
+          // 'middle' olmuyordu) — artık çizginin tam üzerinde ortalanıyor.
           const textY = labelsV === 'Top'    ? ly - 3
                       : labelsV === 'Bottom' ? ly + fontSize + 2
-                      :                        ly - 2; // Middle (baseline above line)
-          ctx.textBaseline = labelsV === 'Bottom' ? 'top' : 'bottom';
+                      :                        ly; // Middle — çizginin üzerinde ortalanır
+          ctx.textBaseline = labelsV === 'Bottom' ? 'top' : labelsV === 'Middle' ? 'middle' : 'bottom';
           ctx.fillText(label, textX, textY);
         }
       }
@@ -179,34 +265,47 @@ window.DrawingFibo = (() => {
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
+      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
+      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
+      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
+      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
+      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
+      // önce bulunanla AYNI hata sınıfı).
       const reverse = !!s.fibReverse;
-  
+
       const extendLeft  = !!s.extendLeft;
       const extendRight = !!s.extendRight;
       const showLabels = s.fibLevelsType !== false;
       const showPrices = s.fibPrices !== false;
-      const levelMode  = s.fibLevelsType === 'Percents' ? 'Percents' : 'Values';
+      const levelMode  = s.fibLevelsMode === 'Percents' ? 'Percents' : 'Values';
       const fibBg    = s.fibBg !== false;
       const bgAlpha  = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
       const fontSize = s.fibFontSize || 11;
       const labelsH  = s.fibLabelsH  || 'Left';
-      const labelsV  = s.fibLabelsV  || 'Middle';
+      const labelsV  = s.fibLabelsV  || 'Top';
       const W = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
       const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
       const leftX  = extendLeft ? 0 : Math.min(p1.x, p2.x, p3.x);
       const rightX = extendRight ? W : Math.max(p1.x, p2.x, p3.x) + 150;
   
-      // Base lines
+      // Base lines — "Trend line" checkbox/renk düğmesi `trendLineActive/
+      // trendLineColor/trendLineWidth/trendLineStyle` kaydediyordu
+      // (bkz. drawing-settings-dialog.js ~1433), ama burada yanlış
+      // property adları (`trendColor/trendWidth/trendStyle`) okunuyordu —
+      // hiçbiri hiç set edilmediği için ayardan bağımsız hep aynı sabit
+      // (kesikli, gri) çizgi çiziliyordu.
       ctx.save();
+      const tlActive = s.trendLineActive !== false;
+      ctx.strokeStyle = tlActive ? (s.trendLineColor || s.color || '#787b86') : 'transparent';
+      ctx.lineWidth = s.trendLineWidth || s.width || 1;
+      const tlStyle = s.trendLineStyle || 'dashed';
+      ctx.setLineDash(tlStyle === 'dashed' ? [6, 4] : tlStyle === 'dotted' ? [2, 3] : []);
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
       ctx.lineTo(p3.x, p3.y);
-      ctx.strokeStyle = s.trendColor || '#787b86';
-      ctx.lineWidth = s.trendWidth || 1;
-      ctx.setLineDash(s.trendStyle === 'dashed' ? [5,5] : s.trendStyle === 'dotted' ? [2,2] : [4, 4]);
       ctx.stroke();
-  
+
       const yDiff = p2.y - p1.y;
       const priceDiff = d.p2.price - d.p1.price;
       const effP3Y = reverse ? p3.y + yDiff : p3.y;
@@ -224,17 +323,15 @@ window.DrawingFibo = (() => {
         }
       }
   
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash : lvlStyle === 'dashed' ? [8, 5] : lvlStyle === 'dotted' ? [3, 3] : [];
       const textX = labelsH === 'Right' ? rightX - 4 : labelsH === 'Center' ? (leftX + rightX) / 2 : leftX + 4;
       const textAlign = labelsH === 'Right' ? 'right' : labelsH === 'Center' ? 'center' : 'left';
       ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
-  
+
       for (const lvl of sorted) {
         const ly = effP3Y + effYDiff * lvl.v;
         if (ly < -20 || ly > H + 20) continue;
-  
+
+        const { width: lvlWidth, dash: lvlDash } = _levelLineStyle(s, lvl);
         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         ctx.lineWidth   = lvlWidth;
         ctx.setLineDash(lvlDash);
@@ -250,10 +347,10 @@ window.DrawingFibo = (() => {
           ctx.textAlign = textAlign;
           const valStr   = showLabels ? (levelMode === 'Percents' ? `${(lvl.v * 100).toFixed(1)}%` : lvl.v.toFixed(3)) : '';
           const priceAt  = effP3Price + effPriceDiff * lvl.v;
-          const priceStr = showPrices ? (showLabels ? ` (${priceAt.toFixed(2)})` : priceAt.toFixed(2)) : '';
+          const priceStr = showPrices ? (showLabels ? ` (${_formatPrice(priceAt)})` : _formatPrice(priceAt)) : '';
           const label    = valStr + priceStr;
-          const textY = labelsV === 'Top' ? ly - 3 : labelsV === 'Bottom' ? ly + fontSize + 2 : ly - 2;
-          ctx.textBaseline = labelsV === 'Bottom' ? 'top' : 'bottom';
+          const textY = labelsV === 'Top' ? ly - 3 : labelsV === 'Bottom' ? ly + fontSize + 2 : ly;
+          ctx.textBaseline = labelsV === 'Bottom' ? 'top' : labelsV === 'Middle' ? 'middle' : 'bottom';
           ctx.fillText(label, textX, textY);
         }
       }
@@ -279,26 +376,48 @@ window.DrawingFibo = (() => {
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
+      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
+      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
+      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
+      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
+      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
+      // önce bulunanla AYNI hata sınıfı).
       const reverse = !!s.fibReverse;
-  
-      const extendLeft  = !!s.extendLeft;
-      const extendRight = !!s.extendRight;
+
       const fibBg    = s.fibBg !== false;
       const bgAlpha  = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
-  
+      const showPrices = s.fibPrices !== false;
+
       ctx.save();
-      
+
+      // Trend line (p1→p2) — "Trend line" checkbox/renk düğmesi
+      // `trendLineActive/trendLineColor/trendLineWidth/trendLineStyle`
+      // kaydediyordu ama bu fonksiyon hiçbir zaman bir taban çizgisi
+      // çizmiyordu — ayar hiçbir şeye etki etmiyordu.
+      const tlActive = s.trendLineActive !== false;
+      if (tlActive) {
+        ctx.strokeStyle = s.trendLineColor || s.color || '#787b86';
+        ctx.lineWidth = s.trendLineWidth || s.width || 1;
+        const tlStyle = s.trendLineStyle || 'dashed';
+        ctx.setLineDash(tlStyle === 'dashed' ? [6, 4] : tlStyle === 'dotted' ? [2, 3] : []);
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
-  
+
       // Vector from line(p1,p2) to p3
       // We treat p1 as origin for projection
       const px3 = p3.x - p1.x;
       const py3 = p3.y - p1.y;
-  
+
       const effPx3 = reverse ? -px3 : px3;
       const effPy3 = reverse ? -py3 : py3;
-  
+
       if (fibBg && sorted.length > 1) {
         for (let i = 1; i < sorted.length; i++) {
           const v1 = sorted[i-1].v;
@@ -315,16 +434,13 @@ window.DrawingFibo = (() => {
         }
       }
   
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash : lvlStyle === 'dashed' ? [8, 5] : lvlStyle === 'dotted' ? [3, 3] : [];
-  
       for (const lvl of sorted) {
         const lx1 = p1.x + effPx3*lvl.v;
         const ly1 = p1.y + effPy3*lvl.v;
         const lx2 = p2.x + effPx3*lvl.v;
         const ly2 = p2.y + effPy3*lvl.v;
-  
+
+        const { width: lvlWidth, dash: lvlDash } = _levelLineStyle(s, lvl);
         ctx.globalAlpha = 1;
         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         ctx.lineWidth = lvlWidth;
@@ -334,61 +450,124 @@ window.DrawingFibo = (() => {
         ctx.lineTo(lx2, ly2);
         ctx.stroke();
   
-        const showLabels = s.fibLabels !== false;
-        if (showLabels) {
+        // BUG: burada `s.fibLabels`/`s.fibLabelsPos` okunuyordu — ayar
+        // diyaloğu ve diğer tüm fib araçları `s.fibLevelsType` (Levels
+        // checkbox) ve `s.fibLabelsH` (Left/Center/Right) kullanıyor. Bu
+        // yüzden Labels satırındaki Left/Center/Right hiç etkili
+        // olmuyordu ("Center" için hiç kod yolu bile yoktu), Percents
+        // modu da hiç çalışmıyordu (`fibLevelsType` bir boolean, string
+        // 'Percents'e hiç eşit olamaz). `s.fibPrices` de hiç okunmuyordu
+        // — "Prices" işaretliyken bile fiyat hiç gösterilmiyordu.
+        const showLabels = s.fibLevelsType !== false;
+        if (showLabels || showPrices) {
           ctx.setLineDash([]);
           ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
           const fontSize = s.fontSize || 12;
           ctx.font = `${fontSize}px 'JetBrains Mono', sans-serif`;
-          const labelsPos = s.fibLabelsPos || 'Left';
-          const labelsV = s.fibLabelsV || 'Bottom';
-          
-          ctx.textAlign = labelsPos === 'Right' ? 'right' : 'left';
-          ctx.textBaseline = labelsV === 'Top' ? 'top' : labelsV === 'Middle' ? 'middle' : 'bottom';
-          
-          const valStr = s.fibLevelsType === 'Percents' ? `${Math.round(lvl.v * 100)}%` : lvl.v.toString();
-          const textX = labelsPos === 'Right' ? lx2 : lx1;
-          const textY = labelsV === 'Top' ? (labelsPos === 'Right' ? ly2 + 4 : ly1 + 4) : 
-                        labelsV === 'Middle' ? (labelsPos === 'Right' ? ly2 : ly1) : 
-                        (labelsPos === 'Right' ? ly2 - 2 : ly1 - 2);
-                        
-          ctx.fillText(valStr, textX, textY);
+          const labelsH = s.fibLabelsH || 'Left';
+
+          // Yatay konum (Left/Center/Right): çizginin hangi ucunda/orta
+          // noktasında duracağı — hem X hem Y bu noktaya göre birlikte
+          // hesaplanmalı. Eskiden "Center" için X ortalanıyordu ama Y hâlâ
+          // `ly1`'e (Left ucu) sabitti — sonuç, çizginin ortasında değil,
+          // Left'in altında/üstünde (çizgi eğimli olduğu için) yanlış bir
+          // noktada duran bir etiketti.
+          const onRight = labelsH === 'Right';
+          const onCenter = labelsH === 'Center';
+          const refX = onRight ? lx2 : onCenter ? (lx1 + lx2) / 2 : lx1;
+          const refY = onRight ? ly2 : onCenter ? (ly1 + ly2) / 2 : ly1;
+          ctx.textAlign = onRight ? 'right' : onCenter ? 'center' : 'left';
+
+          const valStr = showLabels ? (s.fibLevelsMode === 'Percents' ? `${Math.round(lvl.v * 100)}%` : lvl.v.toString()) : '';
+          const priceAt = pane.series?.coordinateToPrice ? pane.series.coordinateToPrice(refY) : null;
+          const priceStr = showPrices && priceAt != null ? (showLabels ? ` (${_formatPrice(priceAt)})` : _formatPrice(priceAt)) : '';
+          const label = valStr + priceStr;
+
+          // Dikey konum (Top/Middle/Bottom) seçeneği kaldırıldı — eğimli
+          // çizgilerde doğru şekilde konumlandırılamadı (kullanıcı
+          // isteğiyle). Etiket her zaman çizginin tam üzerinde duruyor.
+          ctx.textBaseline = 'middle';
+
+          ctx.fillText(label, refX, refY);
         }
       }
-      
+
       ctx.restore();
     }
 
-  function _drawFibTimezone(ctx, d, pane) {
+  // Vline aracının zaman ekseni etiketiyle aynı biçim (bkz.
+  // drawing-trend.js _drawVLine) — ayrı bir IIFE modülde olduğu için
+  // oradaki kodu paylaşamıyoruz, aynı küçük fonksiyon burada tekrarlanıyor.
+  function _formatTimeLabel(t) {
+    let dateObj;
+    if (t && typeof t === 'object' && t.year) {
+      dateObj = new Date(t.year, t.month - 1, t.day, t.hour || 0, t.minute || 0);
+    } else {
+      dateObj = new Date(typeof t === 'number' ? t * 1000 : t);
+    }
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dd = days[dateObj.getDay()];
+    const d2 = String(dateObj.getDate()).padStart(2, '0');
+    const mo = months[dateObj.getMonth()];
+    const yr = String(dateObj.getFullYear()).slice(2);
+    const hh = String(dateObj.getHours()).padStart(2, '0');
+    const mm = String(dateObj.getMinutes()).padStart(2, '0');
+    return `${dd} ${d2} ${mo} '${yr}  ${hh}:${mm}`;
+  }
+
+  function _drawFibTimezone(ctx, d, pane, selected) {
       if (!d.p1 || !d.p2) return;
       const p1 = _pt2xy(d.p1, pane);
       const p2 = _pt2xy(d.p2, pane);
       if (!p1 || !p2) return;
-  
+
       const s = d.style || {};
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
+      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
+      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
+      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
+      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
+      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
+      // önce bulunanla AYNI hata sınıfı).
       const reverse = !!s.fibReverse;
-  
+
       const showLabels = s.fibLevelsType !== false;
-      const levelMode  = s.fibLevelsType === 'Percents' ? 'Percents' : 'Values';
+      const levelMode  = s.fibLevelsMode === 'Percents' ? 'Percents' : 'Values';
       const fibBg    = s.fibBg !== false;
       const bgAlpha  = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
       const fontSize = s.fibFontSize || 11;
       const labelsH  = s.fibLabelsH  || 'Left';
-      const labelsV  = s.fibLabelsV  || 'Middle';
-  
+      const labelsV  = s.fibLabelsV  || 'Top';
+
       const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
       const yTop = 0;
       const yBottom = H;
-  
+
       const dx = p2.x - p1.x;
       const effP1X = reverse ? p2.x : p1.x;
       const effDX = reverse ? -dx : dx;
-      
+
       ctx.save();
-      
+
+      // Trend line (p1→p2) — daha önce "Trend line" checkbox/renk düğmesi
+      // ayarları kaydediyordu ama hiçbir şey çizilmiyordu (grafik üzerinde
+      // hiç görünmüyordu).
+      const tlActive = s.trendLineActive !== false;
+      if (tlActive) {
+        ctx.strokeStyle = s.trendLineColor || s.color || '#787b86';
+        ctx.lineWidth = s.trendLineWidth || s.width || 1;
+        const tlStyle = s.trendLineStyle || 'dashed';
+        ctx.setLineDash(tlStyle === 'dashed' ? [6, 4] : tlStyle === 'dotted' ? [2, 3] : []);
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+
       if (fibBg && sorted.length > 1) {
         for (let i = 1; i < sorted.length; i++) {
           const prevX = effP1X + effDX * sorted[i-1].v;
@@ -399,14 +578,12 @@ window.DrawingFibo = (() => {
         }
       }
   
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash : lvlStyle === 'dashed' ? [8, 5] : lvlStyle === 'dotted' ? [3, 3] : [];
       ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
-      
+
       for (const lvl of sorted) {
          const x = effP1X + effDX * lvl.v;
-         
+
+         const { width: lvlWidth, dash: lvlDash } = _levelLineStyle(s, lvl);
          ctx.globalAlpha = 1;
          ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
          ctx.lineWidth = lvlWidth;
@@ -429,6 +606,36 @@ window.DrawingFibo = (() => {
             ctx.fillText(valStr, textX, textY);
          }
       }
+
+      // Araç seçiliyken, her aktif çizginin zaman ekseninde denk geldiği
+      // saati göster (bkz. Vertical Line aracının zaman etiketi) —
+      // seçili değilken çok sayıda seviye ekranı kirletmesin diye sadece
+      // seçili olduğunda çiziliyor.
+      if (selected) {
+        ctx.setLineDash([]);
+        ctx.font = `11px "JetBrains Mono", sans-serif`;
+        for (const lvl of sorted) {
+          const x = effP1X + effDX * lvl.v;
+          const pt = _xy2pt({ x, y: 0 }, pane);
+          if (!pt || pt.time == null) continue;
+          const label = _formatTimeLabel(pt.time);
+          const pad = 6;
+          const tw = ctx.measureText(label).width;
+          const boxW = tw + pad * 2;
+          const boxH = 11 + 8;
+          const bx = x - boxW / 2;
+          const by = yBottom - boxH;
+          const color = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.roundRect(bx, by, boxW, boxH, 3);
+          ctx.fill();
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, x, by + boxH / 2);
+        }
+      }
       ctx.restore();
     }
 
@@ -449,35 +656,47 @@ window.DrawingFibo = (() => {
       const actPrice = priceLevels.filter(l => l && l.active !== false).sort((a,b)=>a.v-b.v);
       const actTime = timeLevels.filter(l => l && l.active !== false).sort((a,b)=>a.v-b.v);
       
+      // "Reverse" kutusu varsayılan KAPALI. Kullanıcı isteği: ilk tıklanan
+      // nokta (p1 — fan'ın birleştiği köşe) her zaman "1" seviyesi, ikinci
+      // nokta (p2) "0" seviyesi olsun (Fib Retracement'ta da aynı kural
+      // uygulanmıştı — bkz. `_fibAxis`). Eskiden burada p1 sabit olarak
+      // "0", p2 "1" idi. Fan'ın GEOMETRİK kaynağı (moveTo) her zaman p1'de
+      // kalır — sadece hangi v-değerinin hangi noktaya denk geldiği
+      // (etiketleme) değişiyor. Bu, hem fiyat (Y) hem zaman (X) ekseni
+      // için ayrı ayrı uygulanıyor.
       const reverse = !!s.fibReverse;
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const effP1Y = reverse ? p2.y : p1.y;
-      const effDY = reverse ? -dy : dy;
-  
+      const yAxis = _fibAxis(p1.y, p2.y, reverse);
+      const xAxis = _fibAxis(p1.x, p2.x, reverse);
+      const priceYAt = (v) => yAxis.base + yAxis.span * v;
+      const timeXAt  = (v) => xAxis.base + xAxis.span * v;
+      // v=1 artık p1'in kendisi (fan'ın kaynağı) — bu seviyede grid/etiket
+      // çizmek anlamsız (zaten orijin orada), eskiden bu amaçla v===0
+      // atlanıyordu.
+      const originV = 1;
+
       const showGrid = s.gridActive !== false;
       const w = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
       const h = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-  
+
       ctx.save();
-      
+
       // Background fill
       const fibBg = s.fibBg !== false;
       const bgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
       const bgColor = s.fibBgColor || '#2962ff';
-  
+
       if (fibBg && actPrice.length > 1) {
         ctx.save();
         ctx.globalAlpha = bgAlpha;
         for (let i = 1; i < actPrice.length; i++) {
-          const yPrev = effP1Y + effDY * actPrice[i-1].v;
-          const yCur  = effP1Y + effDY * actPrice[i].v;
+          const yPrev = priceYAt(actPrice[i-1].v);
+          const yCur  = priceYAt(actPrice[i].v);
           ctx.fillStyle = s.useOneColor && s.useOneColor !== false ? s.useOneColor : actPrice[i].color || bgColor;
           ctx.fillRect(p1.x, Math.min(yPrev, yCur), w - p1.x, Math.abs(yCur - yPrev));
         }
         ctx.restore();
       }
-      
+
       if (showGrid) {
          ctx.globalAlpha = 1;
          ctx.strokeStyle = s.gridColor || '#363c4e';
@@ -485,296 +704,93 @@ window.DrawingFibo = (() => {
          ctx.setLineDash(gridStyle === 'dashed' ? [8,5] : gridStyle === 'dotted' ? [3,3] : []);
          ctx.lineWidth = s.gridWidth || 1;
          for (const lvl of actPrice) {
-            if (lvl.v === 0) continue;
+            if (lvl.v === originV) continue;
+            const y = priceYAt(lvl.v);
             ctx.beginPath();
-            ctx.moveTo(p1.x, effP1Y + effDY * lvl.v);
-            ctx.lineTo(p2.x, effP1Y + effDY * lvl.v);
+            ctx.moveTo(p1.x, y);
+            ctx.lineTo(p2.x, y);
             ctx.stroke();
          }
          for (const lvl of actTime) {
-            if (lvl.v === 0) continue;
+            const x = timeXAt(lvl.v);
             ctx.beginPath();
-            ctx.moveTo(p1.x + dx * lvl.v, effP1Y);
-            ctx.lineTo(p1.x + dx * lvl.v, p2.y);
+            ctx.moveTo(x, p1.y);
+            ctx.lineTo(x, p2.y);
             ctx.stroke();
          }
       }
-      
+
       ctx.globalAlpha = 1;
       for (const lvl of actPrice) {
         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         ctx.lineWidth = lvl.width || 1;
         const st = lvl.style || 'solid';
         ctx.setLineDash(st === 'dashed' ? [8,5] : st === 'dotted' ? [3,3] : []);
-        
-        let pricePoint = { x: p2.x, y: effP1Y + effDY * lvl.v };
-        let extPrice = _extendToEdge(p1.x, effP1Y, pricePoint.x, pricePoint.y, w, h);
+
+        let pricePoint = { x: p2.x, y: priceYAt(lvl.v) };
+        let extPrice = _extendToEdge(p1.x, p1.y, pricePoint.x, pricePoint.y, w, h);
         ctx.beginPath();
-        ctx.moveTo(p1.x, effP1Y);
+        ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(extPrice.x, extPrice.y);
         ctx.stroke();
       }
-      
+
       for (const lvl of actTime) {
-        if (lvl.v === 0) continue;
         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         ctx.lineWidth = lvl.width || 1;
         const st = lvl.style || 'solid';
         ctx.setLineDash(st === 'dashed' ? [8,5] : st === 'dotted' ? [3,3] : []);
-  
-        let timePoint = { x: p1.x + dx * lvl.v, y: p2.y };
-        let extTime = _extendToEdge(p1.x, effP1Y, timePoint.x, timePoint.y, w, h);
+
+        let timePoint = { x: timeXAt(lvl.v), y: p2.y };
+        let extTime = _extendToEdge(p1.x, p1.y, timePoint.x, timePoint.y, w, h);
         ctx.beginPath();
-        ctx.moveTo(p1.x, effP1Y);
+        ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(extTime.x, extTime.y);
         ctx.stroke();
       }
-      
+
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
       ctx.font = `${s.fibFontSize || 11}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
-      
+
       const showLL = s.labelsLeft !== false;
       const showLR = s.labelsRight === true;
       for (const lvl of actPrice) {
         ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         const valStr = lvl.v.toString();
+        const y = priceYAt(lvl.v);
         if (showLL) {
            ctx.textAlign = 'right';
            ctx.textBaseline = 'bottom';
-           ctx.fillText(valStr, p1.x - 4, effP1Y + effDY * lvl.v - 2);
+           ctx.fillText(valStr, p1.x - 4, y - 2);
         }
         if (showLR) {
            ctx.textAlign = 'left';
            ctx.textBaseline = 'bottom';
-           ctx.fillText(valStr, p2.x + 4, effP1Y + effDY * lvl.v - 2);
+           ctx.fillText(valStr, p2.x + 4, y - 2);
         }
       }
-      
+
       const showLT = s.labelsTop === true;
       const showLB = s.labelsBottom !== false;
       for (const lvl of actTime) {
-        if (lvl.v === 0) continue;
         ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
         const valStr = lvl.v.toString();
+        const x = timeXAt(lvl.v);
         if (showLB) {
            ctx.textAlign = 'left';
            ctx.textBaseline = 'top';
-           ctx.fillText(valStr, p1.x + dx * lvl.v + 4, p2.y + 4);
+           ctx.fillText(valStr, x + 4, p2.y + 4);
         }
         if (showLT) {
            ctx.textAlign = 'left';
            ctx.textBaseline = 'bottom';
-           ctx.fillText(valStr, p1.x + dx * lvl.v + 4, effP1Y - 4);
+           ctx.fillText(valStr, x + 4, p1.y - 4);
         }
       }
-      
+
       ctx.restore();
     }
-
-  function _drawFibTimebased(ctx, d, pane) {
-      if (!d.p1 || !d.p2) return;
-      const p1 = _pt2xy(d.p1, pane);
-      const p2 = _pt2xy(d.p2, pane);
-      if (!p1 || !p2) return;
-      if (!d.p3) {
-        ctx.save();
-        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = '#787b86'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]); ctx.stroke();
-        ctx.restore();
-        return;
-      }
-      const p3 = _pt2xy(d.p3, pane);
-      if (!p3) return;
-  
-      const s = d.style || {};
-      const allLevels = _getFibLevels(s);
-      const activeLevels = allLevels.filter(l => l.active !== false);
-      const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
-      
-      // p1 to p2 is the base length for X axis
-      const dx = p2.x - p1.x; // base time distance
-      
-      const showLabels = s.fibLabels !== false;
-      const labelsH  = s.fibLabelsH  || 'Right';
-      const labelsV  = s.fibLabelsV  || 'Bottom';
-      
-      const H = pane.drawingCanvas.height / (window.devicePixelRatio || 1);
-      const yTop = 0;
-      const yBottom = H;
-  
-      const fibBg = s.fibBg !== false;
-      const bgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
-      
-      ctx.save();
-      
-      if (fibBg && sorted.length > 1) {
-        for (let i = 1; i < sorted.length; i++) {
-          const prevX = p3.x + dx * sorted[i-1].v;
-          const thisX = p3.x + dx * sorted[i].v;
-          ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : sorted[i].color) || '#4caf50';
-          ctx.globalAlpha = bgAlpha;
-          ctx.fillRect(Math.min(prevX, thisX), yTop, Math.abs(thisX - prevX), H);
-        }
-      }
-      
-      const tlActive = s.trendLineActive !== false;
-      if (tlActive) {
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = s.trendLineColor || s.color || '#58a6ff';
-        ctx.lineWidth = s.trendLineWidth || s.width || 1;
-        const tlDash = s.trendLineDash || s.dash || [];
-        ctx.setLineDash(Array.isArray(tlDash) ? tlDash : tlDash === 'dashed' ? [5,5] : tlDash === 'dotted' ? [2,2] : []);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.lineTo(p3.x, p3.y);
-        ctx.stroke();
-      }
-  
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash : lvlStyle === 'dashed' ? [8, 5] : lvlStyle === 'dotted' ? [3, 3] : [];
-      ctx.font = `${s.fibFontSize || 11}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
-  
-      for (const lvl of sorted) {
-         const x = p3.x + dx * lvl.v;
-         
-         ctx.globalAlpha = 1;
-         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
-         ctx.lineWidth = lvlWidth;
-         ctx.setLineDash(lvlDash);
-         ctx.beginPath();
-         ctx.moveTo(x, yTop);
-         ctx.lineTo(x, yBottom);
-         ctx.stroke();
-         
-         if (showLabels) {
-            ctx.setLineDash([]);
-            ctx.fillStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
-            const valStr = lvl.v.toString();
-            
-            ctx.textAlign = labelsH === 'Right' ? 'left' : labelsH === 'Center' ? 'center' : 'right';
-            const textX = labelsH === 'Right' ? x + 4 : labelsH === 'Center' ? x : x - 4;
-            const textY = labelsV === 'Top' ? yTop + (s.fibFontSize || 11) + 4 : labelsV === 'Bottom' ? yBottom - 4 : (yTop + yBottom) / 2;
-            ctx.textBaseline = labelsV === 'Bottom' ? 'bottom' : labelsV === 'Top' ? 'top' : 'middle';
-            
-            ctx.fillText(valStr, textX, textY);
-         }
-      }
-      ctx.restore();
-    }
-
-  function _drawFibSpiral(ctx, d, pane) {
-      if (!d.p1 || !d.p2) return;
-      const p1 = _pt2xy(d.p1, pane);
-      const p2 = _pt2xy(d.p2, pane);
-      if (!p1 || !p2) return;
-  
-      const s = d.style || {};
-      const baseRadius = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      if (baseRadius < 1) return;
-      
-      const startAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-  
-      ctx.save();
-      ctx.strokeStyle = s.color || '#58a6ff';
-      ctx.lineWidth = s.width || 1;
-      let dashArr = s.dash || [];
-      if (s.lineStyle === 'dashed') dashArr = [8, 5];
-      if (s.lineStyle === 'dotted') dashArr = [3, 3];
-      ctx.setLineDash(dashArr);
-      
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      
-      for (let t = 0; t <= Math.PI * 6; t += 0.1) {
-          const theta = startAngle + t;
-          const r = baseRadius * Math.pow(1.618033988749895, t / (Math.PI / 2));
-          const x = p1.x + r * Math.cos(theta);
-          const y = p1.y + r * Math.sin(theta);
-          ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      
-      const tlActive = s.trendLineActive !== false;
-      if (tlActive) {
-        ctx.strokeStyle = s.trendLineColor || s.color || '#58a6ff';
-        ctx.lineWidth = s.trendLineWidth || s.width || 1;
-        const tlDash = s.trendLineDash || s.dash || [];
-        ctx.setLineDash(Array.isArray(tlDash) ? tlDash : tlDash === 'dashed' ? [5,5] : tlDash === 'dotted' ? [2,2] : []);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-      }
-      
-      ctx.restore();
-    }
-
-  function _drawGannFan() {}
-
-  function _drawGannBox() {}
-
-  function _drawGannSquare() {}
-
-  function _drawFibCircles(ctx, d, pane) {
-      if (!d.p1 || !d.p2) return;
-      const p1 = _pt2xy(d.p1, pane);
-      const p2 = _pt2xy(d.p2, pane);
-      if (!p1 || !p2) return;
-      
-      const s = d.style || {};
-      const allLevels = _getFibLevels(s);
-      const activeLevels = allLevels.filter(l => l.active !== false);
-      const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
-      
-      const r = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const fibBg = s.fibBg !== false;
-      const bgAlpha = s.fibBgAlpha !== undefined ? s.fibBgAlpha : 0.2;
-      
-      ctx.save();
-      // Center point
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.strokeStyle = s.trendColor || '#787b86';
-      ctx.lineWidth = s.trendWidth || 1;
-      ctx.setLineDash(s.trendStyle === 'dashed' ? [5,5] : s.trendStyle === 'dotted' ? [2,2] : [4,4]);
-      ctx.stroke();
-      
-      if (fibBg && sorted.length > 1) {
-        // Draw from largest to smallest to avoid overdrawing
-        const revSorted = [...sorted].reverse();
-        for (let i = 0; i < revSorted.length - 1; i++) {
-           const vOuter = revSorted[i].v;
-           const vInner = revSorted[i+1].v;
-           ctx.fillStyle = revSorted[i].color || '#4caf50';
-           ctx.globalAlpha = bgAlpha;
-           ctx.beginPath();
-           ctx.arc(p1.x, p1.y, r * vOuter, 0, Math.PI * 2);
-           ctx.arc(p1.x, p1.y, r * vInner, 0, Math.PI * 2, true); // counter-clockwise for cutout
-           ctx.fill();
-        }
-      }
-  
-      const lvlWidth = s.levelsWidth || s.width || 1;
-      const lvlStyle = s.levelsStyle || 'solid';
-      const lvlDash  = Array.isArray(s.levelsDash) ? s.levelsDash : lvlStyle === 'dashed' ? [8, 5] : lvlStyle === 'dotted' ? [3, 3] : [];
-  
-      for (const lvl of sorted) {
-         if (lvl.v <= 0) continue; // Circle radius cannot be 0 or negative
-         ctx.globalAlpha = 1;
-         ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
-         ctx.lineWidth = lvlWidth;
-         ctx.setLineDash(lvlDash);
-         ctx.beginPath();
-         ctx.arc(p1.x, p1.y, r * lvl.v, 0, Math.PI * 2);
-         ctx.stroke();
-      }
-      ctx.restore();
-    }
-
 
   function _drawFibArcs(ctx, d, pane) {
     // Placeholder for Fib speed resistance arcs
@@ -794,14 +810,11 @@ window.DrawingFibo = (() => {
     drawFibChannel: _drawFibChannel,
     drawFibTimezone: _drawFibTimezone,
     drawFibSpeedfan: _drawFibSpeedfan,
-    drawFibTimebased: _drawFibTimebased,
-    drawFibSpiral: _drawFibSpiral,
-    drawGannFan: _drawGannFan,
-    drawGannBox: _drawGannBox,
-    drawGannSquare: _drawGannSquare,
-    drawFibCircles: _drawFibCircles,
     drawFibArcs: _drawFibArcs,
     drawFibWedge: _drawFibWedge,
     drawPitchfan: _drawPitchfan,
+    // Tek doğruluk kaynağı — drawing-core.js'in hit-test'i de BUNU çağırır,
+    // kendi kopyasını hesaplamaz (bkz. yukarıdaki _fibAxis açıklaması).
+    fibAxis: _fibAxis,
   };
 })();

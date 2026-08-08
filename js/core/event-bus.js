@@ -55,7 +55,6 @@ const EventBus = (() => {
   indicator:remove    { id }
   indicator:update    { id, options }
 
-  watchlist:tab:change { tab }         — bn-screener/bb-screener/bn-all/bb-all
   watchlist:toggle    { open }
   watchlist:select    { symbol, exchange }
 

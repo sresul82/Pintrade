@@ -21,7 +21,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      width: 44px;
+      width: var(--right-sidebar-width);
       flex-shrink: 0;
       background: var(--bg-secondary);
       border-left: 1px solid var(--border-primary);
@@ -45,6 +45,19 @@
     .rsb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
     .rsb-btn.active { color: var(--accent-blue); background: var(--accent-blue-bg); }
     .rsb-label { font-size: 9px; }
+    /* Navbar'dan taşınan snapshot/theme/settings — .rsb-btn'nin aksine
+       ikon+etiket çifti değiller, o yüzden min-height:80px'i miras almamalılar. */
+    .rsb-icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      color: var(--text-primary); /* Navbar ikonlarıyla aynı beyazlık — okunabilirlik için */
+      font-size: 15px;
+    }
+    .rsb-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
     .rsb-sep {
       width: 24px;
       height: 1px;
@@ -58,7 +71,7 @@
       justify-content: center;
       width: 44px;
       padding: 6px 2px;
-      color: var(--text-secondary);
+      color: var(--text-primary); /* Navbar ikonlarıyla aynı beyazlık — okunabilirlik için */
       font-size: 9px;
       font-family: var(--font-mono);
       gap: 2px;
@@ -68,13 +81,14 @@
     }
     .rsb-clock-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
     #rsb-clock-time { font-size: 9px; }
-    #rsb-clock-tz { font-size: 8px; color: var(--text-muted); }
+    #rsb-clock-tz { font-size: 8px; color: var(--text-primary); opacity: 0.85; }
 
-    /* Timezone dropdown */
+    /* Timezone dropdown — artık .main-area (position:relative) içinde,
+       saatin yeni yeri olan .chart-bottom-bar'ın sağ üstüne açılıyor. */
     .rsb-tz-menu {
-      position: fixed;
-      right: 44px;
-      bottom: 0;
+      position: absolute;
+      right: 0;
+      bottom: 22px; /* .chart-bottom-bar yüksekliği kadar yukarıda açılsın */
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: var(--radius-lg);
@@ -94,6 +108,76 @@
     }
     .rsb-tz-item:hover { background: var(--bg-hover); color: var(--text-primary); }
     .rsb-tz-item.active { color: var(--accent-blue); }
+
+    /* ── Grafik altı yatay bant (chart-bottom-bar) ──
+       Genişlik: main-area'nın tam genişliği (chart alanı kadar, sağ panel/sidebar hariç).
+       Yükseklik: 22px — Lightweight Charts'ın time scale yüksekliğiyle aynı
+       (bkz. js/chart/chart-pane.js içindeki timeScaleH sabiti). */
+    .chart-bottom-bar {
+      display: flex;
+      align-items: center;
+      height: 22px;
+      flex-shrink: 0;
+      padding: 0 8px;
+      gap: 8px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-primary);
+    }
+    .cbb-list-wrap { position: relative; display: flex; align-items: center; }
+    .cbb-list-trigger {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text-primary); /* Navbar ikonlarıyla aynı beyazlık — okunabilirlik için */
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    .cbb-list-trigger:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .cbb-arrow { font-size: 10px; opacity: 0.8; }
+    .cbb-list-menu {
+      position: absolute;
+      left: 0;
+      bottom: 22px; /* .chart-bottom-bar yüksekliği kadar yukarı açılır */
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-lg);
+      min-width: 140px;
+      z-index: 500;
+      display: none;
+      padding: 4px 0;
+    }
+    .cbb-list-menu.open { display: block; }
+    .cbb-list-item {
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .cbb-list-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .cbb-list-item.active { color: var(--accent-blue); }
+    .cbb-spacer { flex: 1; }
+    /* .rsb-clock-btn'in dikey (ikon rafı) diziliminin aksine burada tek satır yatay.
+       DİKKAT: css/chart.css'teki eski .rsb-clock-btn kuralı writing-mode:vertical-rl
+       + rotate(180deg) uyguluyor (sağ sidebar'daki eski dikey konum içindi) — burada
+       açıkça iptal edilmezse metin hâlâ dikey görünür. */
+    .chart-bottom-bar .rsb-clock-btn {
+      flex-direction: row;
+      width: auto;
+      padding: 0 4px;
+      gap: 6px;
+      border-top: none;
+      writing-mode: horizontal-tb;
+      transform: none;
+      white-space: nowrap;
+    }
+    /* Alt bant yazıları biraz büyütüldü (okunabilirlik) */
+    .chart-bottom-bar #rsb-clock-time { font-size: 11px; }
+    .chart-bottom-bar #rsb-clock-tz { font-size: 10px; }
 
     /* ── MAIN AREA ── */
     .main-area {
@@ -207,7 +291,6 @@
                 <button class="nb-tf-item" data-tf="5m"><span class="tf-label">5 minutes</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="15m"><span class="tf-label">15 minutes</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="30m"><span class="tf-label">30 minutes</span><span class="tf-star">&#9733;</span></button>
-                <button class="nb-tf-item" data-tf="45m"><span class="tf-label">45 minutes</span><span class="tf-star">&#9733;</span></button>
               </div>
             </div>
             <div class="nb-tf-menu-sep"></div>
@@ -216,7 +299,6 @@
               <div class="nb-tf-acc-body">
                 <button class="nb-tf-item" data-tf="1H"><span class="tf-label">1 hour</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="2H"><span class="tf-label">2 hours</span><span class="tf-star">&#9733;</span></button>
-                <button class="nb-tf-item" data-tf="3H"><span class="tf-label">3 hours</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="4H"><span class="tf-label">4 hours</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="6H"><span class="tf-label">6 hours</span><span class="tf-star">&#9733;</span></button>
                 <button class="nb-tf-item" data-tf="12H"><span class="tf-label">12 hours</span><span class="tf-star">&#9733;</span></button>
@@ -430,13 +512,7 @@
             <button class="nb-icon" id="btn-undo" title="Undo" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18"><path fill="currentColor" d="M8.707 13l2.647 2.646-.707.708L6.792 12.5l3.853-3.854.708.708L8.707 12H14.5a5.5 5.5 0 0 1 5.5 5.5V19h-1v-1.5a4.5 4.5 0 0 0-4.5-4.5H8.707z"></path></svg></button>
             <button class="nb-icon" id="btn-redo" title="Redo" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18"><path fill="currentColor" d="M18.293 13l-2.647 2.646.707.708 3.854-3.854-3.854-3.854-.707.708L18.293 12H12.5A5.5 5.5 0 0 0 7 17.5V19h1v-1.5a4.5 4.5 0 0 1 4.5-4.5h5.793z"></path></svg></button>
           </div>
-
-          <!-- Settings & Tools moved left -->
-          <div class="nb-group-container" style="padding: 0 4px;">
-            <button class="nb-icon" id="btn-snapshot" title="Take a snapshot" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.118 6a.5.5 0 0 0-.447.276L9.809 8H5.5A1.5 1.5 0 0 0 4 9.5v10A1.5 1.5 0 0 0 5.5 21h16a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 21.5 8h-4.309l-.862-1.724A.5.5 0 0 0 15.882 6h-4.764zm-1.342-.17A1.5 1.5 0 0 1 11.118 5h4.764a1.5 1.5 0 0 1 1.342.83L17.809 7H21.5A2.5 2.5 0 0 1 24 9.5v10a2.5 2.5 0 0 1-2.5 2.5h-16A2.5 2.5 0 0 1 3 19.5v-10A2.5 2.5 0 0 1 5.5 7h3.691l.585-1.17z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5 18a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm0 1a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z"></path></svg></button>
-            <button class="nb-icon" id="btn-theme" title="Switch theme" style="background:transparent; border:none; height:100%;">☀</button>
-            <button class="nb-icon" id="btn-settings" title="Settings" style="background:transparent; border:none; height:100%;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" d="M18 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-1 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path><path fill-rule="evenodd" d="M8.5 5h11l5 9-5 9h-11l-5-9 5-9Zm-3.86 9L9.1 6h9.82l4.45 8-4.45 8H9.1l-4.45-8Z"></path></svg></button>
-          </div>
+          <!-- snapshot/theme/settings artık sağ sidebar'ın altında (bkz. .right-sidebar #rsb-tools-group) -->
         </div>
       </div>
 
@@ -466,26 +542,100 @@
 
       <!-- ANA ALAN — chart eklendi -->
       <div class="main-area">
-        <div id="chart-root"></div>
+        <div id="chart-root" style="flex:1; min-height:0;"></div>
         <!-- Sync Panel - gizli, buildSyncPanel() tarafından doldurulur -->
         <div id="sync-panel" style="display:none;"></div>
+
+        <!-- Grafik altı yatay bant — genişliği tam chart alanı kadar (main-area
+             genişliği), yüksekliği Lightweight Charts'ın time scale'i kadar (22px,
+             bkz. chart-pane.js timeScaleH sabiti). Sol: önizleme modu seçici
+             (şimdilik gerçek filtre yapmıyor, sadece açılır liste — bkz.
+             app.js _bindChartBottomBar). Sağ: saat (eskiden sağ sidebar'daydı). -->
+        <div class="chart-bottom-bar" id="chart-bottom-bar">
+          <div class="cbb-list-wrap" id="cbb-list-wrap">
+            <button class="cbb-list-trigger" id="cbb-list-trigger" title="Preview mode">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1"></path><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1"></path></svg>
+              <span id="cbb-list-label">No Preview</span>
+              <span class="cbb-arrow">▾</span>
+            </button>
+            <div class="cbb-list-menu" id="cbb-list-menu">
+              <div class="cbb-list-item active" data-preview="none">No Preview</div>
+              <div class="cbb-list-item" data-preview="gainers">Top Gainers</div>
+              <div class="cbb-list-item" data-preview="delistings">Delistings</div>
+              <div class="cbb-list-item" data-preview="new">New Listings</div>
+            </div>
+          </div>
+          <div class="cbb-spacer"></div>
+          <button class="rsb-clock-btn cbb-clock" id="rsb-clock-btn" title="Timezone Settings">
+            <span id="rsb-clock-time">00:00:00</span>
+            <span id="rsb-clock-tz">UTC</span>
+          </button>
+        </div>
+
+        <!-- Timezone Dropdown — saatin yeni konumuna göre .main-area'ya göre konumlanıyor -->
+        <div class="rsb-tz-menu" id="rsb-tz-menu">
+          <div class="rsb-tz-item" data-tz="Etc/UTC">UTC</div>
+          <div class="rsb-tz-item" data-tz="exchange">Exchange</div>
+          <div class="rsb-tz-item" data-tz="Pacific/Honolulu">(UTC-10) Honolulu</div>
+          <div class="rsb-tz-item" data-tz="America/Anchorage">(UTC-8) Anchorage</div>
+          <div class="rsb-tz-item" data-tz="America/Los_Angeles">(UTC-7) Los Angeles</div>
+          <div class="rsb-tz-item" data-tz="America/Denver">(UTC-6) Denver</div>
+          <div class="rsb-tz-item" data-tz="America/Chicago">(UTC-5) Chicago</div>
+          <div class="rsb-tz-item" data-tz="America/New_York">(UTC-4) New York</div>
+          <div class="rsb-tz-item" data-tz="America/Sao_Paulo">(UTC-3) Sao Paulo</div>
+          <div class="rsb-tz-item" data-tz="Europe/London">(UTC+0) London</div>
+          <div class="rsb-tz-item" data-tz="Europe/Paris">(UTC+1) Paris</div>
+          <div class="rsb-tz-item" data-tz="Europe/Berlin">(UTC+1) Berlin</div>
+          <div class="rsb-tz-item" data-tz="Europe/Istanbul">(UTC+3) Istanbul</div>
+          <div class="rsb-tz-item" data-tz="Asia/Dubai">(UTC+4) Dubai</div>
+          <div class="rsb-tz-item" data-tz="Asia/Ashgabat">(UTC+5) Ashgabat</div>
+          <div class="rsb-tz-item" data-tz="Asia/Tehran">(UTC+3:30) Tehran</div>
+          <div class="rsb-tz-item" data-tz="Asia/Kolkata">(UTC+5:30) Kolkata</div>
+          <div class="rsb-tz-item" data-tz="Asia/Bangkok">(UTC+7) Bangkok</div>
+          <div class="rsb-tz-item" data-tz="Asia/Singapore">(UTC+8) Singapore</div>
+          <div class="rsb-tz-item" data-tz="Asia/Shanghai">(UTC+8) Shanghai</div>
+          <div class="rsb-tz-item" data-tz="Asia/Tokyo">(UTC+9) Tokyo</div>
+          <div class="rsb-tz-item" data-tz="Australia/Sydney">(UTC+9) Sydney</div>
+          <div class="rsb-tz-item" data-tz="Pacific/Auckland">(UTC+10) Auckland</div>
+        </div>
       </div>
 
       <!-- RIGHT PANEL (watchlist + detail) -->
       <div class="right-panel" id="right-panel">
 
-        <!-- WATCHLIST HEADER -->
+        <!-- WATCHLIST HEADER
+             Sıra: [arama] [liste seçici] [sütun aç/kapa ⋮] [borsa seçici] -->
         <div class="wl-header">
-          <button class="wl-close" id="wl-close-btn" title="Kapat">✕</button>
-          <div class="wl-tabs">
-            <button class="wl-tab active" data-tab="bn-screener">BN Screener</button>
-            <button class="wl-tab" data-tab="bb-screener">BB Screener</button>
-            <button class="wl-tab" data-tab="bn-all">BN All</button>
-            <button class="wl-tab" data-tab="bb-all">BB All</button>
+
+          <!-- 1) Arama — yazınca sağında temizleme ✕ belirir -->
+          <div class="wl-search-wrap">
+            <input class="wl-search" id="wl-search" type="text" placeholder="Search...">
+            <button class="wl-search-clear" id="wl-search-clear" type="button" title="Clear">&#10005;</button>
+          </div>
+
+          <!-- 2) Liste seçici — menü içeriği watchlist-menu.js tarafından basılır -->
+          <div class="wl-list-picker" id="wl-list-picker" title="Select List">
+            <span id="wl-list-label">All Coins</span>
+            <span class="wl-exchange-arrow">&#9660;</span>
+            <div class="wl-list-menu" id="wl-list-menu"></div>
+          </div>
+
+          <!-- 3) Sütun aç/kapa — menü içeriği watchlist-menu.js tarafından basılır -->
+          <div class="wl-cols-picker" id="wl-cols-picker" title="Columns">
+            <span class="wl-cols-dots">&#8942;</span>
+            <div class="wl-cols-menu" id="wl-cols-menu"></div>
+          </div>
+
+          <!-- 4) Borsa seçici — en sağda -->
+          <div class="wl-exchange-picker" id="wl-exchange-picker" title="Change Exchange">
+            <span id="wl-exchange-label">Binance</span>
+            <span class="wl-exchange-arrow">&#9660;</span>
+            <div class="wl-exchange-menu" id="wl-exchange-menu">
+              <div class="wl-exchange-item active" data-exchange="binance">Binance</div>
+              <div class="wl-exchange-item" data-exchange="bybit">Bybit</div>
+            </div>
           </div>
         </div>
-
-        <input class="wl-search" id="wl-search" type="text" placeholder="Ara...">
 
         <div class="wl-col-header" id="wl-col-header"></div>
 
@@ -499,7 +649,18 @@
             <button class="detail-tab active" data-tab="detail">Coin Detail</button>
             <button class="detail-tab" data-tab="signals">Bot Signals</button>
             <button class="detail-tab" data-tab="news">News</button>
-            <button id="detail-popout" title="Ayrı pencerede aç" aria-label="Paneli kaydırılabilir pencerede aç">⧉</button>
+            <div class="detail-tabs-right">
+              <!-- Bot Signals sekmesi aktifken bot-signals-panel.js burayı dolduruyor
+                   (SE rozeti / arama / snipe / sırala) — diğer sekmelerde boş+gizli. -->
+              <div class="bsp-tabbar-controls bsp-tabbar-controls-target" id="bsp-tabbar-controls" style="display:none;"></div>
+              <!-- News sekmesi aktifken news-api.js burayı dolduruyor (snipe + sırala) —
+                   snipe açık: seçili coinin haberleri, kapalı: genel piyasa haberleri.
+                   DİKKAT: bsp-tabbar-controls-target sınıfını KULLANMA — o sınıf
+                   BotSignalsPanel'in kendi render hedefleri için ayrılmış, buraya
+                   eklenirse Bot Signals içeriğini buraya da yazar (yaşanmış hata). -->
+              <div class="tabbar-controls-group" id="news-tabbar-controls" style="display:none;"></div>
+              <button id="detail-popout" title="Open in floating window" aria-label="Open panel in a draggable window">⧉</button>
+            </div>
           </div>
 
           <div class="detail-body" id="detail-body">
@@ -509,6 +670,10 @@
             <div class="dp-root" id="dp-news-tab" style="display: none; padding: 12px; color: var(--text-secondary); font-size: 11px; text-align: center;">
                İlgili haber akışı bu alanda listelenecek...
             </div>
+            <!-- Alarm sidebar sekmesi (rsb-alarms) — Bot Signals'tan (dp-signals-tab)
+                 tamamen bağımsız. FR/M1/MA/V3/4S rafı burada asla render edilmez,
+                 sadece AlarmSignalHistory modülünün kartları gösterilir. -->
+            <div class="dp-root" id="dp-alarm-tab" style="display: none; height:100%;"></div>
             <div class="dp-root" id="dp-detail-tab">
               <!-- Üst Kısım -->
               <div class="dp-tech" id="dp-tech">
@@ -578,11 +743,21 @@
 
               <!-- Alt Bölüm: L/S + OI Değişimi -->
               <div class="dp-fund" id="dp-fund" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px 12px 6px;">
-                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px;">
+                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; justify-content: center; padding: 6px 10px; position: relative;">
+                  <!-- Popout ikonu — üst sağ köşe, L/S satırının hizasında. Tıklayınca
+                       boş bir floating window açılır, iç düzenlemesi sonraki bir işte
+                       yapılacak (bkz. js/screener/mini-floating-window.js). -->
+                  <button class="dp-card-popout" id="dp-ls-popout" title="Open in floating window" aria-label="L/S panelini yeni pencerede aç">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="11" height="11" rx="1.5"></rect><rect x="10" y="10" width="11" height="11" rx="1.5" fill="var(--bg-tertiary)"></rect></svg>
+                  </button>
                   <div class="dp-bars-block" style="gap: 12px; width: 100%;">
-                    <div class="dp-split-row">
+                    <!-- Sağdan 24px boşluk bırakılıyor ki bar, kartın üst sağ köşesindeki
+                         popout ikonunun (#dp-ls-popout) altına/üstüne binmesin. Sadece bu
+                         satıra uygulanıyor — Tahta satırı ikonla aynı hizada olmadığı için
+                         tam genişlikte kalabiliyor. -->
+                    <div class="dp-split-row" style="padding-right: 24px;">
                       <span class="dp-split-title">L/S</span>
-                      <div class="dp-split-bar" style="width: 100%;">
+                      <div class="dp-split-bar" id="dp-ls-bar" style="width: 100%;">
                         <div class="dp-split-buy" id="dp-ls-buy" style="width:50%;gap:4px">
                           <span id="dp-ls-buy-vol">—</span><span id="dp-ls-buy-pct">—</span>
                         </div>
@@ -601,9 +776,12 @@
                   </div>
                 </div>
 
-                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; padding: 6px 10px;">
+                <div class="dp-oi-card" style="margin-top: 0; grid-column: span 1; display: flex; flex-direction: column; padding: 6px 10px; position: relative;">
                   <div class="dp-fund-label" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0;">
                     <span>OI Değişimi (8 periyot)</span>
+                    <button class="dp-card-popout" id="dp-oi-popout" title="Open in floating window" aria-label="OI Değişimi panelini yeni pencerede aç" style="position:static;">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="11" height="11" rx="1.5"></rect><rect x="10" y="10" width="11" height="11" rx="1.5" fill="var(--bg-tertiary)"></rect></svg>
+                    </button>
                   </div>
                   <div class="dp-oi-bars" id="dp-oi-bars" style="flex: 1; margin-top: auto;"></div>
                 </div>
@@ -648,27 +826,15 @@
             </div><!-- /dp-root -->
           </div><!-- /detail-body -->
         </div>
-        <!-- GLOBAL NEWS PANEL -->
-        <div class="global-news-panel" id="global-news-panel" style="display: none;">
-          <div class="gnp-header">
-            <button class="gnp-tab active" data-gnp-tab="global">Global News</button>
-            <button class="gnp-tab" data-gnp-tab="exchange">Exchange News</button>
-          </div>
-          <div class="gnp-body">
-            <div class="gnp-content active" id="gnp-global">
-              <div class="gnp-loading">Haberler yükleniyor...</div>
-            </div>
-            <div class="gnp-content" id="gnp-exchange" style="display: none;">
-              <div class="gnp-loading">Borsa haberleri yükleniyor...</div>
-            </div>
-          </div>
-        </div>
+        <!-- Genel piyasa haberleri artık ayrı bir panel değil — News sekmesinin
+             (dp-news-tab) snipe kontrolü KAPALI olduğunda aynı yerde gösteriliyor.
+             bkz. js/data/news-api.js -->
 
       </div><!-- /#right-panel -->
 
       <!-- RIGHT SIDEBAR (toggle bar) -->
       <div class="right-sidebar">
-        <div class="rsb-group-container" style="display:flex; flex-direction:column; gap:4px; width:100%; align-items:center; background: transparent; border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: 4px 0;">
+        <div class="rsb-group-container" style="display:flex; flex-direction:column; gap:4px; width:36px; align-items:center; background: transparent; border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: 4px 0;">
         <button class="rsb-btn" id="rsb-watchlist" title="Watchlist">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
             <path fill="currentColor" d="M28 16H16v1h12v-1ZM28 20H16v1h12v-1ZM16 24h12v1H16v-1Z"></path>
@@ -683,47 +849,19 @@
           </svg>
           <span class="rsb-label">Alarm</span>
         </button>
-        <button class="rsb-btn" id="rsb-news" title="News">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
-            <path fill="currentColor" fill-rule="evenodd" d="M10 11h24v22H10V11Zm1 1v20h22V12H11Zm3 3h6v6h-6v-6Zm8 1h8v1h-8v-1Zm0 3h8v1h-8v-1Zm-8 4h16v1H14v-1Zm0 3h16v1H14v-1Zm0 3h16v1H14v-1Z"></path>
-          </svg>
-          <span class="rsb-label">News</span>
-        </button>
-
         </div>
         <div class="rsb-spacer" style="flex:1"></div>
 
-        <button class="rsb-clock-btn" id="rsb-clock-btn" title="Timezone Settings">
-          <span id="rsb-clock-time">00:00:00</span>
-          <span id="rsb-clock-tz">UTC</span>
-        </button>
-      </div>
-
-      <!-- Timezone Dropdown -->
-      <div class="rsb-tz-menu" id="rsb-tz-menu">
-        <div class="rsb-tz-item" data-tz="Etc/UTC">UTC</div>
-        <div class="rsb-tz-item" data-tz="exchange">Exchange</div>
-        <div class="rsb-tz-item" data-tz="Pacific/Honolulu">(UTC-10) Honolulu</div>
-        <div class="rsb-tz-item" data-tz="America/Anchorage">(UTC-8) Anchorage</div>
-        <div class="rsb-tz-item" data-tz="America/Los_Angeles">(UTC-7) Los Angeles</div>
-        <div class="rsb-tz-item" data-tz="America/Denver">(UTC-6) Denver</div>
-        <div class="rsb-tz-item" data-tz="America/Chicago">(UTC-5) Chicago</div>
-        <div class="rsb-tz-item" data-tz="America/New_York">(UTC-4) New York</div>
-        <div class="rsb-tz-item" data-tz="America/Sao_Paulo">(UTC-3) Sao Paulo</div>
-        <div class="rsb-tz-item" data-tz="Europe/London">(UTC+0) London</div>
-        <div class="rsb-tz-item" data-tz="Europe/Paris">(UTC+1) Paris</div>
-        <div class="rsb-tz-item" data-tz="Europe/Berlin">(UTC+1) Berlin</div>
-        <div class="rsb-tz-item" data-tz="Europe/Istanbul">(UTC+3) Istanbul</div>
-        <div class="rsb-tz-item" data-tz="Asia/Dubai">(UTC+4) Dubai</div>
-<div class="rsb-tz-item" data-tz="Asia/Ashgabat">(UTC+5) Ashgabat</div>
-        <div class="rsb-tz-item" data-tz="Asia/Tehran">(UTC+3:30) Tehran</div>
-        <div class="rsb-tz-item" data-tz="Asia/Kolkata">(UTC+5:30) Kolkata</div>
-        <div class="rsb-tz-item" data-tz="Asia/Bangkok">(UTC+7) Bangkok</div>
-        <div class="rsb-tz-item" data-tz="Asia/Singapore">(UTC+8) Singapore</div>
-        <div class="rsb-tz-item" data-tz="Asia/Shanghai">(UTC+8) Shanghai</div>
-        <div class="rsb-tz-item" data-tz="Asia/Tokyo">(UTC+9) Tokyo</div>
-        <div class="rsb-tz-item" data-tz="Australia/Sydney">(UTC+9) Sydney</div>
-        <div class="rsb-tz-item" data-tz="Pacific/Auckland">(UTC+10) Auckland</div>
+        <!-- Navbar'dan taşınan snapshot/theme/settings butonları -->
+        <div class="rsb-group-container" id="rsb-tools-group" style="display:flex; flex-direction:column; gap:2px; width:32px; align-items:center; background: transparent; border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: 4px 0; margin-top:4px;">
+          <button class="rsb-icon-btn" id="btn-snapshot" title="Take a snapshot">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.118 6a.5.5 0 0 0-.447.276L9.809 8H5.5A1.5 1.5 0 0 0 4 9.5v10A1.5 1.5 0 0 0 5.5 21h16a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 21.5 8h-4.309l-.862-1.724A.5.5 0 0 0 15.882 6h-4.764zm-1.342-.17A1.5 1.5 0 0 1 11.118 5h4.764a1.5 1.5 0 0 1 1.342.83L17.809 7H21.5A2.5 2.5 0 0 1 24 9.5v10a2.5 2.5 0 0 1-2.5 2.5h-16A2.5 2.5 0 0 1 3 19.5v-10A2.5 2.5 0 0 1 5.5 7h3.691l.585-1.17z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5 18a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm0 1a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z"></path></svg>
+          </button>
+          <button class="rsb-icon-btn" id="btn-theme" title="Switch theme">☀</button>
+          <button class="rsb-icon-btn" id="btn-settings" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="18" height="18" fill="currentColor"><path fill-rule="evenodd" d="M18 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-1 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path><path fill-rule="evenodd" d="M8.5 5h11l5 9-5 9h-11l-5-9 5-9Zm-3.86 9L9.1 6h9.82l4.45 8-4.45 8H9.1l-4.45-8Z"></path></svg>
+          </button>
+        </div>
       </div>
 
     </div><!-- /.app-body -->
@@ -781,24 +919,31 @@
 
   <!-- Screener modülleri -->
   <script src="js/screener/search-core.js"></script>
+  <script src="js/screener/watchlist-store.js"></script>   <!-- veri katmanı: listeler, sütunlar -->
+  <script src="js/screener/watchlist-menu.js"></script>    <!-- header dropdown'ları — store'dan sonra -->
   <script src="js/screener/exchange-router.js"></script>
   <script src="js/screener/fr-tracker.js"></script>        <!-- first: scalpFRMonitor is created here -->
   <script src="js/screener/fr-data-bridge.js"></script>   <!-- fr-tracker'dan sonra -->
   <script src="js/data/bybit-api-fr.js"></script>          <!-- then: uses scalpFRMonitor -->
   <script src="js/data/market-data-store.js"></script>  <!-- Merkezi WS veri havuzu — binance-api-fr'den önce -->
+  <script src="js/screener/bot-engine.js"></script>       <!-- Ortak REST rate-limit kuyruğu — bot'lardan önce (Görev 5) -->
+  <script src="js/data/ls-data-store.js"></script>        <!-- L/S merkezi veri katmanı — MarketDataStore + BotEngine'den sonra -->
   <script src="js/data/binance-api-fr.js"></script>        <!-- then: uses scalpFRMonitor -->
   <script src="js/screener/funding-interval.js"></script>
   <script src="js/screener/oi-api.js"></script>
   <script src="js/screener/screener-core.js"></script>
   <script src="js/screener/bot-signals-panel.js"></script>
+  <script src="js/screener/alarm-signal-history.js"></script>
   <script src="js/screener/m1hammer-scanner.js"></script>
   <script src="js/screener/floating-panel.js"></script>
+  <script src="js/screener/mini-floating-window.js"></script>
   <script src="js/screener/detail-panel.js"></script>
   <script src="js/ui/sidebar.js"></script>
 
   <script>
     App.init();
     if (typeof SearchCore  !== 'undefined') SearchCore.init();
+    if (typeof WatchlistMenu !== 'undefined') WatchlistMenu.init();
     if (typeof ScreenerCore !== 'undefined') ScreenerCore.init();
     if (typeof DetailPanel  !== 'undefined') DetailPanel.init();
     if (typeof Sidebar !== 'undefined') Sidebar.init();

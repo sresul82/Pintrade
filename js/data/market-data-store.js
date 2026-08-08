@@ -12,13 +12,13 @@
      /fapi/v1/openInterest  → 60 saniyede bir, toplu batch
 
    EventBus Events:
-     'mds:tick'  → { symbol, price, pct24h, volume24h }
+     'mds:tick'  → { symbol, price, pct24h, volume24h, volumeBase24h }
      'mds:fr'    → { symbol, rate, nextFundingTime }
      'mds:oi'    → { symbol, value, dir }
      'mds:ready' → {} (ilk WS mesajı gelince)
 
    Public API:
-     MarketDataStore.getTicker(sym)   → { price, pct24h, volume24h }
+     MarketDataStore.getTicker(sym)   → { price, pct24h, volume24h, volumeBase24h }
      MarketDataStore.getFR(sym)       → { rate, nextFundingTime }
      MarketDataStore.getOI(sym)       → { value, dir }
      MarketDataStore.setKlines(sym,tf,candles)
@@ -30,7 +30,7 @@
 const MarketDataStore = (() => {
 
   // ── İç Veri Map'leri ───────────────────────────────────────
-  const _tickers = new Map();   // sym → { price, pct24h, volume24h, ts }
+  const _tickers = new Map();   // sym → { price, pct24h, volume24h, volumeBase24h, ts }
   const _fr      = new Map();   // sym → { rate, nextFundingTime, ts }
   const _oi      = new Map();   // sym → { value, dir, ts }
   const _klines  = new Map();   // "SYM_tf" → Candle[]
@@ -120,12 +120,13 @@ const MarketDataStore = (() => {
       const price  = parseFloat(d.c);              // close (son fiyat)
       const pct24h = parseFloat(d.P);              // 24h değişim %
       const vol24h = parseFloat(d.q);              // 24h quote volume (USD)
+      const volBase24h = parseFloat(d.v);           // 24h base asset volume (coin cinsinden — Volume Type: Standard)
       const ts     = Date.now();
 
       const prev = _tickers.get(sym);
-      _tickers.set(sym, { price, pct24h, volume24h: vol24h, ts });
+      _tickers.set(sym, { price, pct24h, volume24h: vol24h, volumeBase24h: volBase24h, ts });
 
-      _emit('mds:tick', { symbol: sym, price, pct24h, volume24h: vol24h, prev });
+      _emit('mds:tick', { symbol: sym, price, pct24h, volume24h: vol24h, volumeBase24h: volBase24h, prev });
     });
   }
 
@@ -206,6 +207,240 @@ const MarketDataStore = (() => {
   }
 
   // ──────────────────────────────────────────────────────────
+  // Kline Stream (Görev 5) — paylaşılan, dinamik SUBSCRIBE/UNSUBSCRIBE'lı
+  // tek bağlantı. Amaç: her bot kendi kline WS'ini açmasın (5 bot = 5
+  // ayrı bağlantı yerine tek bağlantı, dinamik stream listesi).
+  // ──────────────────────────────────────────────────────────
+  let _klineWs          = null;
+  let _klineReconnectMs = 1000;
+  let _klineStopped     = true;
+  let _klineReqId       = 1;
+  const _klineSubscribers  = new Map(); // "SYM_tf" -> Set<callback>
+  const _klineActiveStreams = new Set(); // "sym@kline_tf" — WS'e abone olduğumuz stream isimleri
+
+  function _klineStreamName(symbol, interval) {
+    return `${symbol.toLowerCase()}@kline_${interval}`;
+  }
+
+  function _connectKlineWs() {
+    if (_klineStopped) return;
+    _klineWs = new WebSocket('wss://fstream.binance.com/stream');
+
+    _klineWs.onopen = () => {
+      console.log('[MarketDataStore] Kline WS bağlandı ✓');
+      _klineReconnectMs = 1000;
+      // Reconnect sonrası önceki abonelikleri geri yükle
+      if (_klineActiveStreams.size > 0) {
+        _klineWs.send(JSON.stringify({
+          method: 'SUBSCRIBE', params: [..._klineActiveStreams], id: _klineReqId++,
+        }));
+      }
+    };
+
+    _klineWs.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        const k = msg?.data?.k;
+        if (!k) return;
+        const key  = _klKey(k.s, k.i);
+        const subs = _klineSubscribers.get(key);
+        if (!subs || subs.size === 0) return;
+        const bar = {
+          symbol: k.s, interval: k.i,
+          open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close: parseFloat(k.c),
+          volume: parseFloat(k.v), closeTime: k.T, isFinal: !!k.x,
+        };
+        subs.forEach(cb => {
+          try { cb(bar); } catch (e) { console.warn('[MarketDataStore] Kline subscriber hatası:', e.message); }
+        });
+        _emit('mds:kline', bar);
+      } catch (e) {
+        console.warn('[MarketDataStore] Kline WS parse hatası:', e.message);
+      }
+    };
+
+    _klineWs.onerror = (e) => console.warn('[MarketDataStore] Kline WS hata:', e.type);
+
+    _klineWs.onclose = () => {
+      console.warn('[MarketDataStore] Kline WS kapandı.');
+      if (_klineStopped) return;
+      setTimeout(() => { if (!_klineStopped) _connectKlineWs(); }, _klineReconnectMs);
+      _klineReconnectMs = Math.min(_klineReconnectMs * 2, RECONNECT_MAX);
+    };
+  }
+
+  function _ensureKlineWs() {
+    if (_klineWs && (_klineWs.readyState === WebSocket.OPEN || _klineWs.readyState === WebSocket.CONNECTING)) return;
+    _klineStopped = false;
+    _connectKlineWs();
+  }
+
+  /**
+   * Bir sembol×timeframe kline stream'ine abone ol. Kapanmış bar geldiğinde
+   * callback({symbol, interval, open, high, low, close, volume, closeTime,
+   * isFinal}) çağrılır. Aynı sembol×tf'e birden fazla bot abone olabilir —
+   * WS'e tek stream isteği gider, callback'ler ayrı ayrı tutulur.
+   */
+  function subscribeKlines(symbol, interval, callback) {
+    _ensureKlineWs();
+    const key = _klKey(symbol, interval);
+    if (!_klineSubscribers.has(key)) _klineSubscribers.set(key, new Set());
+    _klineSubscribers.get(key).add(callback);
+
+    const streamName = _klineStreamName(symbol, interval);
+    if (!_klineActiveStreams.has(streamName)) {
+      _klineActiveStreams.add(streamName);
+      if (_klineWs && _klineWs.readyState === WebSocket.OPEN) {
+        _klineWs.send(JSON.stringify({ method: 'SUBSCRIBE', params: [streamName], id: _klineReqId++ }));
+      }
+      // WS henüz açık değilse: _connectKlineWs'in onopen'ı _klineActiveStreams'in
+      // tamamına abone olur, ayrıca bir şey yapmaya gerek yok.
+    }
+  }
+
+  /** subscribeKlines'a verilen AYNI callback referansıyla abonelikten çık. */
+  function unsubscribeKlines(symbol, interval, callback) {
+    const key  = _klKey(symbol, interval);
+    const subs = _klineSubscribers.get(key);
+    if (!subs) return;
+    subs.delete(callback);
+    if (subs.size === 0) {
+      _klineSubscribers.delete(key);
+      const streamName = _klineStreamName(symbol, interval);
+      _klineActiveStreams.delete(streamName);
+      if (_klineWs && _klineWs.readyState === WebSocket.OPEN) {
+        _klineWs.send(JSON.stringify({ method: 'UNSUBSCRIBE', params: [streamName], id: _klineReqId++ }));
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Depth (Order Book) Stream — paylaşılan, dinamik SUBSCRIBE/
+  // UNSUBSCRIBE'lı tek bağlantı (kline stream ile aynı örüntü).
+  // Partial book depth (@depth20@100ms) kullanılır — diff stream
+  // (@depth) yerine, çünkü diff stream'in doğru çalışması için
+  // REST snapshot + update-id senkronizasyonu (U/u/pu) gerekir;
+  // partial depth zaten senkronize top-N snapshot gönderir, aynı
+  // "3 ayrı kaynaktan tutarsız veri" riskini taşımaz.
+  // ──────────────────────────────────────────────────────────
+  const DEPTH_LEVELS        = 20;
+  let _depthWs               = null;
+  let _depthReconnectMs      = 1000;
+  let _depthStopped          = true;
+  let _depthReqId            = 1;
+  const _depthSubscribers    = new Map(); // "SYM" -> Set<callback>
+  const _depthActiveStreams  = new Set(); // "sym@depth20@100ms"
+  const _depth                = new Map(); // sym -> { bids, asks, bidVol, askVol, bidAskRatio, ts }
+
+  function _depthStreamName(symbol) {
+    return `${symbol.toLowerCase()}@depth${DEPTH_LEVELS}@100ms`;
+  }
+
+  function _connectDepthWs() {
+    if (_depthStopped) return;
+    _depthWs = new WebSocket('wss://fstream.binance.com/stream');
+
+    _depthWs.onopen = () => {
+      console.log('[MarketDataStore] Depth WS bağlandı ✓');
+      _depthReconnectMs = 1000;
+      if (_depthActiveStreams.size > 0) {
+        _depthWs.send(JSON.stringify({
+          method: 'SUBSCRIBE', params: [..._depthActiveStreams], id: _depthReqId++,
+        }));
+      }
+    };
+
+    _depthWs.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        const d = msg?.data;
+        if (!d || !Array.isArray(d.b) || !Array.isArray(d.a)) return;
+        // "s" futures partial depth payload'ında var; yoksa stream isminden çıkar.
+        const sym = d.s || (msg.stream || '').split('@')[0].toUpperCase();
+        if (!sym) return;
+
+        const subs = _depthSubscribers.get(sym);
+        if (!subs || subs.size === 0) return;
+
+        const bids = d.b.map(([p, q]) => [parseFloat(p), parseFloat(q)]);
+        const asks = d.a.map(([p, q]) => [parseFloat(p), parseFloat(q)]);
+        const bidVol = bids.reduce((s, [, q]) => s + q, 0);
+        const askVol = asks.reduce((s, [, q]) => s + q, 0);
+        const bidAskRatio = askVol > 0 ? bidVol / askVol : null;
+
+        const snapshot = { symbol: sym, bids, asks, bidVol, askVol, bidAskRatio, ts: Date.now() };
+        _depth.set(sym, snapshot);
+
+        subs.forEach(cb => {
+          try { cb(snapshot); } catch (e) { console.warn('[MarketDataStore] Depth subscriber hatası:', e.message); }
+        });
+        _emit('mds:depth', snapshot);
+      } catch (e) {
+        console.warn('[MarketDataStore] Depth WS parse hatası:', e.message);
+      }
+    };
+
+    _depthWs.onerror = (e) => console.warn('[MarketDataStore] Depth WS hata:', e.type);
+
+    _depthWs.onclose = () => {
+      console.warn('[MarketDataStore] Depth WS kapandı.');
+      if (_depthStopped) return;
+      setTimeout(() => { if (!_depthStopped) _connectDepthWs(); }, _depthReconnectMs);
+      _depthReconnectMs = Math.min(_depthReconnectMs * 2, RECONNECT_MAX);
+    };
+  }
+
+  function _ensureDepthWs() {
+    if (_depthWs && (_depthWs.readyState === WebSocket.OPEN || _depthWs.readyState === WebSocket.CONNECTING)) return;
+    _depthStopped = false;
+    _connectDepthWs();
+  }
+
+  /**
+   * Bir sembolün order book'una (top 20 seviye, 100ms) abone ol.
+   * callback({ symbol, bids, asks, bidVol, askVol, bidAskRatio, ts }) çağrılır.
+   * Aynı sembole birden fazla tüketici (chart, detail panel, LSDataStore, ...)
+   * abone olabilir — WS'e tek stream isteği gider.
+   */
+  function subscribeDepth(symbol, callback) {
+    _ensureDepthWs();
+    const sym = symbol.endsWith('USDT') ? symbol : symbol + 'USDT';
+    if (!_depthSubscribers.has(sym)) _depthSubscribers.set(sym, new Set());
+    _depthSubscribers.get(sym).add(callback);
+
+    const streamName = _depthStreamName(sym);
+    if (!_depthActiveStreams.has(streamName)) {
+      _depthActiveStreams.add(streamName);
+      if (_depthWs && _depthWs.readyState === WebSocket.OPEN) {
+        _depthWs.send(JSON.stringify({ method: 'SUBSCRIBE', params: [streamName], id: _depthReqId++ }));
+      }
+    }
+  }
+
+  /** subscribeDepth'e verilen AYNI callback referansıyla abonelikten çık. */
+  function unsubscribeDepth(symbol, callback) {
+    const sym = symbol.endsWith('USDT') ? symbol : symbol + 'USDT';
+    const subs = _depthSubscribers.get(sym);
+    if (!subs) return;
+    subs.delete(callback);
+    if (subs.size === 0) {
+      _depthSubscribers.delete(sym);
+      _depth.delete(sym);
+      const streamName = _depthStreamName(sym);
+      _depthActiveStreams.delete(streamName);
+      if (_depthWs && _depthWs.readyState === WebSocket.OPEN) {
+        _depthWs.send(JSON.stringify({ method: 'UNSUBSCRIBE', params: [streamName], id: _depthReqId++ }));
+      }
+    }
+  }
+
+  /** Son bilinen order book anlık görüntüsü (abone yoksa null). */
+  function getDepth(sym) {
+    const key = sym.endsWith('USDT') ? sym : sym + 'USDT';
+    return _depth.get(key) || null;
+  }
+
+  // ──────────────────────────────────────────────────────────
   // Public Getter'lar
   // ──────────────────────────────────────────────────────────
 
@@ -254,7 +489,7 @@ const MarketDataStore = (() => {
   /**
    * Mevcut tüm Screener row'larını oluşturmak için gereken birleşik veri.
    * @param {string} sym — "BTCUSDT"
-   * @returns {{ sym, price, pct, fr, nextFundingTime, vol, oi, oiDir } | null}
+   * @returns {{ sym, price, pct, fr, nextFundingTime, vol, volBase, oi, oiDir } | null}
    */
   function getScreenerRow(sym) {
     const key    = sym.endsWith('USDT') ? sym : sym + 'USDT';
@@ -269,6 +504,7 @@ const MarketDataStore = (() => {
       fr:              fr?.rate                 ?? null,
       nextFundingTime: fr?.nextFundingTime      || 0,
       vol:             ticker?.volume24h        || null,
+      volBase:         ticker?.volumeBase24h     || null,
       oi:              oi?.value                || null,
       oiDir:           oi?.dir                  || 'up',
     };
@@ -296,6 +532,23 @@ const MarketDataStore = (() => {
       _ws = null;
     }
     if (_oiTimer) { clearInterval(_oiTimer); clearTimeout(_oiTimer); _oiTimer = null; }
+    _klineStopped = true;
+    if (_klineWs) {
+      _klineWs.onclose = null;
+      _klineWs.close(1000, 'MarketDataStore stopped');
+      _klineWs = null;
+    }
+    _klineSubscribers.clear();
+    _klineActiveStreams.clear();
+    _depthStopped = true;
+    if (_depthWs) {
+      _depthWs.onclose = null;
+      _depthWs.close(1000, 'MarketDataStore stopped');
+      _depthWs = null;
+    }
+    _depthSubscribers.clear();
+    _depthActiveStreams.clear();
+    _depth.clear();
     _ready = false;
     console.log('[MarketDataStore] Durduruldu.');
   }
@@ -315,6 +568,11 @@ const MarketDataStore = (() => {
     getScreenerRow,
     setKlines,
     getKlines,
+    subscribeKlines,
+    unsubscribeKlines,
+    subscribeDepth,
+    unsubscribeDepth,
+    getDepth,
   };
 })();
 

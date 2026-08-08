@@ -169,6 +169,7 @@ const App = {
     this._bindClock();
     this._bindTheme();
     this._bindSyncKey();
+    this._bindChartBottomBar();
 
     EventBus.on('feed:price', data => {
       if (data.symbol === State.get('activeSymbol')) {
@@ -195,9 +196,13 @@ const App = {
     const tfFavsBar = document.getElementById('nb-tf-favs');
 
     // Canonical order — favs always render in this sequence
-    const TF_ORDER = ['1m','3m','5m','15m','30m','45m','1H','2H','3H','4H','6H','12H','1D','3D','1W','1M'];
+    // 45m ve 3H kaldırıldı: Binance/Bybit API'lerinde standart aralık değil
+    // (Bybit sessizce 1H/haftalık mum çekip yanlış etiketle gösteriyordu).
+    const TF_ORDER = ['1m','3m','5m','15m','30m','1H','2H','4H','6H','12H','1D','3D','1W','1M'];
     const DEFAULT_FAVS = ['5m','15m','1H','4H','1D'];
     let favTfs = JSON.parse(localStorage.getItem('perpetual_fav_tfs') || 'null') || [...DEFAULT_FAVS];
+    // Eski localStorage'da 45m/3H favorisi kalmış olabilir — kaldırılmış TF'leri süz.
+    favTfs = favTfs.filter(tf => TF_ORDER.includes(tf));
 
     const saveFavs = () => localStorage.setItem('perpetual_fav_tfs', JSON.stringify(favTfs));
 
@@ -294,7 +299,12 @@ const App = {
     });
 
     // Init
-    const initTf = State.get('activeTf') || '1H';
+    // Kaldırılan bir TF (45m/3H) localStorage'da kalmış olabilir — 1H'ye düş.
+    let initTf = State.get('activeTf') || '1H';
+    if (!TF_ORDER.includes(initTf)) {
+      initTf = '1H';
+      State.set('activeTf', initTf, true);
+    }
     if (tfCurrent) tfCurrent.textContent = initTf;
     updateMenuActive(initTf);
     renderFavBar();
@@ -454,6 +464,10 @@ const App = {
       // Also close clock / TZ menu
       if (!e.target.closest('#rsb-tz-menu') && !e.target.closest('#rsb-clock-btn')) {
         document.getElementById('rsb-tz-menu')?.classList.remove('open');
+      }
+      // Grafik altı bant — önizleme listesi
+      if (!e.target.closest('#cbb-list-wrap')) {
+        document.getElementById('cbb-list-menu')?.classList.remove('open');
       }
     });
 
@@ -686,7 +700,9 @@ const App = {
   },
 
   _bindSidebar() {
-    const btns = ['rsb-watchlist', 'rsb-alarms', 'rsb-news'];
+    // 'rsb-news' kaldırıldı — genel piyasa haberleri artık ayrı bir panel
+    // değil, News sekmesinin (dp-news-tab) snipe kontrolü ile birleştirildi.
+    const btns = ['rsb-watchlist', 'rsb-alarms'];
     
     btns.forEach(id => {
       const btn = document.getElementById(id);
@@ -726,43 +742,63 @@ const App = {
         const detailTab = document.getElementById('dp-detail-tab');
         const signalsTab = document.getElementById('dp-signals-tab');
         const newsTab = document.getElementById('dp-news-tab');
-        
+        // dp-alarm-tab: rsb-alarms'a özel, Bot Signals'tan (dp-signals-tab)
+        // tamamen bağımsız içerik — bkz. AlarmSignalHistory modülü.
+        const alarmTab = document.getElementById('dp-alarm-tab');
+
         if (detailTab) detailTab.style.display = 'none';
         if (signalsTab) signalsTab.style.display = 'none';
         if (newsTab) newsTab.style.display = 'none';
-        
+        if (alarmTab) alarmTab.style.display = 'none';
+
         // Hide/Show Watchlist components based on active tab
         const wlEls = document.querySelectorAll('.wl-header, #wl-search, #wl-col-header, #wl-list, #detail-resize, .detail-tabs');
-        const gnpPanel = document.getElementById('global-news-panel');
         const dpPanel  = document.getElementById('detail-panel');
-        
+
+        // .detail-tabs çubuğu (Coin Detail/Bot Signals/News) rsb-watchlist
+        // dışındaki sekmelerde gizlenir ama DOM'da kalır — DetailPanel'in
+        // _activeTabId() fonksiyonu bu çubuktaki .active sınıfına bakıyor.
+        // Sidebar sekmesi (rsb-alarms) ile bu iç sekme senkron tutulmazsa
+        // DetailPanel her symbol:change'de yanlışlıkla 'detail' sekmesi
+        // aktifmiş gibi layout hesaplar ve dp-detail-tab gizliyken (display:none)
+        // panel yüksekliğini ~0'a çöktürür. bkz. 2026-08-07 alarm kart raporu.
+        // rsb-alarms'ta 'signals' tabId'si sadece bu koruma için kullanılıyor —
+        // dp-signals-tab (Bot Signals/FR/M1/MA/V3/4S rafı) rsb-alarms'ta hiç
+        // gösterilmiyor, sadece _activeTabId() 'detail' dönmesin diye işaretleniyor.
+        const detailTabBtn  = document.querySelector('.detail-tab[data-tab="detail"]');
+        const signalsTabBtn = document.querySelector('.detail-tab[data-tab="signals"]');
+        const newsTabBtn    = document.querySelector('.detail-tab[data-tab="news"]');
+
         if (tab === 'rsb-watchlist') {
           wlEls.forEach(el => el.style.display = ''); // restore default
           if(dpPanel) {
             dpPanel.style.display = 'flex';
-            dpPanel.style.flex = 'none'; // Revert to normal
-            dpPanel.style.height = '40%'; // approximate original
+            dpPanel.style.height = ''; // İçerik-boyutlu (fit-content) düzene dön
             dpPanel.style.background = 'transparent';
           }
-          if(gnpPanel) gnpPanel.style.display = 'none';
           if (detailTab) detailTab.style.display = 'block';
-        } else if (tab === 'rsb-news') {
-          wlEls.forEach(el => el.style.display = 'none');
-          if(dpPanel) dpPanel.style.display = 'none';
-          if(gnpPanel) {
-            gnpPanel.style.display = 'flex';
-          }
+          detailTabBtn?.classList.add('active');
+          signalsTabBtn?.classList.remove('active');
+          newsTabBtn?.classList.remove('active');
+          // Bu yol her zaman "Coin Detail" sekmesini gösterir — panel/screener
+          // flex oranlarını da o sekmenin düzenine sıfırla (bkz. detail-panel.js).
+          if (window.DetailPanel?.applyLayout) DetailPanel.applyLayout('detail');
         } else {
           wlEls.forEach(el => el.style.display = 'none');
-          if(gnpPanel) gnpPanel.style.display = 'none';
           if(dpPanel) {
             dpPanel.style.display = 'flex';
             dpPanel.style.flex = '1';
             dpPanel.style.height = '100%';
             dpPanel.style.background = 'var(--bg-secondary)'; // Make sure it has a background if taking full height
           }
-          
-          if (tab === 'rsb-alarms' && signalsTab) signalsTab.style.display = 'block';
+
+          if (tab === 'rsb-alarms' && alarmTab) {
+            alarmTab.style.display = 'block';
+            signalsTabBtn?.classList.add('active');
+            detailTabBtn?.classList.remove('active');
+            newsTabBtn?.classList.remove('active');
+            if (window.AlarmSignalHistory) AlarmSignalHistory.init();
+          }
         }
       }
     });
@@ -861,6 +897,30 @@ const App = {
     EventBus.on('theme:change', ({ theme }) => {
       const btn = document.getElementById('btn-theme');
       if (btn) btn.textContent = theme === 'dark' ? '☀' : '◑';
+    });
+  },
+
+  // Grafik altı bandın sol tarafındaki önizleme modu seçici (No Preview/Top
+  // Gainers/Delistings/New Listings). Şimdilik gerçek bir filtre uygulamıyor —
+  // sadece seçileni etiket olarak gösteriyor (bkz. 2026-08-01 rapor).
+  _bindChartBottomBar() {
+    const trigger = document.getElementById('cbb-list-trigger');
+    const menu    = document.getElementById('cbb-list-menu');
+    const label   = document.getElementById('cbb-list-label');
+    if (!trigger || !menu) return;
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.classList.toggle('open');
+    });
+
+    menu.querySelectorAll('.cbb-list-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (label) label.textContent = item.textContent;
+        menu.querySelectorAll('.cbb-list-item').forEach(i => i.classList.toggle('active', i === item));
+        menu.classList.remove('open');
+      });
     });
   },
 };

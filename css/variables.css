@@ -34,10 +34,18 @@
   --candle-down: #f23645;
 
   --panel-width-right: 480px;
-  --coin-detail-width: 560px;
+  /* Navbar coin bilgi kutusu = watchlist paneli ile birebir aynı genişlik.
+     Değiştirmek isterseniz sadece --panel-width-right'i değiştirin, ikisi
+     birlikte hareket eder. */
+  --coin-detail-width: var(--panel-width-right);
   --panel-width-left:  40px;
   --navbar-height:     38px;
+  --navbar-padding-x:  8px;
   --sidebar-width:     40px;
+  /* Sağdaki dikey ikon çubuğu (Watch / Alarm / News).
+     index.html içindeki .right-sidebar bunu kullanır — navbar bilgi kutusunun
+     sağ kenarının çubukla hizalanması buna bağlı. */
+  --right-sidebar-width: 44px;
 
   --font-mono: 'Courier New', monospace;
 
