@@ -192,6 +192,29 @@ const _prevFR = {
 };
 
 // ── Binance: FR + OI + Volume (her 1dk) ─────────────────────────────
+/**
+ * Verilen semboller için gerçek Open Interest (adet, USD değil) çeker.
+ * /fapi/v1/openInterest tek sembollük bir endpoint — toplu bir "tüm market"
+ * karşılığı yok, bu yüzden batch'li çekiliyor (mevcut mum toplayıcısının
+ * örüntüsüyle aynı: BATCH'li + aralarda kısa bekleme).
+ * @returns {Promise<Map<string, number>>} symbol -> openInterest (adet)
+ */
+async function _fetchBinanceOIBatch(symbols) {
+  const map = new Map();
+  const BATCH = 10;
+  for (let i = 0; i < symbols.length; i += BATCH) {
+    const batch = symbols.slice(i, i + BATCH);
+    await Promise.allSettled(batch.map(async (sym) => {
+      try {
+        const d = await fetchJson('fapi.binance.com', `/fapi/v1/openInterest?symbol=${sym}`);
+        if (d?.openInterest) map.set(sym, parseFloat(d.openInterest));
+      } catch { /* sessizce geç — tek sembol hatası turu durdurmasın */ }
+    }));
+    if (i + BATCH < symbols.length) await sleep(150);
+  }
+  return map;
+}
+
 async function collectBinanceData() {
   if (mongoose.connection.readyState !== 1) return;
   try {
@@ -213,7 +236,6 @@ async function collectBinanceData() {
       .forEach(f => {
         const tk      = tkMap[f.symbol] || {};
         const price   = parseFloat(f.markPrice) || 0;
-        const oi      = parseFloat(f.openInterest) || 0;
         const fr      = parseFloat(f.lastFundingRate) * 100;
 
         const prevFR  = _prevFR.binance.get(f.symbol);
@@ -223,14 +245,18 @@ async function collectBinanceData() {
 
         _prevFR.binance.set(f.symbol, fr);
 
-        // History için yaz
+        // History için yaz. NOT: openInterest burada henüz doldurulmuyor —
+        // /fapi/v1/premiumIndex yanıtında "openInterest" alanı YOK (eski kod
+        // bunu okuyup sessizce 0 yazıyordu, Görev 10.1). Gerçek değer aşağıda
+        // /fapi/v1/openInterest'ten ayrıca, sadece bu değişen semboller için
+        // batch'li olarak çekilip histDocs'a sonradan işleniyor.
         histDocs.push({
           exchange:     'binance',
           symbol:       f.symbol,
           timestamp:    now,
           price,
           fundingRate:  fr,
-          openInterest: oi * price,
+          openInterest: null,
           volume24h:    tk.quoteVolume ? parseFloat(tk.quoteVolume) : null,
           createdAt:    now
         });
@@ -252,8 +278,15 @@ async function collectBinanceData() {
         }
       });
 
-    // MarketData — sadece değişenler
+    // Gerçek OI — sadece bu turda değişen semboller için (tüm ~500'ü her
+    // dakika çekmek gereksiz ağır olurdu, Görev 1'in bulgusuyla çelişirdi).
+    // Batch'li + aralarda bekleme, mevcut mum toplayıcısının örüntüsüyle aynı.
     if (histDocs.length > 0) {
+      const oiMap = await _fetchBinanceOIBatch(histDocs.map(d => d.symbol));
+      histDocs.forEach(d => {
+        const oiQty = oiMap.get(d.symbol);
+        d.openInterest = oiQty != null ? oiQty * d.price : null;
+      });
       await MarketData.insertMany(histDocs, { ordered: false }).catch(() => {});
     }
 

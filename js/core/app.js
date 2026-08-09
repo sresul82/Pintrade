@@ -170,6 +170,7 @@ const App = {
     this._bindTheme();
     this._bindSyncKey();
     this._bindChartBottomBar();
+    this._bindAlarmModal();
 
     EventBus.on('feed:price', data => {
       if (data.symbol === State.get('activeSymbol')) {
@@ -358,6 +359,15 @@ const App = {
       });
     };
 
+    // MS_ORDER'daki 8 stilden sadece 4'ü ChartPane.setChartType()'ın
+    // desteklediği seri tipleriyle örtüşüyor (Görev 10.2 — chart:style:change
+    // event'i yayınlanıyordu ama hiçbir dinleyicisi yoktu, mum tipi seçimi
+    // grafiğe hiç yansımıyordu). heikinashi/hollow/volume/baseline için
+    // chart-pane.js'de ayrı bir seri implementasyonu yok — o dördü için
+    // sessizce "hiçbir şey yapmamak" yerine açık bir "henüz yok" bildirimi
+    // gösteriliyor (mevcut SPOT/dayOpen "coming soon" örüntüsüyle tutarlı).
+    const CHART_TYPE_MAP = { candlestick: 'candle', bar: 'bar', line: 'line', area: 'area' };
+
     const selectStyle = (style) => {
       const { icon, label } = getMsMeta(style);
       if (msCurrent) msCurrent.textContent = label;
@@ -366,6 +376,14 @@ const App = {
       document.querySelectorAll('.nb-ms-fav-btn').forEach(b => b.classList.toggle('active', b.dataset.style === style));
       State.set('candleStyle', style);
       EventBus.emit('chart:style:change', { style });
+
+      const chartType = CHART_TYPE_MAP[style];
+      const pane = window.LayoutManager?.getActivePane?.();
+      if (chartType && pane) {
+        pane.setChartType(chartType);
+      } else if (!chartType && window.Toast) {
+        Toast.show(`${label} style is not implemented yet — still showing the previous type`, 'info');
+      }
       closeMsMenu();
     };
 
@@ -922,6 +940,60 @@ const App = {
         menu.querySelectorAll('.cbb-list-item').forEach(i => i.classList.toggle('active', i === item));
         menu.classList.remove('open');
         EventBus.emit('screener:previewFilter', { type: item.dataset.preview || 'none' });
+      });
+    });
+  },
+
+  // Alarm (⏰) butonu — Görev 10.2: 'modal:alarm:open' yayınlanıyordu ama
+  // hiçbir dinleyicisi yoktu, buton hiçbir şey açmıyordu. Bilinçli olarak
+  // küçük tutuldu: gerçek bir fiyat alarmı kurma/saklama/tetikleme sistemi
+  // ayrı bir görev (kapsamı — ne zaman/nasıl tetiklenecek, nerede saklanacak
+  // — netleşmeden büyük bir özellik inşa edilmedi). Bu modal sadece butonun
+  // gerçekten bir şey açtığını doğruluyor; "Create" şu an sadece bir toast
+  // gösterip kapanıyor, hiçbir yere kaydetmiyor.
+  _bindAlarmModal() {
+    EventBus.on('modal:alarm:open', () => {
+      if (document.getElementById('alarm-modal-backdrop')) return; // zaten açık
+
+      const sym = State.get('activeSymbol') || '—';
+      const backdrop = document.createElement('div');
+      backdrop.id = 'alarm-modal-backdrop';
+      backdrop.className = 'modal-backdrop';
+      backdrop.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <span>Create Alert — ${sym}</span>
+            <button id="alarm-modal-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label">Trigger price</label>
+            <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" style="margin-bottom:10px;">
+            <label class="form-label">Condition</label>
+            <select class="form-input" id="alarm-modal-cond">
+              <option value="above">Price rises above</option>
+              <option value="below">Price falls below</option>
+            </select>
+            <p style="font-size:10px; color:var(--text-muted); margin-top:10px;">
+              Note: this is a preview — alerts are not yet saved or triggered. Full alert storage/triggering is a separate, larger feature to be scoped later.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" id="alarm-modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="alarm-modal-create">Create</button>
+          </div>
+        </div>`;
+      document.body.appendChild(backdrop);
+
+      const close = () => backdrop.remove();
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      document.getElementById('alarm-modal-close')?.addEventListener('click', close);
+      document.getElementById('alarm-modal-cancel')?.addEventListener('click', close);
+      document.getElementById('alarm-modal-create')?.addEventListener('click', () => {
+        const price = document.getElementById('alarm-modal-price')?.value;
+        close();
+        if (window.Toast) {
+          Toast.show(price ? `Preview only — ${sym} alert (${price}) was not saved` : 'Preview only — no price entered', 'info');
+        }
       });
     });
   },

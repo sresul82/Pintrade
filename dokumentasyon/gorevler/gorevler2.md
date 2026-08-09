@@ -295,15 +295,21 @@ Kod taraması sırasında (bu dosyanın hazırlanışı, 2026-08-08) `dokumentas
 
 ---
 
-## [ ] ⏸ DUR — kullanıcı onayı bekle (Görev 10'dan önce)
+## [x] ⏸ DUR — kullanıcı onayı bekle (Görev 10'dan önce)
 
-Görev 9 bittikten sonra **DURACAKSIN**.
+**Not (2026-08-08):** Kullanıcı Görev 9'u (güvenlik) ERTELEDİ (iptal değil —
+"önce sitenin doğru/fonksiyonel çalışması" önceliğiyle), Görev 10'a
+sıra dışı geçildi. Görev 9 hâlâ bekliyor, kullanıcı "Görev 9'a geç" dediğinde
+ele alınacak.
 
 Bu bloğu geçmek için kullanıcı açıkça "Görev 10'a geç" demeli. Aksi halde bekle.
 
 ---
 
-## [ ] Görev 10 — Doğrulanmış ölü kod / hesaplama hataları (2026-08-08 taramasında bulundu)
+## [x] Görev 10 — Doğrulanmış ölü kod / hesaplama hataları (2026-08-08 taramasında bulundu)
+
+**Tamamlandı (2026-08-08).** Rapor: `dokumentasyon/raporlar/2026-08-08-gorev10-olu-event-ve-oi-duzeltmeleri.md`
+**Bulgu:** Mum tipi menüsünde 11 seçenek var ama chart motoru sadece 4'ünü destekliyor (candlestick/bar/line/area) — kalan 7'si (heikinashi, hollow, baseline vb.) için ayrı seri implementasyonu yok, ayrı bir özellik işi. Şimdilik "henüz desteklenmiyor" toast'ı gösteriliyor.
 
 Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukta olmayan somut hatalar:
 
@@ -334,7 +340,7 @@ Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukt
 - Mum tipi değişimi grafiğe yansıyor mu?
 - Alarm butonu bir şey açıyor mu (en azından placeholder bir modal)?
 
-**Rapor:** `2026-XX-XX-olu-event-ve-oi-duzeltmeleri.md`
+**Rapor:** `2026-08-08-gorev10-olu-event-ve-oi-duzeltmeleri.md`
 
 ---
 
