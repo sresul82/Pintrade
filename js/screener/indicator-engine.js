@@ -122,7 +122,8 @@ const IndicatorEngine = (() => {
 
     return {
       val: Math.round(wt1Curr),
-      dir: bullCross ? 'bull' : 'bear'
+      dir: bullCross ? 'bull' : 'bear',
+      prev: Math.round(wt1Prev), // Kom1'in "önceki bar oversold mu" (WT1 < eşik) kontrolü için — gorevler3.md Görev 2
     };
   }
 

@@ -66,7 +66,9 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 
 ---
 
-## [ ] Görev 2 — Büyük TF sinyali (1H/4H: RC + WaveTrend)
+## [x] Görev 2 — Büyük TF sinyali (1H/4H: RC + WaveTrend)
+
+**Tamamlandı (2026-08-09).** Rapor: `dokumentasyon/raporlar/2026-08-09-gorev2-buyuk-tf-sinyali.md`
 
 **Bağımlılık:** Görev 1 bitmeden başlanamaz.
 
@@ -83,7 +85,7 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 - Gerçek piyasada en az bir coin+TF kombinasyonunda RC_mid ve WT değerlerini elle (örn. TradingView'da aynı ayarlarla) karşılaştır.
 - Ban riski yok mu (BotEngine kuyruğu, MarketDataStore paylaşılan bağlantı) — konsolda BAN_SIGNAL var mı kontrol et.
 
-**Rapor:** `2026-XX-XX-gorev2-buyuk-tf-sinyali.md`
+**Rapor:** `2026-08-09-gorev2-buyuk-tf-sinyali.md`
 
 ---
 
