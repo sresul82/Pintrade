@@ -348,6 +348,7 @@ Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukt
 
 - **Kom1/Kom2/Kom3 sinyal motoru** — büyük iş, L/S artık hazır olduğu için önü açık, ama ayrı, kendi turunda ele alınacak.
 - **Çizim araçları temizliği** — kullanıcı doğrudan Claude Code ile yürütüyor.
+- **Heikin Ashi ve diğer 6 mum stili doldurulmalı** (2026-08-09, kullanıcı isteği): Görev 10.2'de mum stili menüsü 4 stile (candlestick/bar/line/area) bağlandı, kalan 7'si (heikinashi, hollow, volume, line_markers, hlc_area, baseline, volume_footprint, session_volume) menüde duruyor ama tıklanınca "henüz desteklenmiyor" diyor — silinmedi. **Heikin Ashi öncelikli** — gerçek Heikin Ashi hesaplaması (`chart-pane.js`'in `_buildSeries()`'ine yeni bir case) ve grafiğe çizilmesi ayrı bir iş olarak ele alınacak.
 
 ## İzleme listesi — küçük/örtüşme riski taşıyan, henüz görev olarak açılmamış notlar
 
