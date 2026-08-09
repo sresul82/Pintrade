@@ -21,16 +21,23 @@ Her rapor için standart format: değişen dosyalar, ölçümler, doğrulama tes
 
 ---
 
-## 2026-08-09 kararları (bu kuyruk kurulurken netleşen)
+## 2026-08-09 kararları — seçilen VE seçilmeyen alternatifler
 
-Kullanıcıyla netleşen, koda gömülecek kararlar:
+Her karar noktasında kullanıcıyla birlikte bir seçenek seçildi, diğerleri
+**reddedilmedi — sadece şimdilik ertelendi.** İleride bu kuyruğa dönen
+(insan veya Claude Code) kişi neyin neden seçilmediğini bilsin diye
+buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak.
 
-- **Kapsam: sadece Kom1.** Kom2 (zayıf/doğrulanmamış) ve Kom3 (tanımsız) bu kuyrukta YOK — ayrıca planlanacak.
-- **Parametreler şimdilik sabit kodda** (yapılandırılabilir değil): WaveTrend oversold eşiği **-53**, Regression Channel uzunluğu **100 bar**, `TOLERANCE_BARS=3`.
-- **Coin evreni: küçük, sabit bir kümeyle başla** (M1Hammer'ın Faz 1 stratejisiyle aynı — önce küçük kümede ban riskini doğrula, sonra genişlet). Öneri: `sinyal-sistemi-pintrade-entegrasyon.md`'de ismi geçen, zaten test edilmiş ve iyi performans göstermiş 11 coin: `ONDOUSDT, STRKUSDT, ENAUSDT, BIOUSDT, JUPUSDT, TUSDT, AEVOUSDT, MOVEUSDT, VANRYUSDT, BERAUSDT, HYPEUSDT`. **Tüm piyasaya (dinamik ATR taraması) genişletme AYRI bir görev (Görev 6), ban riski bu 11 coinde doğrulanmadan başlanmaz.**
-- **Sadece Binance, sadece FUTURES.**
-- **Büyük TF: hem 1H hem 4H** izlenir (ikisi de bağımsız sinyal üretebilir).
-- Mimari kural (Görev 5'ten beri sabit): kimse kendi fetch/WS döngüsünü açmaz — `BotEngine.queueRestRequest()` ve `MarketDataStore.subscribeKlines()` üzerinden gidilir.
+| Karar noktası | ✅ Seçilen | ❌ Seçilmeyen (ileride değerlendirilebilir) |
+|---|---|---|
+| **Kom3 tanımı** | Henüz tanımlanmadı, bu kuyrukta hiç yok | Kullanıcının üçüncü bir strateji fikri paylaşıp Kom3'ü de bu turda tanımlaması |
+| **Kom2 kapsamı** | Bu kuyrukta yok, sadece Kom1 | Kom2'yi bilinen zayıf/doğrulanmamış kuralla (divergence+L/S+hacim) yine de şimdi kurmak |
+| **Kom1 parametreleri** (WT eşiği -53, RC 100 bar, TOLERANCE_BARS=3) | Sabit kodda, sabit değer | Bir ayar panelinden değiştirilebilir yapmak (örn. WT eşiğini -48 ile de denemek isterse) — **not:** kaynak doküman (`sinyal-sistemi-pintrade-entegrasyon.md` §9) aslında bunun yapılandırılabilir olmasını öneriyordu, kullanıcı şimdilik hız için sabit kodu tercih etti |
+| **Coin evreni** | Küçük, sabit 11 coin (ONDO/STRK/ENA/BIO/JUP/T/AEVO/MOVE/VANRY/BERA/HYPE) | Tüm Binance USDT perpetual'ları dinamik ATR14/fiyat (%3-12) filtresiyle taramak — kaynak dokümanın **orijinal tasarımı buydu**, ama MarketDataStore'un 200-stream/bağlantı sınırı + ban riski nedeniyle Görev 6'ya (ayrı, en riskli adım) ertelendi |
+| **Tarama mimarisi** | Önce küçük sabit kümede dene, ban riski yokluğu doğrulanınca genişlet (M1Hammer'ın izlediği yol) | İki katmanlı taramayı (hafif ATR REST taraması + hedefli WS) baştan, büyük ölçekte kurmak |
+| **Borsa** | Sadece Binance FUTURES | Bybit'i de dahil etmek (L/S görevinde Bybit faz 2 olarak zaten eklenmişti, ama Kom1'in backtest verisi tamamen Binance'e dayanıyor — Bybit'te aynı kuralların işleyip işlemediği hiç test edilmedi) |
+| **Büyük TF** | Hem 1H hem 4H, ikisi de bağımsız sinyal üretir | Sadece tek bir TF (örn. sadece 4H, "en güçlü" ufuk olduğu için — backtest'te +4h en yüksek net getiriyi verdi) |
+| **İş bölümü** | `gorevler3.md` olarak 6 küçük adıma bölündü, DUR noktalarıyla | Planlamadan direkt tek seferde kodlamaya başlamak |
 
 ---
 
