@@ -41,7 +41,9 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 
 ---
 
-## [ ] Görev 1 — Paylaşılan indikatör motoru (DEMA9, Heikin Ashi, Regression Channel)
+## [x] Görev 1 — Paylaşılan indikatör motoru (DEMA9, Heikin Ashi, Regression Channel)
+
+**Tamamlandı (2026-08-09).** Rapor: `dokumentasyon/raporlar/2026-08-09-gorev1-indikator-motoru.md`
 
 **Sebep:** Kom1'in ihtiyaç duyduğu indikatörlerden RSI ve WaveTrend zaten var (`js/screener/m1hammer-scanner.js` içinde, `calcRSI`/`calcWT` — WT_CH_LEN=10, WT_AVG_LEN=21, Kom1'in beklediğiyle birebir uyumlu). Ama **DEMA9, Heikin Ashi ve Regression Channel kod tabanında hiç yok** (grep ile doğrulandı — "heikinashi" sadece grafik menüsünde bir isim olarak geçiyor, hesaplama yok).
 
@@ -60,7 +62,7 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 - M1Hammer'ın taşınan `calcRSI`/`calcWT` çağrılarının hâlâ aynı sonucu verdiğini doğrula (regresyon yok).
 - `node -c` ile syntax kontrolü, tarayıcıda M1Hammer'ın hâlâ çalıştığını doğrula.
 
-**Rapor:** `2026-XX-XX-gorev1-indikator-motoru.md`
+**Rapor:** `2026-08-09-gorev1-indikator-motoru.md`
 
 ---
 

@@ -61,87 +61,14 @@ const M1HammerScanner = (() => {
     if (b.closes.length > BUFFER_CAP) { b.closes.shift(); b.highs.shift(); b.lows.shift(); }
   }
 
-  // RSI hesapla (Wilder yöntemi)
-  function calcRSI(closes) {
-    if (closes.length < RSI_PERIOD + 1) return null;
-    let gains = 0, losses = 0;
-    for (let i = 1; i <= RSI_PERIOD; i++) {
-      const d = closes[i] - closes[i - 1];
-      if (d > 0) gains += d; else losses -= d;
-    }
-    let avgGain = gains / RSI_PERIOD;
-    let avgLoss = losses / RSI_PERIOD;
-    for (let i = RSI_PERIOD + 1; i < closes.length; i++) {
-      const d = closes[i] - closes[i - 1];
-      avgGain = (avgGain * (RSI_PERIOD - 1) + Math.max(d, 0)) / RSI_PERIOD;
-      avgLoss = (avgLoss * (RSI_PERIOD - 1) + Math.max(-d, 0)) / RSI_PERIOD;
-    }
-    if (avgLoss === 0) return 100;
-    const rs = avgGain / avgLoss;
-    return Math.round(100 - 100 / (1 + rs));
-  }
-
-  // Stochastic RSI hesapla — son bar'ın K değeri
-  function calcSRSI(closes) {
-    if (closes.length < RSI_PERIOD * 2 + SRSI_K + SRSI_D) return null;
-    const rsiArr = [];
-    for (let i = RSI_PERIOD; i < closes.length; i++) {
-      rsiArr.push(calcRSI(closes.slice(0, i + 1)));
-    }
-    if (rsiArr.length < SRSI_PERIOD + SRSI_K + SRSI_D - 2) return null;
-    const stochArr = [];
-    for (let i = SRSI_PERIOD - 1; i < rsiArr.length; i++) {
-      const slice = rsiArr.slice(i - SRSI_PERIOD + 1, i + 1);
-      const minR = Math.min(...slice);
-      const maxR = Math.max(...slice);
-      stochArr.push(maxR === minR ? 0 : (rsiArr[i] - minR) / (maxR - minR) * 100);
-    }
-    if (stochArr.length < SRSI_K) return null;
-    const k = stochArr.slice(-SRSI_K).reduce((a, b) => a + b, 0) / SRSI_K;
-    return Math.round(k);
-  }
-
-  // WaveTrend hesapla — son bar'da cross var mı, cross değeri ne?
-  function calcWT(hlc3Arr) {
-    if (hlc3Arr.length < WT_CH_LEN + WT_AVG_LEN + 4) return null;
-
-    function ema(arr, len) {
-      const k = 2 / (len + 1);
-      let e = arr[0];
-      for (let i = 1; i < arr.length; i++) e = arr[i] * k + e * (1 - k);
-      return e;
-    }
-
-    const wt1Arr = [];
-    const needed = WT_CH_LEN + WT_AVG_LEN + 5;
-    const slice = hlc3Arr.slice(-needed);
-
-    for (let i = WT_CH_LEN; i < slice.length; i++) {
-      const window = slice.slice(i - WT_CH_LEN, i + 1);
-      const esa = ema(window, WT_CH_LEN);
-      const dArr = window.map(v => Math.abs(v - esa));
-      const d = ema(dArr, WT_CH_LEN);
-      const ci = d !== 0 ? (slice[i] - esa) / (0.015 * d) : 0;
-      wt1Arr.push(ci);
-    }
-
-    if (wt1Arr.length < WT_AVG_LEN + 2) return null;
-
-    const wt1Prev = ema(wt1Arr.slice(-WT_AVG_LEN - 1, -1), WT_AVG_LEN);
-    const wt1Curr = ema(wt1Arr.slice(-WT_AVG_LEN), WT_AVG_LEN);
-    const wt2Prev = wt1Arr.slice(-5, -1).reduce((a, b) => a + b, 0) / 4;
-    const wt2Curr = wt1Arr.slice(-4).reduce((a, b) => a + b, 0) / 4;
-
-    const bullCross = wt1Prev <= wt2Prev && wt1Curr > wt2Curr;
-    const bearCross = wt1Prev >= wt2Prev && wt1Curr < wt2Curr;
-
-    if (!bullCross && !bearCross) return null;
-
-    return {
-      val: Math.round(wt1Curr),
-      dir: bullCross ? 'bull' : 'bear'
-    };
-  }
+  // RSI/StochRSI/WaveTrend hesaplamaları gorevler3.md Görev 1'de
+  // js/screener/indicator-engine.js'e TAŞINDI (kopyalanmadı) — tek kaynak,
+  // chart ve gelecekteki Kom1Scanner de aynı fonksiyonları kullanacak.
+  // Davranış birebir aynı, sadece çağrı yeri değişti: calcRSI(closes) →
+  // IndicatorEngine.calcRSI(closes) (varsayılan period=14 aynı).
+  const calcRSI  = (closes) => IndicatorEngine.calcRSI(closes, RSI_PERIOD);
+  const calcSRSI = (closes) => IndicatorEngine.calcSRSI(closes, RSI_PERIOD, SRSI_K, SRSI_D);
+  const calcWT   = (hlc3Arr) => IndicatorEngine.calcWT(hlc3Arr, WT_CH_LEN, WT_AVG_LEN);
 
   function _hlc3(b) {
     return b.closes.map((c, i) => (b.highs[i] + b.lows[i] + c) / 3);
