@@ -89,7 +89,9 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 
 ---
 
-## [ ] Görev 3 — 5 dakikalık onay penceresi (Heikin Ashi + DEMA9)
+## [x] Görev 3 — 5 dakikalık onay penceresi (Heikin Ashi + DEMA9)
+
+**Tamamlandı (2026-08-09).** Rapor: `dokumentasyon/raporlar/2026-08-09-gorev3-5dk-onay-penceresi.md`
 
 **Bağımlılık:** Görev 2 bitmeden başlanamaz.
 
@@ -105,7 +107,7 @@ buraya açıkça yazıldı. Kod, burada "Seçilen" yazan tarafa göre yazılacak
 - Bekleyen durumun doğru şekilde açılıp kapandığını (abonelik sızıntısı yok) doğrula — `MarketDataStore.unsubscribeKlines` her durumda (onay geldi / pencere geçti) çağrılıyor mu kontrol et.
 - En az bir uçtan uca test: büyük TF sinyali + 5dk onayının birlikte gerçek/mock veriyle doğru "Long sinyali" ürettiğini doğrula.
 
-**Rapor:** `2026-XX-XX-gorev3-5dk-onay-penceresi.md`
+**Rapor:** `2026-08-09-gorev3-5dk-onay-penceresi.md`
 
 ---
 

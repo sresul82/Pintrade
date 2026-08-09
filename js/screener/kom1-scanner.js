@@ -1,18 +1,28 @@
 /**
- * Kom1Scanner — Kombinasyon 1 sinyal motoru, büyük zaman dilimi tespiti.
+ * Kom1Scanner — Kombinasyon 1 sinyal motoru.
  *
- * gorevler3.md Görev 2 (2026-08-09). Kaynak kural:
+ * gorevler3.md Görev 2+3 (2026-08-09). Kaynak kural:
  * dokumentasyon/gorevler/sinyal-sistemi-pintrade-entegrasyon.md §2.
  *
- * BU TURUN KAPSAMI: sadece büyük TF (1H/4H) sinyalini tespit eder ve
- * "TOLERANCE_BARS penceresi açık" durumunu bir Map'te tutar. Henüz
- * Watchlist/alarm'a yazmaz (Görev 4), henüz 5dk onayını kontrol etmez
- * (Görev 3) — sadece büyük TF'in kendisi doğru çalışıyor mu görmek için.
+ * BU TURUN KAPSAMI: büyük TF (1H/4H) tespiti + 5dk onay penceresi.
+ * Onaylanan sinyal `_confirmed` listesine yazılır — henüz Watchlist/
+ * alarm'a yazmaz (Görev 4), sadece `getConfirmedSignals()` ile gözlemlenir.
  *
  * Kural (büyük TF, 1H veya 4H):
  *   - price <= RC_mid (Regression Channel, 100 bar)
  *   - WT1 bir önceki bar'da oversold'du (WT1 < -53)
  *   - WT1 bu barda WT2'yi yukarı kesti (bullCross)
+ *
+ * Kural (küçük TF, 5dk — büyük TF sinyalinden sonra TOLERANCE_BARS=3
+ * büyük TF barı içinde gerçekleşmeli):
+ *   - Heikin Ashi mumu yeşil (ha_close >= ha_open)
+ *   - HA kapanışı DEMA9'un üzerinde (ha_close > dema9)
+ * İkisi birleşince Long sinyali KESİNLEŞİR.
+ *
+ * 5dk aboneliği KALICI DEĞİL — sadece büyük TF sinyali ateşlenmiş
+ * (pending'de) bir coin için açılır, onay gelince veya pencere
+ * kapanınca hemen kapatılır ("iki katmanlı tarama" mimari kararı,
+ * gorevler3.md — stream limitini düşük tutmak için).
  *
  * Mimari: M1HammerScanner'ın aynı örüntüsü — BotEngine.queueRestRequest()
  * ile tek seferlik backfill, sonra MarketDataStore.subscribeKlines()
@@ -27,6 +37,10 @@ const Kom1Scanner = (() => {
   const WT_THRESHOLD   = -53;   // Sabit — gorevler3.md kararı (yapılandırılabilir değil, şimdilik)
   const RC_LENGTH       = 100;   // Regression Channel uzunluğu (bar)
   const TOLERANCE_BARS  = 3;     // Büyük TF sinyalinden sonra 5dk onayı bekleme penceresi (büyük TF bar sayısı)
+  const SMALL_TF        = '5m';  // Küçük TF onay penceresi
+  const DEMA_PERIOD     = 9;
+  const SMALL_TF_BARS   = 40;    // DEMA9 için yeterli pay (min ~18 gerekir)
+  const CONFIRMED_CAP   = 200;   // getConfirmedSignals() listesi sınırsız büyümesin
 
   // 11 coin — sinyal-sistemi-pintrade-entegrasyon.md'de ismi geçen,
   // backtest'te test edilmiş ve iyi performans göstermiş coinler.
@@ -72,6 +86,16 @@ const Kom1Scanner = (() => {
 
   function getPendingSignals() {
     return [..._pending.values()];
+  }
+
+  // ── Küçük TF (5dk) — SADECE pending'de bekleyen coinler için, kalıcı değil ──
+  const _smallBuf     = new Map(); // "SYM_5m" -> { opens, highs, lows, closes }
+  const _smallActive  = new Set(); // hangi semboller için 5dk aboneliği açık
+
+  // Onaylanmış (kesinleşmiş) Long sinyalleri — en yeni başta.
+  const _confirmed = [];
+  function getConfirmedSignals() {
+    return _confirmed.slice();
   }
 
   // ── Binance kline REST — SADECE tek seferlik backfill, BotEngine kuyruğu
@@ -149,6 +173,11 @@ const Kom1Scanner = (() => {
     };
     _pending.set(key, entry);
     console.log(`[Kom1Scanner] Büyük TF sinyali ateşlendi: ${sym} ${tf} — fiyat=${price}, RC_mid=${rc.mid.toFixed(4)}, WT prev=${wt.prev}→cur=${wt.val}. 5dk onay penceresi açıldı (${TOLERANCE_BARS} ${tf} bar).`);
+
+    // 5dk onay penceresi için bu coin'e hedefli abone ol (kalıcı değil).
+    _ensureSmallTFSubscription(sym).catch(err => {
+      console.warn(`[Kom1Scanner] 5dk aboneliği başlatılamadı (${sym}):`, err.message);
+    });
   }
 
   /** Süresi geçmiş (TOLERANCE_BARS penceresi kapanmış, onay gelmemiş) pending'leri temizler. */
@@ -160,7 +189,99 @@ const Kom1Scanner = (() => {
     if (barCount > entry.expiresAtBarCount) {
       _pending.delete(key);
       console.log(`[Kom1Scanner] Pencere kapandı, onay gelmedi: ${sym} ${tf} — sinyal iptal.`);
+      _releaseSmallTFSubscription(sym); // bu coin için başka pending kalmadıysa 5dk aboneliğini kapat
     }
+  }
+
+  /** Bu sembol için hâlâ pending bir büyük TF girişi var mı? */
+  function _hasPending(sym) {
+    for (const entry of _pending.values()) if (entry.symbol === sym) return true;
+    return false;
+  }
+
+  // ── Küçük TF (5dk) yönetimi ─────────────────────────────────────────
+  function _getSmallBuf(sym) {
+    const k = _bufKey(sym, SMALL_TF);
+    if (!_smallBuf.has(k)) _smallBuf.set(k, { opens: [], highs: [], lows: [], closes: [] });
+    return _smallBuf.get(k);
+  }
+  function _pushSmallBar(sym, o, h, l, c) {
+    const b = _getSmallBuf(sym);
+    b.opens.push(o); b.highs.push(h); b.lows.push(l); b.closes.push(c);
+    const cap = SMALL_TF_BARS + 20;
+    if (b.closes.length > cap) { b.opens.shift(); b.highs.shift(); b.lows.shift(); b.closes.shift(); }
+  }
+
+  async function _ensureSmallTFSubscription(sym) {
+    if (_smallActive.has(sym)) return; // zaten aktif
+    _smallActive.add(sym);
+    try {
+      const kl = await BotEngine.queueRestRequest(() => fetchKlines(sym, SMALL_TF, SMALL_TF_BARS));
+      const b = _getSmallBuf(sym);
+      b.opens  = kl.map(k => parseFloat(k[1]));
+      b.highs  = kl.map(k => parseFloat(k[2]));
+      b.lows   = kl.map(k => parseFloat(k[3]));
+      b.closes = kl.map(k => parseFloat(k[4]));
+    } catch (err) {
+      if (String(err.message).startsWith('BAN_SIGNAL')) {
+        console.error(`[Kom1Scanner] ⛔ BAN sinyali (5dk backfill, ${sym}) — Kom1Scanner durduruluyor.`);
+        stop();
+        return;
+      }
+      console.warn(`[Kom1Scanner] 5dk backfill hatası (${sym}):`, err.message);
+      // Backfill başarısız olsa bile abone ol — canlı barlar birikip DEMA9 için
+      // yeterli geçmiş oluşunca onay kontrolü zaten devreye girer.
+    }
+    MarketDataStore.subscribeKlines(sym, SMALL_TF, _onSmallTFBar);
+    console.log(`[Kom1Scanner] 5dk onay aboneliği açıldı: ${sym}`);
+  }
+
+  /** Bu coin için hiç pending kalmadıysa 5dk aboneliğini kapatır. */
+  function _releaseSmallTFSubscription(sym) {
+    if (_hasPending(sym)) return; // başka bir bigTf hâlâ bekliyor olabilir
+    if (!_smallActive.has(sym)) return;
+    MarketDataStore.unsubscribeKlines(sym, SMALL_TF, _onSmallTFBar);
+    _smallActive.delete(sym);
+    _smallBuf.delete(_bufKey(sym, SMALL_TF));
+    console.log(`[Kom1Scanner] 5dk onay aboneliği kapatıldı: ${sym}`);
+  }
+
+  /** Küçük TF onay kuralını kontrol eder — sağlanırsa bu coin için pending
+   *  olan TÜM büyük TF girişlerini (1H ve/veya 4H aynı anda bekliyor olabilir)
+   *  onaylayıp _confirmed'e taşır. */
+  function _checkSmallTFConfirmation(sym) {
+    const b = _smallBuf.get(_bufKey(sym, SMALL_TF));
+    if (!b || b.closes.length < DEMA_PERIOD * 2) return;
+
+    const ha   = IndicatorEngine.calcHeikinAshi(b.opens, b.highs, b.lows, b.closes);
+    const dema = IndicatorEngine.calcDEMA(b.closes, DEMA_PERIOD);
+    if (!ha || dema === null) return;
+    if (!(ha.haClose >= ha.haOpen && ha.haClose > dema)) return; // onay koşulu sağlanmadı
+
+    let confirmedAny = false;
+    for (const [key, entry] of [..._pending.entries()]) {
+      if (entry.symbol !== sym) continue;
+      const barCount = _barCount.get(_bufKey(entry.symbol, entry.bigTf)) || 0;
+      if (barCount > entry.expiresAtBarCount) continue; // pencere zaten kapanmış (sweep henüz uğramamış olabilir)
+
+      _pending.delete(key);
+      const confirmed = {
+        ...entry,
+        haOpen: ha.haOpen, haClose: ha.haClose, dema9: dema,
+        confirmedAt: Date.now(),
+      };
+      _confirmed.unshift(confirmed);
+      if (_confirmed.length > CONFIRMED_CAP) _confirmed.length = CONFIRMED_CAP;
+      confirmedAny = true;
+      console.log(`[Kom1Scanner] ✅ LONG SİNYALİ KESİNLEŞTİ: ${sym} (büyük TF: ${entry.bigTf}, RC_mid=${entry.rcMid.toFixed(4)}, HA close=${ha.haClose.toFixed(4)} > DEMA9=${dema.toFixed(4)})`);
+    }
+    if (confirmedAny) _releaseSmallTFSubscription(sym);
+  }
+
+  function _onSmallTFBar(bar) {
+    if (!bar.isFinal || bar.interval !== SMALL_TF) return;
+    _pushSmallBar(bar.symbol, bar.open, bar.high, bar.low, bar.close);
+    _checkSmallTFConfirmation(bar.symbol);
   }
 
   // ── Görev 5 mimari kuralı: kendi WS'imiz yok — MarketDataStore'un
@@ -208,10 +329,16 @@ const Kom1Scanner = (() => {
     _stopped = true;
     _started = false;
     _unsubscribeAll();
+    // Açık kalmış tüm hedefli 5dk aboneliklerini de kapat (sızıntı olmasın).
+    [..._smallActive].forEach(sym => {
+      MarketDataStore.unsubscribeKlines(sym, SMALL_TF, _onSmallTFBar);
+    });
+    _smallActive.clear();
+    _smallBuf.clear();
     console.log('[Kom1Scanner] Durduruldu.');
   }
 
-  return { start, stop, getPendingSignals };
+  return { start, stop, getPendingSignals, getConfirmedSignals };
 })();
 
 window.Kom1Scanner = Kom1Scanner;
