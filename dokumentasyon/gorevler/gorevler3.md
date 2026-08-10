@@ -233,6 +233,44 @@ Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlam
 
 ## [ ] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — henüz başlanmadı)
 
+### Sade dille — bu görev ne, neden hemen yapılmadı
+
+**Sorun:** Şu an hem Kom1 sinyal motoru hem de fiyat alarmı sistemi
+tamamen **tarayıcı içinde** (client-side) çalışıyor. Yani:
+- Pintrade sekmesini açık tutman gerekiyor.
+- Bilgisayarı kapatır/tarayıcıyı kapatırsan, o an hiçbir sinyal taranmıyor,
+  hiçbir alarm kontrol edilmiyor.
+- Kullanıcı "tarayıcı kapalıyken de alarm/sinyal almalıyım" dediği için bu
+  bir sorun.
+
+**Bu görevin çözmesi gereken şey:** Bu izlemeyi **sunucuya** (server.js'in
+çalıştığı Render sunucusu) taşımak — yani sunucu 7/24 kendi başına
+fiyatları izleyip, Kom1 sinyali oluştuğunda veya bir alarm tetiklendiğinde,
+kullanıcı tarayıcıyı hiç açmasa bile bunu fark etsin ve **Telegram'a mesaj
+göndersin**.
+
+**Neden hemen yapılmadı, sadece kuyruğa eklendi:** Bu, gorevler2.md Görev
+11'de yapılan işlerden çok daha büyük bir mimari değişiklik — şunları
+gerektiriyor:
+1. Sunucuda sürekli çalışan yeni bir fiyat/sinyal izleme döngüsü kurmak
+   (mevcut arka plan toplayıcılarıyla aynı düzende, Binance rate-limit
+   bütçesini paylaşarak).
+2. Alarmları şu anki gibi tarayıcının localStorage'ında değil, MongoDB'de
+   saklamak (sunucu okuyabilsin diye).
+3. Kom1Scanner'ın (şu an tamamen tarayıcıda çalışan kod) bir kopyasını ya
+   da eşdeğerini sunucuya taşımak — dikkatli yapılması gereken, riskli bir
+   refactor.
+4. Kullanıcının oluşturacağı bir Telegram botunun token'ını sunucuya
+   (.env, gizli) tanımlamak, sunucunun tetiklenen her şeyde Telegram'a
+   mesaj atmasını sağlamak.
+
+Kısacası: "tarayıcı kapalıyken de çalışsın" isteği, aslında çok daha büyük
+bir işe işaret ediyor — bu yüzden hemen koda girişmek yerine görev olarak
+kaydedilip, kapsamı kullanıcıyla birlikte netleştirildikten sonra
+başlanması planlandı.
+
+---
+
 **Bağlam:** Kullanıcı, Kom1 sinyallerinin VE `gorevler2.md` Görev 11.5/11.6'da
 kurulan çizim tabanlı fiyat alarmlarının **tarayıcı kapalıyken de** çalışmasını
 istiyor — şu an ikisi de tamamen client-side (tarayıcı sekmesi açıkken
