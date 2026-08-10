@@ -140,9 +140,9 @@ Görev 3 bittikten sonra **DURACAKSIN**. Görev 4, sinyali gerçekten Watchlist'
 
 ---
 
-## [ ] ⏸ DUR — kullanıcı onayı bekle (Görev 5'ten önce)
+## [x] ⏸ DUR — kullanıcı onayı bekle (Görev 5'ten önce)
 
-Görev 4 bittikten sonra **DURACAKSIN**. Sistem artık gerçek sinyal üretiyor — bir süre canlıda gözlemleyip (yanlış pozitif var mı, ban riski var mı) kullanıcı memnun kalmadan sonraki adıma geçme.
+**Geçildi (2026-08-10):** Kullanıcı "Push doğrulandıktan sonra Görev 5'e geçelim" dedi — açık onay.
 
 ---
 
@@ -150,9 +150,57 @@ Görev 4 bittikten sonra **DURACAKSIN**. Sistem artık gerçek sinyal üretiyor 
 
 **Bağımlılık:** Görev 4'ten sonra, kullanıcı onayıyla.
 
-Kapsamı kullanıcıyla o an netleştirilecek — muhtemelen: birkaç gün canlı gözlem sonrası bulunan sorunlar (yanlış sinyaller, performans, ban riski) varsa düzeltme. Bu görev şablonu şimdiden detaylandırılmadı çünkü Görev 4 canlıya çıkmadan neyin düzeltileceği bilinemez.
+### ⚠️ Kritik bulgu (2026-08-10, Görev 4 production doğrulaması sırasında)
 
-**Rapor:** `2026-XX-XX-gorev5-ince-ayar.md`
+Push sonrası production'da (`pintrade-uwg9.onrender.com`) doğrulama yapılırken,
+**Görev 4'ten bağımsız, önceden var olan bir `server.js` bug'ı** bulundu:
+Binance proxy'si (`proxyRequest()`) upstream'in gerçek HTTP status kodunu
+(418/429 ban dahil) hiç forward etmiyordu, her zaman 200 dönüyordu — bu yüzden
+`fetchKlines()`'ın ban kontrolü (`res.status===429||418`) hiç tetiklenmiyor,
+ban yanıtı normal veri sanılıp `kl.map is not a function` ile çöküyordu.
+**Düzeltildi ve push edildi** (`server.js`, tek satır: `res.statusCode = proxyRes.statusCode`),
+production'da doğrulandı — artık `BotEngine`/`Kom1Scanner`/`M1Hammer` ban
+sinyalini doğru algılayıp çökmeden `stop()` oluyor. Detay:
+`dokumentasyon/raporlar/2026-08-10-binance-proxy-status-forward-fix.md`.
+
+**Ama bu düzeltme banı kaldırmaz** — Binance'in kendi IP banı (`74.220.51.139`,
+~2026-08-11 07:13 UTC'ye kadar) Binance tarafında, koddan bağımsız. Ban
+geçene kadar Kom1Scanner gerçek backfill yapamıyor, dolayısıyla **gerçek
+sinyal üretimi ban sonrasına kalıyor** — Görev 5'in fiili gözlem süreci de
+bu yüzden henüz başlamadı.
+
+### Kapsam (kullanıcıyla 2026-08-10'da netleşti)
+
+- **Gözlem süresi:** Sabit bir gün sayısı değil — **kesinleşen ilk 10 sinyal**
+  toplanana kadar gözlemlenecek (ban geçtikten sonra, ~2026-08-11 07:13 UTC'den
+  itibaren).
+- **"İyi çalışıyor" metriği:**
+  1. **Manuel gözlem** — otomatik istatistiksel eşik yok, gelen sinyaller tek
+     tek elle "mantıklı mı" diye değerlendirilecek.
+  2. **Ban/hata sıklığı (teknik sağlık)** — sinyal kalitesinden önce, sistemin
+     kendisinin ban/çökme olmadan güvenilir çalıştığı doğrulanacak (artık
+     yukarıdaki proxy fix'i sayesinde ban durumunda da güvenli davranıyor).
+- **İnce ayar kapsamı:** **Hiçbir parametre bu aşamada oynanmayacak** — WT
+  eşiği, RC uzunluğu, TOLERANCE_BARS hepsi sabit kalacak (gorevler3.md'nin
+  başındaki karara sadık kalındı). Sorun çıkarsa doğrudan koda müdahale
+  edilir, bir "ayar paneli" bu turda kurulmaz.
+
+### Yapılacak
+
+- Ban geçtikten sonra (~2026-08-11 07:13 UTC), production'da Kom1Scanner'ın
+  gerçekten backfill tamamlayıp sinyal üretmeye başladığını doğrula.
+- İlk 10 kesinleşen sinyali (`Kom1Scanner.getConfirmedSignals()` veya alarm
+  sekmesi üzerinden) topla, her birini manuel değerlendir.
+- Bu süre boyunca ban/hata sıklığını izle (konsol/production logları).
+- 10 sinyal toplanınca veya kritik bir sorun çıkarsa kullanıcıya rapor et,
+  Görev 6'dan önceki DUR kapısına gelindiğinde onay bekle.
+
+### Doğrulama
+
+- 10 sinyal toplandı mı, hepsi manuel değerlendirildi mi?
+- Gözlem süresince ban/çökme yaşandı mı (yaşandıysa kaç kez, nasıl ele alındı)?
+
+**Rapor:** `2026-XX-XX-gorev5-canli-gozlem.md`
 
 ---
 

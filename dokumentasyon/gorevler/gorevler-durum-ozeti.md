@@ -65,13 +65,23 @@
 | 1 | Paylaşılan indikatör motoru (DEMA9, HA, RC) | ✅ |
 | 2 | Büyük TF sinyali (1H/4H: RC + WaveTrend) | ✅ |
 | 3 | 5 dakikalık onay penceresi (HA + DEMA9) | ✅ |
-| 4 | Watchlist Kom1 grubuna yazma + alarm bildirimi | ✅ (2026-08-10) — **`Kom1Scanner.start()` artık gerçekten çağrılıyor, sistem canlı sinyal üretiyor** |
-| — | ⏸ DUR (Görev 5'ten önce) | **ŞU AN BURADAYIZ** — henüz geçilmedi |
-| 5 | Canlı gözlem + ince ayar | Kapsamı henüz netleşmedi |
+| 4 | Watchlist Kom1 grubuna yazma + alarm bildirimi | ✅ (2026-08-10), production'a push edildi ve doğrulandı |
+| — | ⏸ DUR (Görev 5'ten önce) | ✅ Geçildi (2026-08-10, kullanıcı onayı) |
+| 5 | Canlı gözlem + ince ayar | Kapsamı netleşti (ilk 10 sinyal, manuel değerlendirme + ban/hata sıklığı, parametreler sabit) — **fiili gözlem, Binance IP banı geçene kadar (~2026-08-11 07:13 UTC) başlayamıyor**, bkz. aşağıdaki kritik bulgu |
 | — | ⏸ DUR (Görev 6'dan önce) | Geçilmedi |
 | 6 | Tüm piyasaya genişletme (dinamik ATR taraması) | En riskli adım, henüz başlanmadı |
 
-**Henüz push edilmedi** — Görev 4 kod tarafı bitti ve tarayıcıda mock veriyle doğrulandı, ama `_V2.4\Pintrade`'e senkronize edilip production'a deploy edilmedi (kullanıcı "birkaç adım daha gidelim, sonra push ederiz" dedi).
+**Push edildi ve doğrulandı (2026-08-10).** İki ayrı push yapıldı:
+1. Görev 4'ün kendi kodu (Kom1Scanner canlıya alma, Watchlist/alarm entegrasyonu).
+2. Doğrulama sırasında bulunan, Görev 4'ten bağımsız kritik bir `server.js`
+   bug'ının düzeltmesi: Binance proxy'si upstream ban status kodunu (418/429)
+   hiç forward etmiyordu, `kl.map is not a function` çökmesine yol açıyordu.
+   Düzeltildi, production'da doğrulandı (artık ban durumunda çökme yok, temiz
+   `stop()`). Detay: `2026-08-10-binance-proxy-status-forward-fix.md`.
+
+**Şu an aktif durum:** Binance'in kendi IP banı (~2026-08-11 07:13 UTC'ye kadar,
+koddan bağımsız) yüzünden Kom1Scanner henüz gerçek backfill yapamıyor — gerçek
+sinyal üretimi ban geçtikten sonra başlayacak.
 
 **Bu kuyrukta bilinçli olarak ERTELENEN/YAPILMAYAN kararlar** (detaylı tablo `gorevler3.md`'nin başında):
 - Kom2 — bilinen zayıf/doğrulanmamış kural, bu kuyrukta yok
