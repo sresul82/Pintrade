@@ -87,6 +87,19 @@ class ChartPane {
     this.timezone  = s.timezone  ?? 'UTC';
     this.precision = s.precision ?? 'Default'; // fiyat ekseni hassasiyeti
 
+    // gorevler2.md Görev 11 (2026-08-10) — bu grup applySettings()'te canlı
+    // uygulanıyordu ama constructor'da hiç okunmuyor, getState()'te hiç
+    // kaydedilmiyordu — kullanıcı değiştirince anında çalışıyor gibi
+    // görünüyordu ama sayfa yenilenince sessizce sıfırlanıyordu.
+    this.hlValue = s.hlValue ?? true;    this.hlLine = s.hlLine ?? true;
+    this.baValue = s.baValue ?? true;    this.baLine = s.baLine ?? true;
+    this.pdValue = s.pdValue ?? false;   this.pdLine = s.pdLine ?? true;
+    this.symName = s.symName ?? true;    this.symValue = s.symValue ?? true;    this.symLine = s.symLine ?? true;
+    this.watermarkMode = s.watermarkMode ?? 'Ticker';
+    // Varsayılanlar chart'ın kendi hardcoded scaleMargins'iyle (.05/.15) eşleşiyor
+    // — böylece ayarı hiç değiştirmemiş kullanıcıların görünümü değişmez.
+    this.marginTop = s.marginTop ?? 5;   this.marginBottom = s.marginBottom ?? 15;
+
     // Dummy tracking variables for new features
     this._lastPrice = null;
     this._priceLines = {}; // Store custom lines 
@@ -129,10 +142,11 @@ class ChartPane {
     this.cvs = document.createElement('div');
     this.cvs.className = 'pane-cvs';
 
-    // Watermark
+    // Watermark — kayıtlı watermarkMode'a göre (bkz. constructor'daki Görev 11 notu,
+    // eskiden burası hep this.symbol'e sabitti, restore edilen mod hiç okunmuyordu)
     this.wm = document.createElement('div');
     this.wm.className = 'pane-wm';
-    this.wm.textContent = this.symbol;
+    this.wm.textContent = this.watermarkMode === 'Interval' ? this.tf : this.symbol;
     this.cvs.appendChild(this.wm);
 
     // Gear button (axis intersection)
@@ -259,14 +273,14 @@ class ChartPane {
       },
       rightPriceScale: {
         borderColor: this.scaleLinesColor,
-        scaleMargins: { top: .05, bottom: .15 },
+        scaleMargins: { top: this.marginTop / 100, bottom: this.marginBottom / 100 },
         visible: this.priceSide === 'right',
         mode: scaleModeMap[this.scaleMode] ?? 0,
         invertScale: this.invertScale,
       },
       leftPriceScale: {
         borderColor: this.scaleLinesColor,
-        scaleMargins: { top: .05, bottom: .15 },
+        scaleMargins: { top: this.marginTop / 100, bottom: this.marginBottom / 100 },
         visible: this.priceSide === 'left',
       },
       timeScale: {
@@ -450,6 +464,13 @@ class ChartPane {
   _buildSeries() {
     if (this.series)    try { this.chart.removeSeries(this.series);    } catch(_) {}
     if (this.volSeries) try { this.chart.removeSeries(this.volSeries); } catch(_) {}
+    // Seri kaldırılınca ona bağlı price-line referansı da geçersiz olur —
+    // sıfırlanmazsa _updateLivePriceLine() eski (artık var olmayan) seriye
+    // applyOptions() çağırır, bu sessizce başarısız olur ve fiyat çizgisi
+    // (mumdan fiyat cetveline uzanan noktalı çizgi) bir daha hiç görünmez.
+    // 2026-08-10, Heikin Ashi açılışında keşfedildi ama her seri yeniden
+    // kurulumunu (chart tipi/stil değişimi) etkileyen genel bir bug'dı.
+    this._livePriceLine = null;
     this.series = this.volSeries = null;
 
     const pScaleId = this.priceSide === 'left' ? 'left' : 'right';
@@ -504,7 +525,13 @@ class ChartPane {
 
     if (this.series) {
       this.series.applyOptions({
-        lastValueVisible: false,
+        // Heikin Ashi'de TradingView'daki gibi İKİ fiyat gösterilir: serinin
+        // kendi last-value etiketi (HA kapanışı, mumun kendi rengiyle) +
+        // ayrıca _livePriceLine (ham/gerçek piyasa fiyatı, kesikli çizgi +
+        // geri sayım). Normal mumda HA kapanışı=ham kapanış olduğu için
+        // ikinci etiket gereksiz/yanıltıcı, bu yüzden sadece HA modunda
+        // açılıyor (2026-08-10, kullanıcı isteği — TradingView karşılaştırması).
+        lastValueVisible: this.useHeikinAshi === true,
         priceLineVisible: this.symLine !== false,
         title: '',
       });
@@ -875,6 +902,17 @@ class ChartPane {
     }
   }
 
+  // Görünen zaman aralığındaki bar'ları döner (High/Low'un viewport'a göre
+  // dinamik hesaplanması için, bkz. _updateVisualLines). Aralık alınamazsa
+  // (chart henüz layout almamışsa) TÜM veriye düşer — hiç çizgi göstermemekten iyi.
+  _visibleCandles(data) {
+    if (!data || !data.length) return [];
+    let range = null;
+    try { range = this.chart.timeScale().getVisibleRange(); } catch (_) {}
+    if (!range) return data;
+    return data.filter(d => d.time >= range.from && d.time <= range.to);
+  }
+
   // Visual Chart Elements (Issues 4,5,6)
   _updateVisualLines(data) {
     if (!this.series) return;
@@ -896,13 +934,23 @@ class ChartPane {
       addLine('prev', this._lastPrice * 0.995, 'Prev Close', showLine ? '#787b86' : 'transparent', LightweightCharts.LineStyle.Dotted, showVal);
     } else removeLine('prev');
 
+    // gorevler2.md Görev 11.1 (2026-08-10) — iki hata düzeltildi:
+    // 1) `data` boşken Math.max(...[])=-Infinity/Math.min(...[])=Infinity
+    //    hesaplanıp geçersiz bir çizgi oluşturuluyordu (hata vermeden, sessizce
+    //    hiç görünmüyordu).
+    // 2) High/Low artık TÜM yüklü geçmişin sabit min/max'ı değil, TradingView'daki
+    //    gibi o an GÖRÜNEN aralığın (viewport) bar'larından hesaplanıyor — bkz.
+    //    _onRangeChange()'deki ek çağrı (scroll/zoom'da yeniden hesaplanır).
     if (this.lineHighLow) {
-      const showLine = this.hlLine !== false;
-      const showVal  = this.hlValue !== false;
-      const high = Math.max(...data.map(d => d.high ?? d.close));
-      const low  = Math.min(...data.map(d => d.low ?? d.close));
-      addLine('high', high, 'High', showLine ? '#f23645' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
-      addLine('low', low, 'Low', showLine ? '#2962ff' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
+      const visible = this._visibleCandles(data);
+      if (visible.length) {
+        const showLine = this.hlLine !== false;
+        const showVal  = this.hlValue !== false;
+        const high = Math.max(...visible.map(d => d.high ?? d.close));
+        const low  = Math.min(...visible.map(d => d.low ?? d.close));
+        addLine('high', high, 'High', showLine ? '#f23645' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
+        addLine('low', low, 'Low', showLine ? '#2962ff' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
+      } else { removeLine('high'); removeLine('low'); }
     } else { removeLine('high'); removeLine('low'); }
     
     if (this.lineBidAsk && this._lastPrice) {
@@ -958,9 +1006,18 @@ class ChartPane {
         const pos = this.chart.timeScale().scrollPosition();
         this.rtBtn.classList.toggle('visible', pos < -5);
         if (this.series) {
-          this.series.applyOptions({ priceLineVisible: false, lastValueVisible: false });
+          // Her scroll/zoom'da _buildSeries()'teki ile TUTARSIZ şekilde ikisini
+          // de sabit false yapıyordu — HA modunda kapanış etiketini (lastValueVisible)
+          // ilk kaydırmada geri söndürüyordu. _buildSeries()/applySettings()'teki
+          // aynı mantıkla hizalandı (2026-08-10).
+          this.series.applyOptions({
+            priceLineVisible: this.symLine !== false,
+            lastValueVisible: this.useHeikinAshi === true,
+          });
         }
         this._updateLivePriceLine();
+        // gorevler2.md Görev 11.1 — High/Low viewport'a göre dinamik, scroll/zoom'da yeniden hesapla.
+        if (this.lineHighLow) this._updateVisualLines(this.candlesData || []);
       } catch(_) {}
       EventBus.emit('range:change', { sourceIdx: this.idx, range });
       this._positionCountdown();
@@ -1037,13 +1094,14 @@ class ChartPane {
     this.symbol = symbol;
     if (exchange) this.exchange = exchange;
     this.hdr.querySelector('.pane-sym').textContent = symbol;
-    this.wm.textContent = symbol;
+    if (this.watermarkMode !== 'Interval') this.wm.textContent = symbol;
     this.loaded = false; this._loadData(); this.loaded = true;
   }
 
   setTF(tf) {
     if (this.tf === tf) return; // Çift tetiklenme koruması
     this.tf = tf;
+    if (this.watermarkMode === 'Interval') this.wm.textContent = tf;
     this.loaded = false; this._loadData(); this.loaded = true;
 
     // Restart countdown with new TF interval
@@ -1248,7 +1306,7 @@ class ChartPane {
        if (this.series) {
          this.series.applyOptions({
            title: '',
-           lastValueVisible: false,
+           lastValueVisible: this.useHeikinAshi === true, // bkz. _buildSeries() notu — HA kapanış etiketini burada da sıfırlama
            priceLineVisible: this.symLine !== false,
          });
        }
@@ -1303,14 +1361,17 @@ class ChartPane {
     const topPct    = s.marginTop    != null ? s.marginTop    / 100 : null;
     const bottomPct = s.marginBottom != null ? s.marginBottom / 100 : null;
     if (topPct !== null || bottomPct !== null) {
+      if (s.marginTop    != null) this.marginTop    = s.marginTop;
+      if (s.marginBottom != null) this.marginBottom = s.marginBottom;
       const scaleId = this.priceSide === 'left' ? 'left' : 'right';
       this.chart.priceScale(scaleId).applyOptions({
-        scaleMargins: { top: topPct ?? 0.05, bottom: bottomPct ?? 0.15 }
+        scaleMargins: { top: topPct ?? this.marginTop / 100, bottom: bottomPct ?? this.marginBottom / 100 }
       });
     }
 
     // ── WATERMARK (Canvas tab) ────────────────────────────────
     if (s.watermarkMode != null) {
+      this.watermarkMode = s.watermarkMode;
       const wmText = s.watermarkMode === 'Ticker'      ? this.symbol
                    : s.watermarkMode === 'Interval'    ? this.tf
                    : s.watermarkMode === 'Description' ? this.symbol
@@ -1532,6 +1593,15 @@ class ChartPane {
       priceLine: this.priceLine, linePrevDayClose: this.linePrevDayClose,
       linePrePost: this.linePrePost, lineHighLow: this.lineHighLow,
       lineBidAsk: this.lineBidAsk, plusButton: this.plusButton,
+      // gorevler2.md Görev 11 (2026-08-10) — eskiden canlı uygulanıp hiç
+      // kaydedilmeyen ayarlar (bkz. constructor'daki not).
+      timezone: this.timezone,
+      hlValue: this.hlValue, hlLine: this.hlLine,
+      baValue: this.baValue, baLine: this.baLine,
+      pdValue: this.pdValue, pdLine: this.pdLine,
+      symName: this.symName, symValue: this.symValue, symLine: this.symLine,
+      watermarkMode: this.watermarkMode,
+      marginTop: this.marginTop, marginBottom: this.marginBottom,
     };
   }
 

@@ -27,7 +27,7 @@
 
 ## 2. `gorevler2.md` — İkinci kuyruk (2026-08-08)
 
-**Durum: Görev 1-4, 7, 8, 10 tamamlandı. Görev 5, 6 ertelendi. Görev 9 ertelendi (iptal değil).**
+**Durum: Görev 1-4, 7, 8, 9, 10 tamamlandı. Görev 5, 6 ertelendi. Görev 11 sadece belgelendi (henüz başlanmadı).**
 
 | # | Görev | Durum |
 |---|---|---|
@@ -39,20 +39,21 @@
 | 6 | Alarm'a "önerilen giriş fiyatı" + geri ölçüm kaydı | ⏸ **Yapılmadı, bekliyor** — Kom1 artık canlı sinyal ürettiği için (bkz. gorevler3.md Görev 4) bu görevin önkoşulu artık var, istenirse başlanabilir |
 | 7 | Watchlist SPOT gerçek işlevi (sadece liste) | ✅ |
 | 8 | Delist/yeni liste/en yükselen uyarısı | ✅ |
-| 9 | Güvenlik açıkları (`express.static` kapsamı, syncKey rate-limit) | ⏸ **Ertelendi** (kullanıcı: "önce sitenin doğru çalışması") — hâlâ açık, düzeltilmedi |
+| 9 | Güvenlik açıkları (`express.static` kapsamı, syncKey rate-limit) | ✅ (2026-08-10), production'da doğrulandı |
 | 10 | Doğrulanmış ölü kod / OI hesap hatası | ✅ |
+| 11 | Chart Settings denetimi (High/Low bug, ölü `settings:apply` dinleyicisi, modalın ~%60-65'i kozmetik) | 📋 **Sadece belgelendi** (2026-08-10) — henüz kod değişikliği yok, kapsam netleşince "Görev 11'e geç" onayı gerekir |
 
 **Bu kuyruktan kalan, henüz görev olarak açılmamış notlar ("izleme listesi"):**
 - `funding:loaded` event'i tüm Coin Detail panelini gereksiz yeniden yüklüyor (performans borcu)
 - Fib Extension/Channel/Time Zone araçları merkezi `_fibAxis` mimarisini kullanmıyor
-- `drawing:settings:saved` debounce yok
+- ~~`drawing:settings:saved` debounce yok~~ — **✅ Düzeltildi (2026-08-10)**, production'da doğrulandı: redraw anlık, kayıt 300ms debounce'lu.
 - Sütun menüsü "1D Open" işlevsiz (`dayOpen` veri kaynağı yok)
 - `MiniFloatingWindow` OI Değişimi popout'u hâlâ boş
 - Grafik altı "No Preview" filtre işlevi kısmen dolduruldu (Görev 8), tam kapsam kontrol edilmedi
-- Grafik üzerinde indikatör motoru görselleştirmesi yok (RSI/DEMA9/HA/WT/RC sadece scanner'larda gömülü matematik — artık `indicator-engine.js` var ama chart'a hiç çizilmiyor)
-- Grafik ayarları saat dilimi değişikliğinin uygulanıp uygulanmadığından şüpheleniliyor (doğrulanmadı)
+- Grafik üzerinde indikatör motoru görselleştirmesi yok (RSI/DEMA9/WT/RC — **Heikin Ashi hariç, o artık chart'a bağlı**, bkz. aşağıda)
+- ~~Grafik ayarları saat dilimi değişikliğinin uygulanıp uygulanmadığından şüpheleniliyor~~ — **kesinleşti, Görev 11.2'ye taşındı** (iki çakışan `settings:apply` dinleyicisi, ikincisi ölü kod)
 - İlk REST yüklemesi başarısız olursa screener toparlanmıyor (doğrulanmadı)
-- Heikin Ashi ve 6 diğer mum stili menüde duruyor ama hesaplanmıyor ("henüz desteklenmiyor" toast'ı) — **not:** artık `IndicatorEngine.calcHeikinAshi` var (gorevler3.md Görev 1) ama bu, chart'ın kendi mum stili render'ına hâlâ bağlanmadı, ayrı iş.
+- ~~Heikin Ashi ve 6 diğer mum stili menüde duruyor ama hesaplanmıyor~~ — **Heikin Ashi ✅ Düzeltildi (2026-08-10)**, production'da doğrulandı (`IndicatorEngine.calcHeikinAshi` artık `chart-pane.js`'e bağlı, canlı veride kayan hesap doğru çalışıyor). Kalan 6 stil (hollow, volume, line_markers, hlc_area, baseline, volume_footprint, session_volume) hâlâ "henüz desteklenmiyor".
 
 ---
 

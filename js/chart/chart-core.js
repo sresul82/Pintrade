@@ -110,7 +110,12 @@ window.initChartCore = function() {
   });
 
   // ── Bridge: timezone change from chart settings modal ─────────
-  EventBus.on('settings:apply', ({ paneIdx, settings }) => {
+  // gorevler2.md Görev 11.2 (2026-08-10) — event her zaman {pane, state} ile
+  // yayınlanıyor (chart-settings.js), bu dinleyici eskiden {paneIdx, settings}
+  // bekliyordu — `settings` hep undefined olduğu için tamamen ölüydü, saat
+  // dilimi hiç sidebar'daki global saate köprülenmiyordu. Düzeltildi.
+  EventBus.on('settings:apply', ({ state }) => {
+    const settings = state;
     if (settings && settings.timezone) {
       const offsetToTz = {
          'UTC': 'Etc/UTC',

@@ -346,6 +346,58 @@ Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukt
 
 ---
 
+## [x] Görev 11 — Chart Settings denetiminde bulunan hatalar (2026-08-10 taramasında doğrulandı)
+
+**Durum:** 11.1, 11.2, 11.4 tamamlandı (2026-08-10) — kullanıcı "koda işlensin ve deploy edilsin" dedi. **11.3 hâlâ açık** (büyük kapsam kararı, kullanıcı onayı gerekiyor, aşağıda ayrıntılı).
+
+**Bağlam:** Kullanıcı Heikin Ashi'yi TradingView ile karşılaştırırken `chart-settings.js`'deki "High and low" fiyat çizgisinin çalışmadığını fark etti. Kök nedeni ararken tüm Chart Settings modalının (`js/chart/ui/chart-settings.js`, 731 satır) sistematik bir denetimi yapıldı.
+
+### [x] 11.1 — "High and low" fiyat çizgisi (2 ayrı hata) — Tamamlandı (2026-08-10)
+
+`js/chart/chart-pane.js` `_updateVisualLines()`:
+1. `this.candlesData` boşken (veri henüz yüklenmemiş/ban gibi bir sebeple boşsa) `Math.max(...[].map(...))` = `-Infinity` hesaplanıyor, `createPriceLine({price:-Infinity})` hata vermeden görünmez bir çizgi oluşturuyordu.
+2. High/Low, yüklenmiş TÜM geçmişin **statik** min/max'ıydı — TradingView'da ise görünen aralığa göre **dinamik** (scroll/zoom'da yeniden) hesaplanır.
+
+**Düzeltme:** Yeni `_visibleCandles(data)` yardımcı fonksiyonu — `chart.timeScale().getVisibleRange()` ile filtreleyip sadece görünen bar'lardan high/low hesaplıyor, boş sonuç varsa çizgiyi kaldırıyor. `_onRangeChange()`'e `if (this.lineHighLow) this._updateVisualLines(...)` eklendi — scroll/zoom'da yeniden hesaplanıyor. Test: mock range ile dar/geniş aralıkta doğru high/low doğrulandı (`102/98` vs `102/26`), gerçek sayfada zoom sonrası ekran görüntüsüyle de doğrulandı.
+
+### [x] 11.2 — `settings:apply` event'i için 2 ayrı, çakışan dinleyici (`chart-core.js`) — Tamamlandı (2026-08-10)
+
+- Satır ~16: `EventBus.on('settings:apply', ({ state }) => {...})` — doğru, tüm pane'lere `applySettings(state)` uyguluyor.
+- Satır ~113: `EventBus.on('settings:apply', ({ paneIdx, settings }) => {...})` — saat dilimi köprüleme kodu (Chart Settings'teki timezone → sidebar'daki global saat göstergesi/`rsb-clock-tz`). Event her zaman `{pane, state}` ile emit ediliyor, yani bu ikinci dinleyicideki `settings` HER ZAMAN `undefined` idi — tamamen ölü kod.
+
+**Düzeltme:** Dinleyici `{ state }` okuyacak şekilde düzeltildi. Test: `EventBus.emit('settings:apply', {pane, state:{timezone:'UTC+9 Tokyo'}})` sonrası `#rsb-clock-tz` metni `UTC` → `UTC+9` olarak doğrulandı.
+
+### [x] 11.4 — Değiştirilip kaydedilmeyen ayarlar (kullanıcı sorusu üzerine bulundu) — Tamamlandı (2026-08-10)
+
+`applySettings()`'te canlı uygulanan ama `getState()`'te hiç yer almayan (sayfa yenilenince sessizce sıfırlanan) alanlar: `timezone`, `hlValue`/`hlLine`/`baValue`/`baLine`/`pdValue`/`pdLine`, `symName`/`symValue`/`symLine`, `watermarkMode`, `marginTop`/`marginBottom`. Bazıları (`watermarkMode`, `marginTop/Bottom`) constructor'da hiç okunmuyordu bile — sadece `applySettings()`'in kendi parametresinden anlık kullanılıp atılıyordu.
+
+**Düzeltme:** Constructor'a hepsi için `s.X ?? default` init eklendi (varsayılanlar mevcut sabit davranışla birebir eşleşecek şekilde seçildi — görsel değişiklik yok), `getState()`'e eklendi, ayrıca watermark'ın chart ilk kurulumunda/sembol-TF değişiminde de `watermarkMode`'a göre doğru metni göstermesi sağlandı (`_build()`, `setSymbol()`, `setTF()`). Test: `applySettings({...})` sonrası `getState()`'te tüm alanların doğru round-trip ettiği doğrulandı.
+
+**Bonus — ikinci fiyat etiketi (kullanıcı isteği):** Heikin Ashi modunda artık TradingView'daki gibi İKİ fiyat gösteriliyor — serinin kendi last-value etiketi (HA kapanışı, `lastValueVisible: this.useHeikinAshi===true`) + mevcut `_livePriceLine` (ham fiyat, geri sayımlı). Normal mumda ikinci etiket kapalı kalıyor (gereksiz/yanıltıcı olmasın diye). `_onRangeChange()`'in her scroll'da `lastValueVisible`'ı sabit `false` yapan tutarsız kodu da aynı anda düzeltildi (aksi halde HA etiketi ilk kaydırmada sönerdi).
+
+### 11.3 — Chart Settings modalının ~%60-65'i tamamen kozmetik (hiçbir işleve bağlı değil)
+
+Tam denetim (`js/chart/ui/chart-settings.js` her `data-key` × `chart-pane.js applySettings()` çapraz kontrolü):
+
+- **Trading sekmesi** — 18 kontrolün TAMAMI (Buy/sell buttons, one-click trading, brackets, positions, execution marks, vb.) `applySettings`'e hiç bağlı değil. Beklenen: proje gerçek bir order execution terminali değil, bu sekme muhtemelen TradingView'ı görsel olarak taklit etmek için scaffold edilmiş, hiç doldurulmamış.
+- **Alerts sekmesi** — 5 kontrolün tamamı bağlı değil.
+- **Events sekmesi** — 9 kontrolün tamamı bağlı değil.
+- **Status line sekmesi** — 7 kontrolden sadece `showVolume` çalışıyor, diğer 6'sı (statusLogo, statusTitle, statusMarket, statusChartValues, statusBarChange, statusBg) bağlı değil.
+- **Scales and lines sekmesi** — `highLow`/`prevDayClose`/`bidAsk`/`scalesPlacement`/`countdown`/`symName`/`symValue`/`symLine`/`timezone` çalışıyor; ama `hlColor`/`bidColor`/`askColor`/`prevDayColor`/`symbolLabelColor` gibi renk seçicilerin çoğu ve `lockPriceToBar`/`noOverlapLabels` (state'e yazılıyor ama davranışa hiç bağlanmamış — "yarı ölü") dahil ~14 kontrol çalışmıyor.
+- **Canvas sekmesi** — 13 kontrolden 10'u çalışıyor (bgType/bgColor/gridType/crosshairColor/watermarkMode/scaleTextColor/scaleFontSize/scaleLinesColor/marginTop/marginBottom); `watermarkColor`, `navBtnVisibility`, `paneBtnVisibility`, `marginRight` bağlı değil.
+- **Symbol sekmesi** — tek tam çalışan sekme, 9/9 kontrol doğru bağlı.
+
+**Yapılacak (taslak, kullanıcı kararı gerekiyor):** Bu büyük bir kapsam kararı — seçenekler: (a) çalışmayan kontrolleri gerçek işleve bağlamak (özellikle Trading/Alerts/Events için karşılığı olmayan büyük özellik işleri gerektirir, muhtemelen bu projenin kapsamı dışı), (b) çalışmayan sekmeleri/kontrolleri UI'dan tamamen kaldırmak (kullanıcıyı yanıltmasın diye), (c) olduğu gibi bırakmak. Hangisi istenirse ayrı, kullanıcı onaylı bir alt görev.
+
+### Doğrulama
+
+- 11.1/11.2/11.4: kod içi testlerle doğrulandı (yukarıda özetlendi), lokal sunucuda konsol hatasız.
+- 11.3: henüz uygulanmadı, kullanıcı hangi seçeneği (a/b/c) istediğini belirtince ayrıca ele alınacak.
+
+**Rapor:** `2026-08-10-gorev11-chart-settings-denetimi.md`
+
+---
+
 ## Kuyrukta olmayan, kullanıcı ayrıca planlayacak (değişmedi)
 
 - **Kom1/Kom2/Kom3 sinyal motoru** — büyük iş, L/S artık hazır olduğu için önü açık, ama ayrı, kendi turunda ele alınacak.
@@ -363,7 +415,7 @@ Bunlar 2026-08-08 taramasında bulundu ama ya çok küçük, ya yukarıdaki gör
 - **`MiniFloatingWindow`'un OI Değişimi popout'u hâlâ boş placeholder** (`2026-08-01-liste-ikonu-ls-oi-popout.md`) — L/S popout'u Görev 2'de dolduruluyor olacak, OI Değişimi popout'u ayrı, unutulmasın.
 - **Grafik altı bandın "No Preview ▾" liste yer tutucusuna gerçek filtreleme işlevi yok** (`2026-08-01-bant-duzeltmeleri-liste-ikonu.md`) — Görev 8 (delist uyarısı) ile aynı UI alanını paylaşıyor olabilir, Görev 8'e başlarken önce buraya bakılmalı, tekrar iş yapılmasın.
 - **Grafik üstünde indikatör motoru yok** (RSI/DEMA9/Heikin Ashi/WaveTrend/regresyon kanalı sadece `m1hammer-scanner.js` içinde gömülü matematik olarak var, grafik katmanında görselleştirilmiyor). Backtest sisteminden ayrı, büyük bir mimari boşluk — ayrı bir iş olarak kullanıcıya sorulmalı, bu dosyaya görev olarak eklenmedi çünkü kapsamı netleşmemiş.
-- **Grafik ayarları penceresindeki saat dilimi değişikliğinin uygulanmadığından şüpheleniliyor** (event şekli uyuşmazlığı: `{pane, state}` yayınlanıyor, dinleyici `{paneIdx, settings}` bekliyor gibi görünüyor — kodda yeniden doğrulanmadı, sadece işaret var). Doğrulanıp gerçekten bozuksa Görev 10'a benzer bir "ölü event" maddesi olarak eklenebilir.
+- ~~Grafik ayarları penceresindeki saat dilimi değişikliğinin uygulanmadığından şüpheleniliyor~~ — **2026-08-10'da kesinleşti ve Görev 11.2'ye taşındı** (kod okunarak doğrulandı: ikinci `settings:apply` dinleyicisi gerçekten ölü).
 - **Top trader L/S oranı eksikliği** (`2026-07-31-kod-incelemesi.md`'de "stratejinin en değerli sinyali eksik" diye not düşülmüştü) — **bu artık ÇÖZÜLDÜ**, bu oturumdaki L/S veri katmanı (`js/data/ls-data-store.js`) hem `topLongShortPositionRatio` hem `topLongShortAccountRatio`'yu zaten içeriyor. Eski rapor güncel değil, referans verilirse bu not eklensin.
 - **İlk REST yüklemesi başarısız olursa screener toparlanmıyor** (retry mekanizması yok) — koda bakılarak doğrulanmadı, sadece eski bir gözlem. Gerçekten hâlâ geçerli mi kontrol edilmeli.
 
