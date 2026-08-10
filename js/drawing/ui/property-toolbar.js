@@ -1213,12 +1213,11 @@ window.PropertyToolbar = (() => {
     if (btnAlert) {
       btnAlert.onclick = () => {
         _closeAllMenus();
-        if (!window.AlertStore) return;
-        const exchange = (typeof State !== 'undefined' ? State.get('activeExchange') : null) || 'binance';
-        const created = window.AlertStore.createFromDrawing(_symbol, exchange, _drawing);
-        if (window.Toast) {
-          Toast.show(created ? `Alert created — ${_symbol} @ ${created.price}` : 'Could not create alert from this drawing', created ? 'success' : 'error');
-        }
+        // gorevler2.md Görev 11.6 (2026-08-10) — artık anında oluşturmuyor,
+        // Navbar'daki ⏰ Alert butonuyla AYNI TradingView-tarzı "Create Alert"
+        // modalını açıyor (bkz. app.js _bindAlarmModal), bu çizgi önceden
+        // seçili olarak.
+        if (typeof EventBus !== 'undefined') EventBus.emit('modal:alarm:open', { drawing: _drawing });
       };
     }
 

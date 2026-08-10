@@ -348,7 +348,7 @@ Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukt
 
 ## [x] Görev 11 — Chart Settings denetiminde bulunan hatalar (2026-08-10 taramasında doğrulandı)
 
-**Durum:** 11.1, 11.2, 11.4 tamamlandı (2026-08-10) — kullanıcı "koda işlensin ve deploy edilsin" dedi. **11.3 hâlâ açık** (büyük kapsam kararı, kullanıcı onayı gerekiyor, aşağıda ayrıntılı).
+**Durum:** 11.1, 11.2, 11.3(kısmen — Events/Trading/Alerts kullanıcı kararıyla), 11.4, 11.5, 11.5.1, 11.6 tamamlandı (2026-08-10). Sunucu taraflı izleme + Telegram/Email gönderimi `gorevler3.md` Görev 7'ye kuyruğa eklendi (kullanıcı isteğiyle, bu turda uygulanmadı). 11.3'ün geri kalanı (Status line/Scales/Canvas'taki kozmetik kontroller) izleme listesinde.
 
 **Bağlam:** Kullanıcı Heikin Ashi'yi TradingView ile karşılaştırırken `chart-settings.js`'deki "High and low" fiyat çizgisinin çalışmadığını fark etti. Kök nedeni ararken tüm Chart Settings modalının (`js/chart/ui/chart-settings.js`, 731 satır) sistematik bir denetimi yapıldı.
 
@@ -407,10 +407,58 @@ Tam denetim (`js/chart/ui/chart-settings.js` her `data-key` × `chart-pane.js ap
 
 **⚠️ Test sırasında bulunan KRİTİK bug (kendi eklediğim kod, hemen düzeltildi):** Alerts sekmesi senkron kodunu yanlışlıkla `if (pane) {...}` bloğunun DIŞINA yazdım — `setCheck`/`setColor` o bloğa scope'lu olduğu için `ReferenceError` fırlatıp **TÜM Settings modalının** (sadece Alerts değil — Cancel/Ok/X butonları dahil TÜMÜ) sessizce çalışmaz hale gelmesine yol açıyordu. Test sırasında (Cancel butonunun bile modalı kapatmadığını fark ederek) yakalandı ve düzeltildi — bkz. rapor.
 
+### [x] 11.5.1 — Eğik çizgi alarmları canlı takip düzeltmesi (kullanıcı geri bildirimi, 2026-08-10)
+
+11.5'in ilk sürümünde eğik çizgi alarmlarının tetik fiyatı **oluşturma
+anında hesaplanıp sabitleniyordu** — kullanıcı bunun eğik çizgi kullanmanın
+anlamını ortadan kaldırdığını belirtti. Düzeltildi: `_resolveTriggerPrice()`
+artık `sourceDrawingId`'si olan alarmlarda kaynak çizimi HER fiyat
+kontrolünde State'ten taze okuyup yeniden hesaplıyor — TradingView'daki
+gibi çizgiyi (ve kullanıcı sürükleyip düzenlerse yeni hâlini) canlı takip
+ediyor. `chart-pane.js`'teki görsel çizgi de artık her canlı tick'te
+(`_onFeedTick`/`_onLiveCandle`) yeniden çiziliyor.
+
+### [x] 11.6 — TradingView tarzı "Create Alert" modalı (kullanıcı isteği, 2026-08-10)
+
+Kullanıcı TradingView'ın gerçek "Create alert on {symbol}" diyaloğunun
+ekran görüntülerini paylaşıp "buradan faydalı olanları al" dedi.
+
+**Eklenen alanlar** (`js/core/app.js`, `_bindAlarmModal`):
+- **Condition:** Crossing / Crossing Up / Crossing Down (mevcut `condition`
+  alanına birebir eşleniyor).
+- **Trigger:** Once only / Once per bar / Once per bar close / Once per
+  minute — UI'da seçilebilir, kaydediliyor (`triggerMode`), ama şu an
+  SADECE "Once only" fiilen çalışıyor. Diğerleri sunucu taraflı izleme
+  gerektiriyor — kullanıcı onayıyla **Görev 7**'ye (aşağıda, gorevler3.md'de)
+  kuyruğa eklendi, bu turda uygulanmadı.
+- **Expiration:** Open-ended / End of day / 1 week / 1 month — FİİLEN
+  çalışıyor, `checkPrice()` süresi dolan alarmı sessizce pasif işaretliyor.
+- **Message:** özel alarm metni, Toast'ta gösteriliyor.
+- **Notifications:** Toast (fiilen çalışıyor) + **Telegram** (checkbox var,
+  tercih kaydediliyor, ama HENÜZ GÖNDERMİYOR — sunucu taraflı bot
+  entegrasyonu Görev 7'ye bağlı). Email kullanıcı kararıyla bu turda hiç
+  eklenmedi.
+
+**Mimari birleştirme:** Property toolbar'daki zil ikonu artık anında
+alarm oluşturmuyor — Navbar'daki ⏰ Alert butonuyla AYNI bu modalı açıyor
+(`EventBus.emit('modal:alarm:open', { drawing })`), seçili çizgi önceden
+dolu olarak. Manuel (çizim kaynaksız) alarmlarda fiyat input'u; çizim
+kaynaklı alarmlarda salt-okunur "{Araç adı} ~{canlı fiyat}" satırı gösteriliyor.
+
+**Test:** Tüm alanlar (Condition/Trigger/Expiration/Message/Notifications)
+doldurulup "Create"e basılınca `AlertStore`'daki alarm nesnesinde hepsinin
+doğru kaydedildiği doğrulandı (`condition:'above', triggerMode:'once_per_bar',
+expiresAt` set, `message`, `notifyToast:true, notifyTelegram:true`).
+Süresi geçmiş bir alarmın `checkPrice()`'ta sessizce pasif olduğu (`active:false,
+triggered:false`) ayrıca doğrulandı. Property toolbar zil ikonunun artık
+anında oluşturmadığı, aynı modalı açtığı doğrulandı. Ekran görüntüsüyle
+görsel doğrulama yapıldı.
+
 ### Doğrulama
 
-- 11.1/11.2/11.4/11.5: kapsamlı kod içi testlerle doğrulandı (yukarıda özetlendi + rapor), lokal sunucuda konsol hatasız. hline/trendline'dan doğru fiyat hesabı, crossing tetikleme, onlyActiveAlerts filtresi, Chart Settings round-trip, property-toolbar + navbar entegrasyonu ayrı ayrı test edildi.
+- 11.1/11.2/11.4/11.5/11.5.1/11.6: kapsamlı kod içi testlerle doğrulandı (yukarıda özetlendi + rapor), lokal sunucuda konsol hatasız. hline/trendline'dan doğru fiyat hesabı, crossing tetikleme, onlyActiveAlerts filtresi, Chart Settings round-trip, property-toolbar + navbar entegrasyonu, eğik çizgi canlı takibi, yeni modal alanları ayrı ayrı test edildi.
 - 11.3 kalan kısmı (Status line, Scales, Canvas'taki kalan kozmetik kontroller): kullanıcı bu tura dahil etmedi, izleme listesine taşındı.
+- Sunucu taraflı izleme + Telegram/Email gönderimi: kullanıcı isteğiyle `gorevler3.md` Görev 7'ye kuyruğa eklendi, bu turda uygulanmadı.
 
 **Rapor:** `2026-08-10-gorev11-chart-settings-denetimi.md`
 

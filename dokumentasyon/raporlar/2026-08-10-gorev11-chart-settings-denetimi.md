@@ -1,6 +1,18 @@
-# gorevler2.md Görev 11 — Chart Settings Denetimi (11.1, 11.2, 11.3-kısmen, 11.4, 11.5 Tamamlandı)
+# gorevler2.md Görev 11 — Chart Settings Denetimi (11.1, 11.2, 11.3-kısmen, 11.4, 11.5, 11.5.1, 11.6 Tamamlandı)
 
 **Tarih:** 2026-08-10
+
+**Ek (aynı gün, 2 tur sonra):** Kullanıcı TradingView'ın gerçek "Create
+Alert" modalının ekran görüntülerini paylaştı — 11.5'in ilk versiyonundaki
+basit modal yerine, TV'ninkiyle hizalanan Condition/Trigger/Expiration/
+Message/Notifications (Toast+Telegram) alanları eklendi (**11.6**, detay
+aşağıda §11.6). Ayrıca kullanıcı, ilk 11.5 versiyonundaki "eğik çizgi
+alarmı oluşturma anında sabitleniyor" basitleştirmesine haklı olarak itiraz
+etti — düzeltildi, artık TradingView gibi çizgiyi canlı takip ediyor
+(**11.5.1**, detay §11.5.1). Sunucu taraflı izleme (tarayıcı kapalıyken
+Kom1+alarm çalışsın, Telegram gerçekten göndersin) kullanıcı isteğiyle
+`gorevler3.md` Görev 7'ye kuyruğa eklendi, bu turda uygulanmadı — bkz.
+gorevler2.md Görev 11'in "Doğrulama" bölümü ve gorevler3.md.
 
 ## Bağlam
 

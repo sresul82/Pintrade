@@ -949,12 +949,15 @@ const App = {
     });
   },
 
-  // Alarm (⏰) butonu — gorevler2.md Görev 11 (2026-08-10, kullanıcı onaylı
-  // kapsam): artık AlertStore'a (js/screener/alert-store.js) gerçekten
-  // kaydediyor ve fiyat geçişinde gerçekten tetikleniyor. Şu an bir çizgi
-  // (trendline/ray/extended/hline/hray/trendangle/infoline) seçiliyse fiyat
-  // alanı o çizginin o anki fiyatıyla önceden dolduruluyor — property
-  // toolbar'daki zil ikonuyla aynı AlertStore'u paylaşıyor (bkz. property-toolbar.js).
+  // Alarm (⏰) butonu — gorevler2.md Görev 11.6 (2026-08-10). Navbar ⏰ Alert
+  // butonu VE property toolbar'daki zil ikonu (bkz. property-toolbar.js)
+  // AYNI bu modalı açar (EventBus 'modal:alarm:open', opsiyonel {drawing}
+  // payload'ıyla) — TradingView'ın "Create alert on {symbol}" diyaloğuyla
+  // hizalanan Condition/Trigger/Expiration/Message/Notifications bölümleri.
+  // Trigger'daki "Once per bar" vb. ve Telegram bildirimi UI'da SEÇİLEBİLİR
+  // ama henüz FİİLEN çalışmıyor — sunucu taraflı izleme gerektiriyor,
+  // bkz. gorevler3.md Görev 7 (kullanıcı onayıyla kuyruğa eklendi, bu turda
+  // uygulanmadı). Şimdilik hep client-side "once" + Toast çalışıyor.
   _lastSelectedDrawing: null,
 
   _bindAlarmModal() {
@@ -965,35 +968,71 @@ const App = {
       this._lastSelectedDrawing = (d && window.AlertStore?.SUPPORTED_TOOLS.includes(d.tool)) ? { drawing: d, symbol: data.symbol } : null;
     });
 
-    EventBus.on('modal:alarm:open', () => {
+    EventBus.on('modal:alarm:open', (payload) => {
       if (document.getElementById('alarm-modal-backdrop')) return; // zaten açık
 
       const sym = State.get('activeSymbol') || '—';
+      const tf  = window.LayoutManager?.getActivePane?.()?.tf || '';
       const exchange = State.get('activeExchange') || 'binance';
-      const selected = (this._lastSelectedDrawing && this._lastSelectedDrawing.symbol === sym) ? this._lastSelectedDrawing : null;
-      const prefillPrice = selected && window.AlertStore
-        ? window.AlertStore.computeDrawingPrice(selected.drawing)
-        : null;
+      const fromPayload = payload?.drawing && window.AlertStore?.SUPPORTED_TOOLS.includes(payload.drawing.tool) ? payload.drawing : null;
+      const fromTracked  = (this._lastSelectedDrawing && this._lastSelectedDrawing.symbol === sym) ? this._lastSelectedDrawing.drawing : null;
+      const sourceDrawing = fromPayload || fromTracked;
+      const livePrice = sourceDrawing && window.AlertStore ? window.AlertStore.computeDrawingPrice(sourceDrawing) : null;
+      const TOOL_LABELS = { trendline: 'Trend Line', ray: 'Ray', extended: 'Extended Line', hline: 'Horizontal Line', hray: 'Horizontal Ray', trendangle: 'Trend Angle', infoline: 'Info Line' };
 
       const backdrop = document.createElement('div');
       backdrop.id = 'alarm-modal-backdrop';
       backdrop.className = 'modal-backdrop';
       backdrop.innerHTML = `
-        <div class="modal">
+        <div class="modal" style="width:340px;">
           <div class="modal-header">
-            <span>Create Alert — ${sym}</span>
+            <span>Create alert on ${sym}${tf ? ', ' + tf : ''}</span>
             <button id="alarm-modal-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
           </div>
           <div class="modal-body">
-            <label class="form-label">Trigger price</label>
-            <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" value="${prefillPrice != null ? prefillPrice : ''}" style="margin-bottom:10px;">
             <label class="form-label">Condition</label>
-            <select class="form-input" id="alarm-modal-cond">
-              <option value="crossing">Crossing (either direction)</option>
-              <option value="above">Price rises above</option>
-              <option value="below">Price falls below</option>
+            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Price</div>
+            <select class="form-input" id="alarm-modal-cond" style="margin-bottom:8px;">
+              <option value="crossing">Crossing</option>
+              <option value="above">Crossing Up</option>
+              <option value="below">Crossing Down</option>
             </select>
-            ${selected ? `<p style="font-size:10px; color:var(--text-muted); margin-top:10px;">Pre-filled from selected ${selected.drawing.tool} — you can still edit the price.</p>` : ''}
+            ${sourceDrawing ? `
+              <div class="form-input" style="margin-bottom:10px; color:var(--text-secondary); display:flex; justify-content:space-between;">
+                <span>${TOOL_LABELS[sourceDrawing.tool] || sourceDrawing.tool}</span>
+                <span>~${livePrice != null ? livePrice.toFixed ? livePrice.toFixed(4) : livePrice : '—'}</span>
+              </div>
+            ` : `
+              <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" style="margin-bottom:10px;">
+            `}
+
+            <label class="form-label">Trigger</label>
+            <select class="form-input" id="alarm-modal-trigger" style="margin-bottom:2px;">
+              <option value="once">Once only</option>
+              <option value="once_per_bar">Once per bar</option>
+              <option value="once_per_bar_close">Once per bar close</option>
+              <option value="once_per_minute">Once per minute</option>
+            </select>
+            <p style="font-size:10px; color:var(--text-muted); margin:0 0 10px;">Only "Once only" is active for now — the rest need server-side monitoring (queued, see task list).</p>
+
+            <label class="form-label">Expiration</label>
+            <select class="form-input" id="alarm-modal-expiry" style="margin-bottom:10px;">
+              <option value="open">Open-ended</option>
+              <option value="eod">End of day</option>
+              <option value="week">1 week</option>
+              <option value="month">1 month</option>
+            </select>
+
+            <label class="form-label">Message</label>
+            <textarea class="form-input" id="alarm-modal-message" rows="2" style="margin-bottom:10px; resize:vertical;" placeholder="${sym} ${sourceDrawing ? TOOL_LABELS[sourceDrawing.tool] || sourceDrawing.tool : 'price'} crossing"></textarea>
+
+            <label class="form-label">Notifications</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0;">
+              <input type="checkbox" id="alarm-modal-notify-toast" checked> Toast notification
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; color:var(--text-secondary);">
+              <input type="checkbox" id="alarm-modal-notify-telegram"> Telegram <span style="font-size:10px;">(server setup pending — won't send yet)</span>
+            </label>
           </div>
           <div class="modal-footer">
             <button class="btn" id="alarm-modal-cancel">Cancel</button>
@@ -1002,22 +1041,37 @@ const App = {
         </div>`;
       document.body.appendChild(backdrop);
 
-      const priceInput = document.getElementById('alarm-modal-price');
-
       const close = () => backdrop.remove();
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
       document.getElementById('alarm-modal-close')?.addEventListener('click', close);
       document.getElementById('alarm-modal-cancel')?.addEventListener('click', close);
       document.getElementById('alarm-modal-create')?.addEventListener('click', () => {
-        const price = priceInput?.value;
         const cond = document.getElementById('alarm-modal-cond')?.value || 'crossing';
+        const triggerMode = document.getElementById('alarm-modal-trigger')?.value || 'once';
+        const expiryChoice = document.getElementById('alarm-modal-expiry')?.value || 'open';
+        const message = document.getElementById('alarm-modal-message')?.value?.trim() || '';
+        const notifyToast = !!document.getElementById('alarm-modal-notify-toast')?.checked;
+        const notifyTelegram = !!document.getElementById('alarm-modal-notify-telegram')?.checked;
+
+        const now = Date.now();
+        const expiresAt = expiryChoice === 'eod'   ? new Date().setHours(23, 59, 59, 999)
+                         : expiryChoice === 'week'  ? now + 7 * 24 * 60 * 60 * 1000
+                         : expiryChoice === 'month' ? now + 30 * 24 * 60 * 60 * 1000
+                         : null;
+        const opts = { condition: cond, triggerMode, expiresAt, message, notifyToast, notifyTelegram };
+
         close();
-        if (!price || !window.AlertStore) {
-          if (window.Toast) Toast.show('No price entered', 'info');
-          return;
+        if (!window.AlertStore) return;
+
+        let alert;
+        if (sourceDrawing) {
+          alert = window.AlertStore.createFromDrawing(sym, exchange, sourceDrawing, opts);
+        } else {
+          const price = document.getElementById('alarm-modal-price')?.value;
+          if (!price) { if (window.Toast) Toast.show('No price entered', 'info'); return; }
+          alert = window.AlertStore.createManual(sym, exchange, price, cond, opts);
         }
-        const alert = window.AlertStore.createManual(sym, exchange, price, cond);
-        if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${price}` : 'Could not create alert', alert ? 'success' : 'error');
+        if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${alert.price}` : 'Could not create alert', alert ? 'success' : 'error');
       });
     });
   },

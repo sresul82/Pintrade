@@ -115,17 +115,32 @@ const AlertStore = (() => {
     return alert;
   }
 
-  function createFromDrawing(symbol, exchange, drawing) {
+  // gorevler2.md Görev 11.6 (2026-08-10) — TradingView "Create Alert" modalıyla
+  // hizalanan ek alanlar. `triggerMode` UI'da seçilebilir ama şu an sadece
+  // 'once' fiilen çalışıyor (bkz. checkPrice) — diğerleri (once_per_bar vb.)
+  // sunucu taraflı izleme geldiğinde tamamlanacak, bkz. gorevler3.md Görev 7.
+  function _extraOpts(opts = {}) {
+    return {
+      condition: opts.condition || 'crossing',
+      triggerMode: opts.triggerMode || 'once',
+      expiresAt: opts.expiresAt ?? null,
+      message: opts.message || '',
+      notifyToast: opts.notifyToast !== false,
+      notifyTelegram: !!opts.notifyTelegram, // bkz. modül başlığı — henüz GÖNDERMİYOR, sadece tercih olarak kaydediliyor
+    };
+  }
+
+  function createFromDrawing(symbol, exchange, drawing, opts = {}) {
     if (!drawing || !SUPPORTED_TOOLS.includes(drawing.tool)) return null;
     const price = computeDrawingPrice(drawing);
     if (price == null || isNaN(price)) return null;
-    return _addAlert({ symbol, exchange: exchange || 'binance', price, sourceDrawingId: drawing.id, sourceTool: drawing.tool });
+    return _addAlert({ symbol, exchange: exchange || 'binance', price, sourceDrawingId: drawing.id, sourceTool: drawing.tool, ..._extraOpts(opts) });
   }
 
   /** condition: 'above' | 'below' | 'crossing' */
-  function createManual(symbol, exchange, price, condition = 'crossing') {
+  function createManual(symbol, exchange, price, condition = 'crossing', opts = {}) {
     if (price == null || isNaN(price)) return null;
-    return _addAlert({ symbol, exchange: exchange || 'binance', price: parseFloat(price), condition, sourceTool: null });
+    return _addAlert({ symbol, exchange: exchange || 'binance', price: parseFloat(price), sourceTool: null, ..._extraOpts({ ...opts, condition }) });
   }
 
   function removeAlert(id) {
@@ -160,6 +175,14 @@ const AlertStore = (() => {
     _alerts.forEach(a => {
       if (a.symbol !== symbol || a.triggered || !a.active) return;
 
+      // Süresi dolmuşsa (Expiration — TradingView modalındaki alan) bir daha
+      // hiç kontrol etmeden pasif işaretle.
+      if (a.expiresAt && Date.now() > a.expiresAt) {
+        a.active = false;
+        changed = true;
+        return;
+      }
+
       // Eğik çizgiden gelen alarmlarda tetik seviyesi HER kontrolde yeniden
       // hesaplanır (bkz. _resolveTriggerPrice) — çizgi zamanla/sürüklenince
       // değişse de alarm onu takip eder. a.price, render/gösterim için
@@ -175,15 +198,22 @@ const AlertStore = (() => {
                   : a.condition === 'below' ? crossedDown
                   : (crossedUp || crossedDown);
       if (fires) {
+        // triggerMode: şu an sadece 'once' fiilen destekleniyor — tetiklenince
+        // pasif olur. 'once_per_bar' vb. sunucu taraflı izleme gelince
+        // tamamlanacak (bkz. gorevler3.md Görev 7), UI'da seçilebilir ama
+        // seçilse de bu turda 'once' gibi davranır.
         a.triggered = true;
         a.triggeredAt = Date.now();
         changed = true;
         _emit('alert:triggered', a);
-        if (window.Toast) {
+        const msg = a.message ? a.message : `Alert: ${a.symbol} crossed ${triggerPrice}`;
+        if (a.notifyToast !== false && window.Toast) {
           const dur = _prefs.autoHideToasts === false ? 15000 : 3000;
-          Toast.show(`Alert: ${a.symbol} crossed ${triggerPrice}`, 'info', dur);
+          Toast.show(msg, 'info', dur);
         }
         if (_prefs.alertVolume !== false) _beep(_prefs.alertVolumeLevel);
+        // Telegram: henüz göndermiyor (sunucu taraflı bot entegrasyonu bekleniyor,
+        // bkz. gorevler3.md Görev 7) — tercih burada sadece işaretli kalıyor.
       } else {
         a.lastKnownPrice = price;
       }

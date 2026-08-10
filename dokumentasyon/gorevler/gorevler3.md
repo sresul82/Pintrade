@@ -231,6 +231,49 @@ Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlam
 
 ---
 
+## [ ] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — henüz başlanmadı)
+
+**Bağlam:** Kullanıcı, Kom1 sinyallerinin VE `gorevler2.md` Görev 11.5/11.6'da
+kurulan çizim tabanlı fiyat alarmlarının **tarayıcı kapalıyken de** çalışmasını
+istiyor — şu an ikisi de tamamen client-side (tarayıcı sekmesi açıkken
+çalışır, kapanınca durur). Ayrıca Alarm sekmesine gelen sinyallerin
+(AlarmSignalHistory) ileride bildirim (notification) olarak da gelmesi
+isteniyor. TradingView'ın "Create Alert" modalındaki Email/Telegram
+bildirim seçenekleri de (bkz. Görev 11.6) bu sunucu taraflı altyapı
+kurulana kadar fiilen göndermiyor, sadece tercih olarak kaydediliyor.
+
+**Kapsam netleşmedi — büyük bir mimari iş, kullanıcı onayı ve ayrıca
+detaylandırma gerekiyor.** Muhtemel parçalar:
+
+- Sunucuda (server.js) yeni, sürekli çalışan bir fiyat/sinyal izleme
+  döngüsü — mevcut `collectBinanceData`/`collectLSData` gibi periyodik
+  toplayıcılarla AYNI mimari desende (BotEngine'in rate-limit bütçesini
+  paylaşan, kendi ayrı REST döngüsünü açmayan).
+- Alarmların (`pintrade_alerts`, şu an localStorage) MongoDB'ye taşınması
+  — sunucunun izleyebilmesi için client-side localStorage yetersiz.
+- Kom1Scanner'ın (şu an tamamen client-side, `js/screener/kom1-scanner.js`)
+  sunucu tarafına taşınması ya da sunucuda paralel bir kopyasının kurulması
+  — büyük bir refactor, dikkatli ele alınmalı (mevcut client-side davranış
+  bozulmamalı).
+- **Telegram:** Kullanıcı kendi botunu BotFather ile oluşturacak, bot
+  token'ı `.env`'e eklenecek (koda gömülmeyecek, sır). Sunucu, tetiklenen
+  alarm/sinyalde Telegram Bot API'nin `sendMessage` endpoint'ine POST atar.
+- **Email:** Bu turda KAPSAM DIŞI bırakıldı (kullanıcı: "şimdilik atlayalım,
+  sadece Toast kurulsun") — ileride istenirse SMTP/SendGrid gibi bir servis
+  kararı gerekecek.
+- Alarm sekmesindeki (AlarmSignalHistory) sinyallerin de bildirim
+  kanallarına (Telegram vb.) bağlanması.
+
+### Doğrulama (kapsam netleştikten sonra)
+
+- Tarayıcı kapalıyken bir alarm/Kom1 sinyali gerçekten tetikleniyor mu?
+- Telegram mesajı doğru sohbete, doğru içerikle geliyor mu?
+- Mevcut client-side davranış (tarayıcı açıkken Toast/ses) bozulmadı mı?
+
+**Rapor:** `2026-XX-XX-gorev7-sunucu-tarafli-izleme-bildirimler.md`
+
+---
+
 ## Kuyrukta olmayan, kullanıcı ayrıca planlayacak
 
 - **Kom2** — zayıf/doğrulanmamış (Varyant B'nin look-ahead bias'ı netleşmeden), ayrı bir tur.
