@@ -25,6 +25,7 @@ window.DrawingManager = (() => {
   let _lastPointerdownClaimed = false;
   let _globalLock = false;
   let _pendingTextEditTimer = null;
+  let _settingsSavedDebounceTimer = null;
 
   let _toolStyles = {};
 
@@ -1575,7 +1576,13 @@ window.DrawingManager = (() => {
       _clearIndicators();
     });
 
-    EventBus.on('drawing:settings:saved', () => {
+    // gorevler2.md izleme listesi (2026-08-10) — ayar panelindeki slider/renk
+    // seçicileri sürükleme sırasında bu event'i her ufak değişiklikte
+    // (her 'input' tick'inde) tetikliyor, her seferinde tüm State'i
+    // JSON.stringify edip localStorage'a yazıyordu. 300ms debounce ile
+    // kullanıcı durduktan sonra tek bir kayıt tetiklenir — kaydedilen veri/
+    // mantık aynı, sadece tetiklenme sıklığı azaltıldı.
+    function _persistSettingsSaved() {
       if (_selectedId) {
         Object.values(State.get('drawings') || {}).forEach(list => {
           const d = (list || []).find(x => x.id === _selectedId);
@@ -1602,7 +1609,18 @@ window.DrawingManager = (() => {
       // menü değişiklikleri kayboluyordu. Artık her ayar kaydında `drawings`
       // de açıkça persist ediliyor.
       State.set('drawings', State.get('drawings'));
+    }
+
+    EventBus.on('drawing:settings:saved', () => {
+      // requestRedrawAll() anında çalışır — slider/renk sürüklerken chart'taki
+      // çizim eskisi gibi anlık güncellenir. Sadece State.set (localStorage
+      // yazımı) debounce'lanır (bkz. yukarıdaki _persistSettingsSaved notu).
       requestRedrawAll();
+      if (_settingsSavedDebounceTimer) clearTimeout(_settingsSavedDebounceTimer);
+      _settingsSavedDebounceTimer = setTimeout(() => {
+        _settingsSavedDebounceTimer = null;
+        _persistSettingsSaved();
+      }, 300);
     });
 
     // Delete/Backspace key listener
