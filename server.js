@@ -847,6 +847,12 @@ function proxyRequest(targetHost, targetPath, res) {
     headers: { 'User-Agent': 'Mozilla/5.0' }
   };
   const proxyReq = https.request(options, (proxyRes) => {
+    // Upstream status kodu (418/429 ban dahil) client'a aynen aktarılmalı —
+    // eskiden burası hep 200 dönüyordu, bu yüzden fetchKlines() gibi çağıranlar
+    // res.status===429||418 kontrolüyle ban'ı hiç yakalayamıyor, ban gövdesini
+    // ({code:-1003,...}) normal veri sanıp çöküyordu (bkz. 2026-08-10 gorev4
+    // production doğrulaması, kl.map is not a function).
+    res.statusCode = proxyRes.statusCode;
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
