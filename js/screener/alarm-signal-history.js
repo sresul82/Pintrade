@@ -4,9 +4,9 @@
  * Bot Signals (FR/M1 Hammer/M1-A/V3/4S rafı, bot-signals-panel.js) ile HİÇ
  * ilişkisi yok — kendi başına, tüm panel alanını kaplayan kart listesi.
  *
- * Şu an demo/statik veri: gerçek bir sinyal motoru yok (bkz.
- * dokumentasyon/gorevler/sinyal-sistemi-pintrade-entegrasyon.md). Kom1/Kom2/Kom3
- * puanlama sistemi kurulunca bu modül gerçek veriyle beslenecek.
+ * Kom1: gerçek Kom1Scanner çıktısıyla besleniyor (gorevler3.md Görev 4,
+ * 2026-08-10) — bkz. `_kom1LiveSignals()`. Kom2/Kom3: hâlâ demo/statik
+ * veri (bkz. `_demoSignals()`), ayrı puanlama sistemi kurulunca değişecek.
  */
 const AlarmSignalHistory = (() => {
   // Combo 3 henüz tanımlanmadığı için placeholder (kesikli kenarlık) olarak işaretlenir.
@@ -124,6 +124,49 @@ const AlarmSignalHistory = (() => {
     ];
   }
 
+  // Kom1 artık gerçek Kom1Scanner çıktısıyla besleniyor (gorevler3.md Görev 4).
+  // Kom2/Kom3 hâlâ _demoSignals()'taki placeholder kartlar — dokunulmadı.
+  // Aktiflik süresi: kullanıcı kararı (2026-08-10) — mevcut 24h "Old" eşiğiyle
+  // aynı kural kullanılıyor. TODO: hedef/stop fiyatı bazlı bir "aktiflik" kuralı
+  // tasarlanınca (bkz. gorevler2.md Görev 6, sinyal önerisi+geri ölçüm) bu geçici
+  // 24h kuralın yerini alması gerekecek.
+  function _kom1LiveSignals() {
+    if (typeof Kom1Scanner === 'undefined') return [];
+    return Kom1Scanner.getConfirmedSignals().map(entry => {
+      const ticker = (typeof MarketDataStore !== 'undefined' && MarketDataStore.getTicker)
+        ? MarketDataStore.getTicker(entry.symbol) : null;
+      const currentPrice = ticker?.price;
+      const priceChangePct = (typeof currentPrice === 'number' && entry.price)
+        ? ((currentPrice - entry.price) / entry.price) * 100
+        : 0;
+      return {
+        symbol: entry.symbol,
+        kom: 1,
+        exchange: 'binance', // Kom1Scanner sadece Binance FUTURES tarıyor (gorevler3.md kararı)
+        timestamp: entry.confirmedAt,
+        priceChangePct,
+        chips: [
+          { label: 'Büyük TF',  value: entry.bigTf.toUpperCase(),        color: 'var(--text-primary)' },
+          { label: 'RC_mid',    value: entry.rcMid.toFixed(4),           color: 'var(--text-primary)' },
+          { label: 'WT1',       value: `${entry.wtPrev.toFixed(1)}→${entry.wtVal.toFixed(1)}`, color: '#16a34a' },
+          { label: 'HA Close',  value: entry.haClose.toFixed(4),         color: '#16a34a' },
+          { label: 'DEMA9',     value: entry.dema9.toFixed(4),           color: 'var(--text-primary)' },
+        ],
+        rule: `Büyük TF (${entry.bigTf.toUpperCase()}): RC_mid altı + WT cross-up (önceki bar oversold) + 5dk onay: HA yeşil + DEMA9 üstü`,
+      };
+    });
+  }
+
+  /** _demoSignals()'tan sadece Kom2/Kom3 placeholder kartları — Kom1 artık
+   *  _kom1LiveSignals()'tan geliyor, demo Kom1 kartları listeden çıkarıldı. */
+  function _kom23DemoSignals() {
+    return _demoSignals().filter(sig => sig.kom !== 1);
+  }
+
+  function _allSignals() {
+    return [..._kom1LiveSignals(), ..._kom23DemoSignals()];
+  }
+
   // Toolbar state: active Combo filter + exchange filter + search term (uppercase).
   const _state = { komFilter: 'all', exchangeFilter: 'all', searchTerm: '' };
 
@@ -147,13 +190,13 @@ const AlarmSignalHistory = (() => {
   /** Watchlist'in "Signals" sistem listesini beslemek için — sadece güncel
    *  (Geçmiş etiketli olmayan) sinyaller, { symbol, kom } şeklinde. */
   function getActiveSignals() {
-    return _demoSignals()
+    return _allSignals()
       .filter(sig => !_isOldVisual(sig))
       .map(sig => ({ symbol: sig.symbol, kom: sig.kom }));
   }
 
   function _getFilteredSignals() {
-    const all = _demoSignals();
+    const all = _allSignals();
     let filtered = _state.komFilter === 'all'
       ? all
       : all.filter(s => String(s.kom) === _state.komFilter);
@@ -388,6 +431,18 @@ const AlarmSignalHistory = (() => {
       _inited = true;
     }
     render();
+  }
+
+  // Kom1Scanner yeni bir sinyali kesinleştirdiğinde: alarm sekmesinde bildirim
+  // ("Kom1 listesine XUSDT eklendi") + açıksa alarm listesi + Watchlist Sinyaller
+  // grubu tazelensin. Modül yüklenirken bir kere kaydediliyor (init()'in
+  // tekrar tekrar çağrılmasından bağımsız — tab kapalıyken de sinyal gelebilir).
+  if (typeof EventBus !== 'undefined') {
+    EventBus.on('kom1:signalConfirmed', ({ symbol }) => {
+      if (typeof Toast !== 'undefined') Toast.show(`Kom1 listesine ${symbol} eklendi`, 'success');
+      if (document.getElementById('dp-alarm-tab')?.offsetParent) render();
+      EventBus.emit('watchlist:listsChanged');
+    });
   }
 
   return { init, render, getActiveSignals };

@@ -1123,6 +1123,11 @@ const DetailPanel = (() => {
       // 429/418 (BAN_SIGNAL) görürse otomatik durur. Genişletme ayrı onay ister
       // (bkz. m1hammer-scanner.js başlığı ve dokumentasyon/gorevler/siradaki-gorevler.md).
       if (window.M1HammerScanner) M1HammerScanner.start();
+
+      // Kom1Scanner (gorevler3.md Görev 4, 2026-08-10) — gerçek sinyal üretimi
+      // canlıya alındı. Kendi ayrı BotEngine kuyruğu/backfill akışı var (11 coin
+      // × 1H/4H, bkz. kom1-scanner.js başlığı) — M1Hammer'ınkinden bağımsız.
+      if (window.Kom1Scanner) Kom1Scanner.start();
     }
 
     // New signal arrived → re-render

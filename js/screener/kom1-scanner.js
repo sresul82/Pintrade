@@ -5,8 +5,9 @@
  * dokumentasyon/gorevler/sinyal-sistemi-pintrade-entegrasyon.md §2.
  *
  * BU TURUN KAPSAMI: büyük TF (1H/4H) tespiti + 5dk onay penceresi.
- * Onaylanan sinyal `_confirmed` listesine yazılır — henüz Watchlist/
- * alarm'a yazmaz (Görev 4), sadece `getConfirmedSignals()` ile gözlemlenir.
+ * Onaylanan sinyal `_confirmed` listesine yazılır ve `kom1:signalConfirmed`
+ * event'i yayınlanır (Görev 4, `alarm-signal-history.js` bunu dinleyip
+ * Watchlist'in Kom1 grubuna ve alarm sekmesine yazıyor).
  *
  * Kural (büyük TF, 1H veya 4H):
  *   - price <= RC_mid (Regression Channel, 100 bar)
@@ -274,6 +275,9 @@ const Kom1Scanner = (() => {
       if (_confirmed.length > CONFIRMED_CAP) _confirmed.length = CONFIRMED_CAP;
       confirmedAny = true;
       console.log(`[Kom1Scanner] ✅ LONG SİNYALİ KESİNLEŞTİ: ${sym} (büyük TF: ${entry.bigTf}, RC_mid=${entry.rcMid.toFixed(4)}, HA close=${ha.haClose.toFixed(4)} > DEMA9=${dema.toFixed(4)})`);
+      if (typeof EventBus !== 'undefined') {
+        EventBus.emit('kom1:signalConfirmed', { symbol: sym, bigTf: entry.bigTf, confirmedAt: confirmed.confirmedAt });
+      }
     }
     if (confirmedAny) _releaseSmallTFSubscription(sym);
   }

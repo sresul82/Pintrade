@@ -117,7 +117,9 @@ Görev 3 bittikten sonra **DURACAKSIN**. Görev 4, sinyali gerçekten Watchlist'
 
 ---
 
-## [ ] Görev 4 — Watchlist Kom1 grubuna yazma + alarm bildirimi
+## [x] Görev 4 — Watchlist Kom1 grubuna yazma + alarm bildirimi
+
+**Tamamlandı (2026-08-10).** Rapor: `dokumentasyon/raporlar/2026-08-10-gorev4-watchlist-alarm-entegrasyonu.md`
 
 **Bağımlılık:** Görev 3 bitmeden başlanamaz.
 
@@ -126,6 +128,7 @@ Görev 3 bittikten sonra **DURACAKSIN**. Görev 4, sinyali gerçekten Watchlist'
 - Görev 3'te "Long sinyali kesinleşti" olan coin, `WatchlistStore`'un `kom1` grubuna eklensin (şu an `getSignalGroups()` `AlarmSignalHistory.getActiveSignals()`'tan besleniyor — bu demo veri kaynağı, gerçek Kom1Scanner çıktısıyla değiştirilmeli, ama **`alarm-signal-history.js`'nin Kom2/Kom3 demo kartlarına DOKUNMA** — sadece Kom1 gerçek veriyle beslenecek).
 - Sinyal geldiğinde alarm sekmesinde bildirim ("Kom1 listesine BANKUSDT eklendi" tarzı — bkz. tasarım dokümanı Bölüm 5).
 - Coin, sinyal aktif olduğu sürece listede kalsın (ne zaman "aktifliği" biter — örn. X saat sonra otomatik mi düşer, yoksa manuel mi temizlenir — belirsizse DUR ve kullanıcıya sor, tahmin yürütme).
+  - **Kullanıcı kararı (2026-08-10):** mevcut 24 saatlik "Old" eşiğiyle aynı kural kullanılsın (yeni eşik icat edilmedi). **TODO (kullanıcı notu):** bu geçici bir karar — ileride sinyal önerisi + geri ölçüm işi (`gorevler2.md` Görev 6) tasarlanınca fiyat hedefi/stop bazlı bir "aktiflik" kuralına geçilecek.
 
 ### Doğrulama
 
@@ -186,3 +189,27 @@ Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlam
 - **Kom3** — hiç tanımlanmadı, kullanıcı tanımlayınca ayrı bir kuyruk.
 - **Sinyal önerisi + geri ölçüm** (`gorevler2.md` Görev 6 ile aynı konu, oradan zaten biliniyor) — Kom1 canlıya çıkıp veri birikince ele alınacak.
 - **Parametrelerin yapılandırılabilir hâle getirilmesi** (WT eşiği, RC uzunluğu vb.) — şimdilik sabit kodlanmasına karar verildi, ileride istenirse ayrı bir iş.
+
+---
+
+## İleri seviye — Kom1 gözlem sonrası ele alınacak
+
+**Not (2026-08-10):** Bu dört madde de Kom1'in Görev 5 (canlı gözlem)
+sonucunda "güvenilir" sayılmasına bağlı — önkoşul olarak işaretlendi,
+Görev 5 tamamlanıp kullanıcı memnun kalmadan bunlara başlanmaz.
+
+- **Chart üzerinde indikatör görselleştirmesi** (RSI/DEMA9/HA/WT/RC) —
+  `indicator-engine.js` hazır (gorevler3.md Görev 1) ama chart'a hiç
+  çizilmiyor, sadece scanner'ların iç hesaplaması olarak kullanılıyor.
+  (`gorevler2.md` izleme listesinden taşındı.)
+- **Manuel strateji kararları için botların gerçek zamanlı çalışır
+  durumda tutulması** — izleme/health-check mekanizması (bot çöktü mü,
+  abonelik sızıntısı var mı, backfill takıldı mı gibi durumları tespit
+  edip bildiren bir katman; şu an sadece konsol logları var).
+- **Navbar'daki Alert butonunun işlevsel hale getirilmesi** — buton şu an
+  hiçbir modal açmıyor (bkz. `gorevler2.md` Görev 10.2, `modal:alarm:open`
+  event'i dinleyicisiz), Kom1'den bağımsız manuel fiyat alarmı kurma
+  özelliği.
+- **Alert → Telegram bildirim entegrasyonu** — bot token/chat id
+  yapılandırması gerekecek, kullanıcının Telegram tarafını ayrıca
+  kurması gerekiyor.
