@@ -3,6 +3,8 @@ const express = require('express');
 const cors    = require('cors');
 const mongoose = require('mongoose');
 const https   = require('https');
+const path    = require('path');
+const rateLimit = require('express-rate-limit');
 
 const app  = express();
 const PORT = process.env.PORT || 5500;
@@ -12,7 +14,15 @@ const PORT = process.env.PORT || 5500;
 // ==========================================
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+
+// gorevler2.md Görev 9.1 (2026-08-10) — eskiden express.static(__dirname)
+// tüm proje kökünü servis ediyordu: server.js, package.json ve dokumentasyon/
+// (strateji parametrelerini içeren gorevler3.md dahil) tarayıcıdan doğrudan
+// indirilebiliyordu. Sadece frontend'in gerçekten ihtiyaç duyduğu index.html
+// + css/ + js/ servis ediliyor.
+app.use('/css', express.static(path.join(__dirname, 'css')));
+app.use('/js', express.static(path.join(__dirname, 'js')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.use((req, res, next) => {
   if (!req.url.startsWith('/api/history') && !req.url.startsWith('/api/signals')) { // Suppress noisy history logs
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -646,6 +656,22 @@ mongoose.connection.once('open', () => {
 // ==========================================
 
 // ── Çizim Senkronizasyonu ───────────────────────────────────────────
+// gorevler2.md Görev 9.2 (2026-08-10) — syncKey kullanıcı tarafından serbest
+// metin olarak girilen bir değer (bkz. js/core/app.js:_bindSyncKey, js/core/state.js:getSyncKey),
+// sunucu tarafında üretilmiyor/doğrulanmıyor — kısa/tahmin edilebilir bir
+// syncKey seçen bir kullanıcının kaydını kaba kuvvetle bulmaya çalışmak
+// teorik olarak mümkündü. Rate-limit bunu pratikte anlamsız hâle getiriyor
+// (meşru kullanım: js/core/state.js:syncDrawingsCloud zaten 1sn debounce'lu,
+// dakikada birkaç istekten fazlasına hiç ihtiyaç yok).
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla istek, lütfen bir dakika sonra tekrar deneyin' },
+});
+app.use('/api/sync/drawings', syncLimiter);
+
 app.get('/api/sync/drawings', async (req, res) => {
   try {
     const { syncKey } = req.query;

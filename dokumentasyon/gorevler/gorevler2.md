@@ -270,7 +270,9 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 9'a geç" demeli. Aksi hal
 
 ---
 
-## [ ] Görev 9 — Güvenlik açıkları (2026-08-08 taramasında doğrulandı, henüz kuyrukta değildi)
+## [x] Görev 9 — Güvenlik açıkları (2026-08-08 taramasında doğrulandı, henüz kuyrukta değildi)
+
+**Tamamlandı (2026-08-10).** Rapor: `dokumentasyon/raporlar/2026-08-10-gorev9-guvenlik-duzeltmeleri.md`
 
 Kod taraması sırasında (bu dosyanın hazırlanışı, 2026-08-08) `dokumentasyon/raporlar/2026-07-31-kod-incelemesi.md`'de daha önce tespit edilmiş ama hâlâ düzeltilmemiş iki güvenlik maddesi bulundu:
 
@@ -291,7 +293,7 @@ Kod taraması sırasında (bu dosyanın hazırlanışı, 2026-08-08) `dokumentas
 - Site normal çalışmaya devam ediyor mu (statik dosyalar, çizim senkronu)?
 - `server.js` artık tarayıcıdan indirilemiyor mu?
 
-**Rapor:** `2026-XX-XX-guvenlik-duzeltmeleri.md`
+**Rapor:** `2026-08-10-gorev9-guvenlik-duzeltmeleri.md`
 
 ---
 
