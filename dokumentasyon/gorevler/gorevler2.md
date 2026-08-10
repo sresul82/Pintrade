@@ -464,6 +464,52 @@ görsel doğrulama yapıldı.
 
 ---
 
+## [ ] Görev 12 — `Candle` koleksiyonuna TTL eklenmesi (2026-08-10, MongoDB Atlas uyarısı üzerine bulundu)
+
+**Bağlam:** MongoDB Atlas'tan "Logical Size 440MB'ı geçti" uyarısı geldi
+(free tier M0 limiti 512MB, ölçüm anında 477MB/512MB — ~%93 dolu).
+İncelendi: `server.js`'deki 7 koleksiyondan 6'sında TTL (otomatik silinme)
+var (`MarketData` 48s, `FRSignal` 7g, `LSMetrics` 60s, `SymbolStatusEvent`
+30g) — **`Candle` koleksiyonunda YOK**. `collectBinanceCandles()` her 5
+dakikada ~500 Binance sembolünün 5dk mumunu yazıyor, hiç silinmiyor —
+aylardır sınırsız birikiyor, dolan alanın ana kaynağı bu.
+
+**Ek bulgu:** `Candle`'ı okuyan tek endpoint (`GET /api/history/candles/...`)
+**hiçbir frontend kodu tarafından çağrılmıyor** (grep ile doğrulandı, `js/`
+altında sıfır kullanım) — yani bu koleksiyon şu an TAMAMEN ölü/kullanılmayan
+bir veri. Chart'taki mumlar canlı Binance REST/WS'ten geliyor, bu kayıttan
+değil.
+
+**Geçici çözüm (2026-08-10'da uygulandı, kullanıcı onayıyla):** Depolama
+alanı acilen boşaltılmak üzere mevcut `Candle` kayıtları MongoDB Atlas
+üzerinden manuel silindi (yeni bir ücretli/ikinci hesaba geçmemek için).
+TTL henüz eklenmedi — koleksiyon toplayıcı (`collectBinanceCandles`,
+`server.js:649`) hâlâ her 5 dakikada yazmaya devam ediyor, bu yüzden sorun
+zamanla TEKRAR birikecek.
+
+### Yapılacak (kalıcı çözüm, henüz uygulanmadı)
+
+- `candleSchema`'ya diğer koleksiyonlarla tutarlı bir TTL index eklenmeli
+  (örn. `candleSchema.index({ openTime: 1 }, { expireAfterSeconds: 72*60*60 })`
+  — 72 saat, `/api/history/candles`'ın maksimum `limit=5000` × 5dk ≈ 17 gün
+  teorik pencereden çok daha az ama gerçek kullanım paternine göre yeterli).
+- Alternatif/ek karar: madem endpoint hiç kullanılmıyor, `collectBinanceCandles()`
+  toplayıcısının kendisini tamamen DURDURMAK da bir seçenek (gereksiz
+  Binance rate-limit bütçesi + depolama harcıyor, hiçbir özelliğe hizmet
+  etmiyor) — TTL eklemek yerine bu daha kökten bir çözüm olabilir, kullanıcıyla
+  netleştirilmeli: gelecekte bu geçmiş mum verisi kullanılacak bir özellik
+  planlanıyor mu (örn. backtest), yoksa tamamen kaldırılabilir mi?
+
+### Doğrulama
+
+- TTL eklendiyse: birkaç gün sonra koleksiyon boyutu büyümeyi durdurdu mu?
+- Toplayıcı durdurulduysa: `/api/history/candles` (zaten kullanılmıyor)
+  hâlâ hata vermeden boş dönüyor mu, başka hiçbir yer bozulmadı mı?
+
+**Rapor:** `2026-XX-XX-gorev12-candle-ttl.md`
+
+---
+
 ## Kuyrukta olmayan, kullanıcı ayrıca planlayacak (değişmedi)
 
 - **Kom1/Kom2/Kom3 sinyal motoru** — büyük iş, L/S artık hazır olduğu için önü açık, ama ayrı, kendi turunda ele alınacak.
