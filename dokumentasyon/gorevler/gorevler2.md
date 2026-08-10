@@ -480,12 +480,21 @@ altında sıfır kullanım) — yani bu koleksiyon şu an TAMAMEN ölü/kullanı
 bir veri. Chart'taki mumlar canlı Binance REST/WS'ten geliyor, bu kayıttan
 değil.
 
-**Geçici çözüm (2026-08-10'da uygulandı, kullanıcı onayıyla):** Depolama
-alanı acilen boşaltılmak üzere mevcut `Candle` kayıtları MongoDB Atlas
-üzerinden manuel silindi (yeni bir ücretli/ikinci hesaba geçmemek için).
-TTL henüz eklenmedi — koleksiyon toplayıcı (`collectBinanceCandles`,
+**Geçici çözüm (2026-08-10'da kullanıcı tarafından MongoDB Atlas Data
+Explorer üzerinden manuel uygulandı):**
+- `sample_mflix` veritabanı tamamen silindi (Atlas'ın kendi demo/örnek
+  veri seti — Pintrade ile hiç ilgisi yok, ~147MB boşalttı, sıfır risk).
+- `test` veritabanındaki `candles` koleksiyonu boşaltıldı/silindi.
+- **Sonuç:** `test` veritabanı 103.10MB/296.23MB'tan (7 koleksiyon)
+  22.91MB/63.92MB'a (6 koleksiyon, `candles` artık listede bile yok) düştü.
+  512MB limitinin çok altına inildi, acil kriz geçti.
+- Chart üzerinde hiçbir görsel etki olmadı doğrulandı (mumlar zaten
+  Binance'ten canlı geliyor, bu silinen kayıttan değil).
+
+**Kalıcı çözüm HÂLÂ YAPILMADI** — koleksiyon toplayıcı (`collectBinanceCandles`,
 `server.js:649`) hâlâ her 5 dakikada yazmaya devam ediyor, bu yüzden sorun
-zamanla TEKRAR birikecek.
+zamanla TEKRAR birikecek. Kullanıcı: "ileride detaylıca bakarız" dedi —
+şimdilik sadece bu not bırakıldı, TTL/toplayıcı durdurma kararı ertelendi.
 
 ### Yapılacak (kalıcı çözüm, henüz uygulanmadı)
 
@@ -507,6 +516,46 @@ zamanla TEKRAR birikecek.
   hâlâ hata vermeden boş dönüyor mu, başka hiçbir yer bozulmadı mı?
 
 **Rapor:** `2026-XX-XX-gorev12-candle-ttl.md`
+
+---
+
+## [ ] Görev 13 — Alarm listesi görünümü + düzenleme/silme (2026-08-10, kullanıcı isteği — henüz başlanmadı)
+
+**Bağlam:** Görev 11.5/11.6'da çizim tabanlı fiyat alarmı sistemi kuruldu
+(`js/screener/alert-store.js`) — alarm oluşturmak (Navbar ⏰ Alert butonu
+veya property toolbar zil ikonu) çalışıyor, chart üzerinde çizgi olarak
+gösteriliyor, ama **oluşturulan tüm alarmları TEK bir yerde listeleyip
+görebileceğin, silebileceğin veya düzenleyebileceğin bir arayüz henüz
+yok**. `AlertStore.getAlerts()`/`removeAlert()` fonksiyonları zaten var
+(veri katmanı hazır) — eksik olan sadece UI.
+
+TradingView'da bu, sağ kenar çubuğundaki ayrı bir "Alerts" sekmesi/paneli
+— tüm aktif/tetiklenmiş alarmları liste hâlinde gösterir, her satırda
+düzenle/sil/aktif-pasif yap seçenekleri olur.
+
+### Yapılacak (kapsam netleşince detaylandırılacak — henüz tasarlanmadı)
+
+- Bir "Alerts" listesi paneli/sekmesi (muhtemelen mevcut sağ sidebar
+  yapısına — Watchlist/Alarm sekmeleri gibi — eklenir, ama tam yer/tasarım
+  netleşmedi).
+- Her alarm satırında: sembol, fiyat, condition (crossing/above/below),
+  durum (aktif/tetiklendi/süresi doldu), kaynak (hangi çizimden geldiği
+  varsa), sil butonu, düzenle butonu.
+- Düzenleme: en azından fiyat/condition/expiration/message alanlarının
+  değiştirilebilmesi — `AlertStore`'a yeni bir `updateAlert(id, fields)`
+  fonksiyonu eklenmesi gerekecek (şu an sadece create/remove var).
+- Silme: zaten var olan `removeAlert(id)`'i UI'dan çağırmak.
+
+### Doğrulama
+
+- Oluşturulan tüm alarmlar listede doğru görünüyor mu (sembol/pane
+  bağımsız — bir alarm başka bir sembolde de listelenmeli)?
+- Silme gerçekten `AlertStore`'dan kaldırıyor mu, chart'taki çizgi de
+  kayboluyor mu?
+- Düzenleme sonrası tetikleme mantığı (crossing kontrolü) doğru güncel
+  değerlerle çalışıyor mu?
+
+**Rapor:** `2026-XX-XX-gorev13-alarm-listesi-ui.md`
 
 ---
 
