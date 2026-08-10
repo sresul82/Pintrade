@@ -230,12 +230,15 @@ function initContextMenus() {
 /* --- settings.js --- */
 // ── TV Style Settings Modal ──────────────────────────────────────
 
+// gorevler2.md Görev 11.3 (2026-08-10, kullanıcı kararı) — "Trading" sekmesi
+// (Buy/sell buttons, one-click trading, brackets, positions vb.) TradingView'ın
+// Paper Trading entegrasyonundan geliyordu, bu projede hiç karşılığı yok
+// (gerçek bir order execution/broker terminali değiliz) — tamamen kaldırıldı.
 const TABS = [
   { id: 'symbol',     label: 'Symbol',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M6 3v12M12 5v10M4 6h4M10 8h4"/></svg>' },
   { id: 'statusline', label: 'Status line',      icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M3 4h12v2H3zM3 8h12v2H3zM3 12h8v2H3z"/></svg>' },
   { id: 'scales',     label: 'Scales and lines', icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M4 2v14h12" stroke-width="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="13" cy="6" r="1.5"/><path d="M8 10l5-4"/></svg>' },
   { id: 'canvas',     label: 'Canvas',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M12 4l2 2-7 7-3 1 1-3 7-7zM11 5l2 2"/></svg>' },
-  { id: 'trading',    label: 'Trading',          icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M3 13h4l3-6 5 4" stroke-width="1.5"/><path d="M11 11l4 0 0-4"/></svg>' },
   { id: 'alerts',     label: 'Alerts',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><circle cx="9" cy="9" r="6"/><path d="M9 5v4l2 2M1 1l3 3M17 1l-3 3"/></svg>' },
   { id: 'events',     label: 'Events',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><rect x="3" y="4" width="12" height="11" rx="1"/><path d="M3 8h12M6 2v4M12 2v4"/></svg>' },
 ];
@@ -291,8 +294,9 @@ function buildMultiSelect(options) {
 }
 
 
-function buildSlider(val, max=100) {
-  return `<div class="tv-slider-wrap"><input type="range" class="tv-slider" value="${val}" max="${max}" /></div>`;
+function buildSlider(val, max=100, key=null) {
+  const keyAttr = key ? `data-key="${key}" data-type="number"` : '';
+  return `<div class="tv-slider-wrap"><input type="range" class="tv-slider" value="${val}" max="${max}" ${keyAttr}/></div>`;
 }
 
 function buildRow(left, rightHtml, config = {}) {
@@ -385,31 +389,6 @@ function tabCanvas() {
   `;
 }
 
-function tabTrading() {
-  const iconSound = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#787b86"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
-  return `
-    ${buildSection('GENERAL')}
-    ${buildRow(buildCheck('Buy/sell buttons', true, {desc: 'Displays buy and sell buttons directly on the chart', key:'tradingBuySell'}), '')}
-    ${buildRow(buildCheck('One-click trading', false, {info: 'One click trading', desc: 'Instantly place, edit, cancel orders or close positions without confirmation', key:'oneClickTrading'}), '')}
-    ${buildRow(buildCheck('Execution sound', false, {key:'execSound'}), iconSound + buildSlider(50))}
-    <div class="tv-row-right-only">${buildSelect(['3 Notes Reverb', 'Alarm Clock', 'Beep-beep', 'Calling', 'Chirpy', 'Fault', 'Hand bell', 'Thin'], 'Alarm Clock', 'execSoundType')}</div>
-    ${buildRow(buildCheck('Show only rejection notifications', false, {key:'rejectNotif'}), '')}
-
-    ${buildSection('APPEARANCE')}
-    ${buildRow(buildCheck('Positions and orders', true, {info:'Info', key:'showPositions'}), '')}
-    ${buildRow(buildCheck('Reverse position button', true, {nested:true, desc:'Adds the reverse button next to the open position on the chart', key:'reversePositionBtn'}), '')}
-    ${buildRow(buildCheck('Project order for market orders', false, {desc:'Shows a project order on the chart before sending a market order', key:'projectOrder'}), '')}
-    ${buildRow(buildCheck('Profit and loss value', true, {info:'Click here to learn more', key:'showPnL'}), '')}
-    ${buildRow(buildCheck('Positions', true, {nested:true, key:'positionsDisplay'}), buildSelect(['Money', 'Ticks', '%'], 'Money', 'positionsUnit'))}
-    ${buildRow(buildCheck('Brackets', true, {nested:true, key:'bracketsDisplay'}), buildSelect(['Money', 'Ticks', '%'], 'Money', 'bracketsUnit'))}
-    ${buildRow(buildCheck('Execution marks', true, {info:'Shows arrows on the chart that mark where trades were executed.', key:'execMarks'}), '')}
-    ${buildRow(buildCheck('Execution labels', false, {nested:true, key:'execLabels'}), '')}
-    ${buildRow(buildCheck('Extended price lines across the entire chart width', true, {key:'extendedPriceLines'}), '')}
-    ${buildRow('Order and position alignment', buildSelect(['Left', 'Center', 'Right'], 'Right', 'orderAlignment'))}
-    ${buildRow(buildCheck('Orders, executions and positions in screenshots', true, {desc:'Shows your trades on the chart in screenshots', key:'tradesInScreenshots'}), '')}
-  `;
-}
-
 function tabAlerts() {
   const iconSound = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#787b86"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
   return `
@@ -418,21 +397,19 @@ function tabAlerts() {
     ${buildRow(buildCheck('Only active alerts', true, {key:'onlyActiveAlerts'}), '')}
 
     ${buildSection('NOTIFICATIONS')}
-    ${buildRow(buildCheck('Alert volume', true, {key:'alertVolume'}), iconSound + buildSlider(50))}
+    ${buildRow(buildCheck('Alert volume', true, {key:'alertVolume'}), iconSound + buildSlider(50, 100, 'alertVolumeLevel'))}
     ${buildRow(buildCheck('Automatically hide toasts', true, {info:'Click here to learn more', key:'autoHideToasts'}), '')}
   `;
 }
 
 function tabEvents() {
+  // gorevler2.md Görev 11.3 (2026-08-10, kullanıcı kararı) — Ideas/Economic
+  // events/Latest news/News notification kaldırıldı: proje ayrı bir News
+  // sekmesine sahip, burada tekrarı gereksizdi. Session breaks kaldı (henüz
+  // applySettings()'e bağlı değil — ayrı bir iş).
   return `
     ${buildSection('EVENTS')}
-    ${buildRow(buildCheck('Ideas', false, {key:'eventsIdeas'}), buildSelect(['All ideas'], 'All ideas', 'ideasFilter') + '<span class="tv-info-icon" title="info" style="margin-left:8px;">?</span>')}
     ${buildRow(buildCheck('Session breaks', false, {key:'sessionBreaks'}), buildLineToolBtn('sessionBreaks', '#2962ff', 1, 'dashed', true))}
-    ${buildRow(buildCheck('Economic events', true, {key:'econEvents'}), '')}
-    ${buildRow(buildCheck('Only future events', true, {nested:true, key:'onlyFutureEvents'}), '')}
-    ${buildRow(buildCheck('Events breaks', false, {nested:true, key:'eventsBreaks'}), buildLineToolBtn('eventsBreaks', '#787b86', 1, 'dashed', true))}
-    ${buildRow(buildCheck('Latest news', true, {key:'latestNews'}), '')}
-    ${buildRow(buildCheck('News notification', true, {key:'newsNotification'}), '')}
   `;
 }
 
@@ -503,7 +480,6 @@ function initSettings() {
             <div class="tv-tab-pane" data-tab="statusline">${tabStatusline()}</div>
             <div class="tv-tab-pane" data-tab="scales">${tabScales()}</div>
             <div class="tv-tab-pane" data-tab="canvas">${tabCanvas()}</div>
-            <div class="tv-tab-pane" data-tab="trading">${tabTrading()}</div>
             <div class="tv-tab-pane" data-tab="alerts">${tabAlerts()}</div>
             <div class="tv-tab-pane" data-tab="events">${tabEvents()}</div>
           </div>
@@ -611,6 +587,23 @@ function initSettings() {
       setCheck('symName', s.symName ?? true);
       setCheck('symValue',s.symValue?? true);
       setCheck('symLine', s.symLine ?? true);
+
+      // gorevler2.md Görev 11 (2026-08-10) — Alerts sekmesi pane'e değil
+      // AlertStore'un global tercihlerine bağlı (bkz. alert-store.js başlığı),
+      // bu yüzden pane state'inden değil oradan okunuyor. setCheck/setColor
+      // bu bloğun kapsadığı `if (pane)` scope'una ait — DIŞINA taşınırsa
+      // ReferenceError fırlatıp TÜM settings:open handler'ını (Cancel/Ok
+      // butonları dahil) sessizce durdurur, bu yüzden burada, İÇERİDE kalmalı.
+      if (window.AlertStore) {
+        const ap = window.AlertStore.getPrefs();
+        setCheck('alertLines', ap.alertLines);
+        setColor('alertLinesColor', ap.alertLinesColor);
+        setCheck('onlyActiveAlerts', ap.onlyActiveAlerts);
+        setCheck('alertVolume', ap.alertVolume !== false);
+        const volSlider = overlay.querySelector('[data-key="alertVolumeLevel"]');
+        if (volSlider) volSlider.value = ap.alertVolumeLevel ?? 50;
+        setCheck('autoHideToasts', ap.autoHideToasts);
+      }
     }
 
     const showTab = id => {

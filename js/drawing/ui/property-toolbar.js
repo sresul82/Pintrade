@@ -441,7 +441,11 @@ window.PropertyToolbar = (() => {
 
     const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'triangle', 'arc'].includes(_drawing.tool);
     const hasText = !['arrowdraw', 'regression', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'pathtool', 'trendangle', 'crossline'].includes(_drawing.tool);
-    const hasAlert = !['rotatedrect', 'triangle', 'pathtool', 'circle', 'arc'].includes(_drawing.tool);
+    // gorevler2.md Görev 11 (2026-08-10, kullanıcı onaylı kapsam) — eskiden
+    // çoğu araçta görünüyordu ama tıklayınca sadece "yakında" alert'i
+    // gösteriyordu. Artık gerçekten AlertStore'a kaydediyor, bu yüzden
+    // sadece kullanıcının belirlediği 7 çizgi aracında gösteriliyor.
+    const hasAlert = window.AlertStore ? window.AlertStore.SUPPORTED_TOOLS.includes(_drawing.tool) : false;
 
     _panel = document.createElement('div');
     _panel.id = 'pt-toolbar';
@@ -1209,7 +1213,12 @@ window.PropertyToolbar = (() => {
     if (btnAlert) {
       btnAlert.onclick = () => {
         _closeAllMenus();
-        alert('Alarm özellikleri yakında buraya entegre edilecektir!');
+        if (!window.AlertStore) return;
+        const exchange = (typeof State !== 'undefined' ? State.get('activeExchange') : null) || 'binance';
+        const created = window.AlertStore.createFromDrawing(_symbol, exchange, _drawing);
+        if (window.Toast) {
+          Toast.show(created ? `Alert created — ${_symbol} @ ${created.price}` : 'Could not create alert from this drawing', created ? 'success' : 'error');
+        }
       };
     }
 

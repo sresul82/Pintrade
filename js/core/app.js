@@ -4,25 +4,27 @@
 ────────────────────────────────────────────────────────── */
 
 window.Toast = {
-  show(message, type = 'success') {
+  // duration: opsiyonel, varsayılan 3000ms (gorevler2.md Görev 11 — AlertStore'un
+  // "Automatically hide toasts" ayarı için eklendi, mevcut tüm çağıranlar etkilenmez).
+  show(message, type = 'success', duration = 3000) {
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `<span style="font-size: 14px; margin-right: 6px;">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span> ${message}`;
-    
+
     container.appendChild(toast);
-    
+
     // Trigger reflow for animation
     void toast.offsetWidth;
     toast.classList.add('show');
-    
+
     setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transform = 'translateY(8px)';
       toast.addEventListener('transitionend', () => toast.remove());
-    }, 3000);
+    }, duration);
   }
 };
 
@@ -947,18 +949,32 @@ const App = {
     });
   },
 
-  // Alarm (⏰) butonu — Görev 10.2: 'modal:alarm:open' yayınlanıyordu ama
-  // hiçbir dinleyicisi yoktu, buton hiçbir şey açmıyordu. Bilinçli olarak
-  // küçük tutuldu: gerçek bir fiyat alarmı kurma/saklama/tetikleme sistemi
-  // ayrı bir görev (kapsamı — ne zaman/nasıl tetiklenecek, nerede saklanacak
-  // — netleşmeden büyük bir özellik inşa edilmedi). Bu modal sadece butonun
-  // gerçekten bir şey açtığını doğruluyor; "Create" şu an sadece bir toast
-  // gösterip kapanıyor, hiçbir yere kaydetmiyor.
+  // Alarm (⏰) butonu — gorevler2.md Görev 11 (2026-08-10, kullanıcı onaylı
+  // kapsam): artık AlertStore'a (js/screener/alert-store.js) gerçekten
+  // kaydediyor ve fiyat geçişinde gerçekten tetikleniyor. Şu an bir çizgi
+  // (trendline/ray/extended/hline/hray/trendangle/infoline) seçiliyse fiyat
+  // alanı o çizginin o anki fiyatıyla önceden dolduruluyor — property
+  // toolbar'daki zil ikonuyla aynı AlertStore'u paylaşıyor (bkz. property-toolbar.js).
+  _lastSelectedDrawing: null,
+
   _bindAlarmModal() {
+    EventBus.on('drawing:selected', (data) => {
+      if (!data || !data.id) { this._lastSelectedDrawing = null; return; }
+      const drawings = State.getDrawings(data.symbol);
+      const d = (drawings || []).find(x => x.id === data.id);
+      this._lastSelectedDrawing = (d && window.AlertStore?.SUPPORTED_TOOLS.includes(d.tool)) ? { drawing: d, symbol: data.symbol } : null;
+    });
+
     EventBus.on('modal:alarm:open', () => {
       if (document.getElementById('alarm-modal-backdrop')) return; // zaten açık
 
       const sym = State.get('activeSymbol') || '—';
+      const exchange = State.get('activeExchange') || 'binance';
+      const selected = (this._lastSelectedDrawing && this._lastSelectedDrawing.symbol === sym) ? this._lastSelectedDrawing : null;
+      const prefillPrice = selected && window.AlertStore
+        ? window.AlertStore.computeDrawingPrice(selected.drawing)
+        : null;
+
       const backdrop = document.createElement('div');
       backdrop.id = 'alarm-modal-backdrop';
       backdrop.className = 'modal-backdrop';
@@ -970,15 +986,14 @@ const App = {
           </div>
           <div class="modal-body">
             <label class="form-label">Trigger price</label>
-            <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" style="margin-bottom:10px;">
+            <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" value="${prefillPrice != null ? prefillPrice : ''}" style="margin-bottom:10px;">
             <label class="form-label">Condition</label>
             <select class="form-input" id="alarm-modal-cond">
+              <option value="crossing">Crossing (either direction)</option>
               <option value="above">Price rises above</option>
               <option value="below">Price falls below</option>
             </select>
-            <p style="font-size:10px; color:var(--text-muted); margin-top:10px;">
-              Note: this is a preview — alerts are not yet saved or triggered. Full alert storage/triggering is a separate, larger feature to be scoped later.
-            </p>
+            ${selected ? `<p style="font-size:10px; color:var(--text-muted); margin-top:10px;">Pre-filled from selected ${selected.drawing.tool} — you can still edit the price.</p>` : ''}
           </div>
           <div class="modal-footer">
             <button class="btn" id="alarm-modal-cancel">Cancel</button>
@@ -987,16 +1002,22 @@ const App = {
         </div>`;
       document.body.appendChild(backdrop);
 
+      const priceInput = document.getElementById('alarm-modal-price');
+
       const close = () => backdrop.remove();
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
       document.getElementById('alarm-modal-close')?.addEventListener('click', close);
       document.getElementById('alarm-modal-cancel')?.addEventListener('click', close);
       document.getElementById('alarm-modal-create')?.addEventListener('click', () => {
-        const price = document.getElementById('alarm-modal-price')?.value;
+        const price = priceInput?.value;
+        const cond = document.getElementById('alarm-modal-cond')?.value || 'crossing';
         close();
-        if (window.Toast) {
-          Toast.show(price ? `Preview only — ${sym} alert (${price}) was not saved` : 'Preview only — no price entered', 'info');
+        if (!price || !window.AlertStore) {
+          if (window.Toast) Toast.show('No price entered', 'info');
+          return;
         }
+        const alert = window.AlertStore.createManual(sym, exchange, price, cond);
+        if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${price}` : 'Could not create alert', alert ? 'success' : 'error');
       });
     });
   },

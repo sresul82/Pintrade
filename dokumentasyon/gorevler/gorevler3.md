@@ -254,10 +254,10 @@ Görev 5 tamamlanıp kullanıcı memnun kalmadan bunlara başlanmaz.
   durumda tutulması** — izleme/health-check mekanizması (bot çöktü mü,
   abonelik sızıntısı var mı, backfill takıldı mı gibi durumları tespit
   edip bildiren bir katman; şu an sadece konsol logları var).
-- **Navbar'daki Alert butonunun işlevsel hale getirilmesi** — buton şu an
-  hiçbir modal açmıyor (bkz. `gorevler2.md` Görev 10.2, `modal:alarm:open`
-  event'i dinleyicisiz), Kom1'den bağımsız manuel fiyat alarmı kurma
-  özelliği.
+- ~~Navbar'daki Alert butonunun işlevsel hale getirilmesi~~ — **✅ Tamamlandı
+  (2026-08-10)**, bkz. `gorevler2.md` Görev 11.5 — çizim tabanlı (trendline/
+  ray/extended/hline/hray/trendangle/infoline) fiyat alarmları, gerçek
+  tetikleme + kalıcı depolama ile. Kom1'den bağımsız, manuel.
 - **Alert → Telegram bildirim entegrasyonu** — bot token/chat id
   yapılandırması gerekecek, kullanıcının Telegram tarafını ayrıca
   kurması gerekiyor.

@@ -375,24 +375,42 @@ Kod taraması sırasında koda bakılarak doğrulanmış, henüz hiçbir kuyrukt
 
 **Bonus — ikinci fiyat etiketi (kullanıcı isteği):** Heikin Ashi modunda artık TradingView'daki gibi İKİ fiyat gösteriliyor — serinin kendi last-value etiketi (HA kapanışı, `lastValueVisible: this.useHeikinAshi===true`) + mevcut `_livePriceLine` (ham fiyat, geri sayımlı). Normal mumda ikinci etiket kapalı kalıyor (gereksiz/yanıltıcı olmasın diye). `_onRangeChange()`'in her scroll'da `lastValueVisible`'ı sabit `false` yapan tutarsız kodu da aynı anda düzeltildi (aksi halde HA etiketi ilk kaydırmada sönerdi).
 
-### 11.3 — Chart Settings modalının ~%60-65'i tamamen kozmetik (hiçbir işleve bağlı değil)
+### [x] 11.3 — Chart Settings modalının ~%60-65'i tamamen kozmetik — kullanıcı kararı geldi, kısmen uygulandı (2026-08-10)
 
 Tam denetim (`js/chart/ui/chart-settings.js` her `data-key` × `chart-pane.js applySettings()` çapraz kontrolü):
 
-- **Trading sekmesi** — 18 kontrolün TAMAMI (Buy/sell buttons, one-click trading, brackets, positions, execution marks, vb.) `applySettings`'e hiç bağlı değil. Beklenen: proje gerçek bir order execution terminali değil, bu sekme muhtemelen TradingView'ı görsel olarak taklit etmek için scaffold edilmiş, hiç doldurulmamış.
-- **Alerts sekmesi** — 5 kontrolün tamamı bağlı değil.
-- **Events sekmesi** — 9 kontrolün tamamı bağlı değil.
-- **Status line sekmesi** — 7 kontrolden sadece `showVolume` çalışıyor, diğer 6'sı (statusLogo, statusTitle, statusMarket, statusChartValues, statusBarChange, statusBg) bağlı değil.
-- **Scales and lines sekmesi** — `highLow`/`prevDayClose`/`bidAsk`/`scalesPlacement`/`countdown`/`symName`/`symValue`/`symLine`/`timezone` çalışıyor; ama `hlColor`/`bidColor`/`askColor`/`prevDayColor`/`symbolLabelColor` gibi renk seçicilerin çoğu ve `lockPriceToBar`/`noOverlapLabels` (state'e yazılıyor ama davranışa hiç bağlanmamış — "yarı ölü") dahil ~14 kontrol çalışmıyor.
-- **Canvas sekmesi** — 13 kontrolden 10'u çalışıyor (bgType/bgColor/gridType/crosshairColor/watermarkMode/scaleTextColor/scaleFontSize/scaleLinesColor/marginTop/marginBottom); `watermarkColor`, `navBtnVisibility`, `paneBtnVisibility`, `marginRight` bağlı değil.
-- **Symbol sekmesi** — tek tam çalışan sekme, 9/9 kontrol doğru bağlı.
+- **Trading sekmesi** — 18 kontrolün TAMAMI `applySettings`'e hiç bağlı değildi. **Kullanıcı kararı: TAMAMEN KALDIRILDI** — TradingView'ın Paper Trading entegrasyonundan geliyor, bu projede karşılığı yok. `TABS` dizisinden, `tabTrading()` fonksiyonundan ve render satırından silindi.
+- **Alerts sekmesi** — **kullanıcı kararı: GERÇEK bir özelliğe dönüştürüldü**, bkz. aşağıdaki 11.5.
+- **Events sekmesi** — 9 kontrolün tamamı bağlı değildi. **Kullanıcı kararı: sadece "Session breaks" kaldı**, diğer 6'sı (Ideas, Economic events, Only future events, Events breaks, Latest news, News notification) kaldırıldı — proje ayrı bir News sekmesine sahip, tekrarı gereksizdi. Session breaks henüz `applySettings()`'e bağlı değil (ayrı, küçük bir iş — davranışa bağlanmadan sadece UI'da bırakıldı).
+- **Status line sekmesi** — kullanıcı bu tura dahil etmedi, hâlâ 6/7 kontrol bağlı değil (izleme listesine taşındı, aşağıda).
+- **Scales and lines sekmesi** — ~14 kontrol hâlâ bağlı değil (renk seçicilerin çoğu, `lockPriceToBar`/`noOverlapLabels`) — kullanıcı bu tura dahil etmedi.
+- **Canvas sekmesi** — `watermarkColor`, `navBtnVisibility`, `paneBtnVisibility`, `marginRight` hâlâ bağlı değil — kullanıcı bu tura dahil etmedi.
+- **Symbol sekmesi** — zaten tam çalışıyordu, dokunulmadı.
 
-**Yapılacak (taslak, kullanıcı kararı gerekiyor):** Bu büyük bir kapsam kararı — seçenekler: (a) çalışmayan kontrolleri gerçek işleve bağlamak (özellikle Trading/Alerts/Events için karşılığı olmayan büyük özellik işleri gerektirir, muhtemelen bu projenin kapsamı dışı), (b) çalışmayan sekmeleri/kontrolleri UI'dan tamamen kaldırmak (kullanıcıyı yanıltmasın diye), (c) olduğu gibi bırakmak. Hangisi istenirse ayrı, kullanıcı onaylı bir alt görev.
+### [x] 11.5 — Çizim tabanlı fiyat alarmları (kullanıcı isteği, 2026-08-10) — YENİ, büyük özellik
+
+**Kapsam (kullanıcı onaylı):**
+- Alarm kaynağı: SADECE 7 çizim aracı — `trendline, ray, extended, hline, hray, trendangle, infoline`.
+- Çizim özellik menüsündeki zil ikonu (`property-toolbar.js`, önceden sadece "yakında" `alert()`'i gösteriyordu) artık gerçekten alarm oluşturuyor — ikon zaten Navbar'ın ⏰ Alert ikonuyla birebir aynıydı (aynı SVG path), ek değişiklik gerekmedi.
+- Navbar ⏰ Alert butonu (önceden sadece "preview, kaydetmiyor" diyen bir modal) artık gerçekten kaydediyor; bir çizgi seçiliyse fiyatı önceden dolduruyor.
+- Tetikleme BU TURDA dahil: canlı fiyat (MarketDataStore'un zaten yayınladığı `mds:tick`, kendi ayrı akış AÇILMADI) alarm seviyesini geçince Toast bildirimi + Web Audio beep + chart'ta çizgi güncellenir (tetiklenen alarm `onlyActiveAlerts=true` iken gizlenir).
+- Kalıcılık: localStorage (`pintrade_alerts` + `pintrade_alert_prefs`).
+- Eğik çizgilerin (trendline/ray/extended/trendangle/infoline) tetik fiyatı **TradingView'daki gibi çizgiyi canlı takip eder** — her fiyat kontrolünde kaynak çizim State'ten taze okunup o anki eğim+zamana göre yeniden hesaplanır; kullanıcı çizgiyi sürükleyip düzenlerse alarm da onunla birlikte güncellenir. (İlk versiyonda yanlışlıkla "oluşturma anında sabitlenip donuyor" şeklinde basitleştirilmişti — kullanıcı bunun eğik çizginin anlamını ortadan kaldırdığını belirtti, aynı gün düzeltildi, bkz. rapor.)
+
+**Yeni dosya:** `js/screener/alert-store.js` — `getAlerts/createFromDrawing/createManual/removeAlert/getPrefs/setPrefs/checkPrice/computeDrawingPrice`.
+
+**Değişen dosyalar:**
+- `js/drawing/ui/property-toolbar.js` — `hasAlert` artık sadece 7 desteklenen araçta true, `pt-btn-alert` tıklaması `AlertStore.createFromDrawing()` çağırıyor.
+- `js/core/app.js` — Alarm modalı gerçekten `AlertStore.createManual()` çağırıyor, seçili çizgi varsa fiyatı önceden dolduruyor. `Toast.show()` opsiyonel `duration` parametresi aldı (geriye dönük uyumlu).
+- `js/chart/chart-pane.js` — yeni `_updateAlertLines()` (AlertStore'daki bu pane'in sembolüne ait alarmları çizgi olarak render eder), `_buildSeries()`'te seri yeniden kurulunca `_alertPriceLines` sıfırlanıyor (Görev 11.1'deki `_livePriceLine` bug'ıyla aynı sınıf hata, önceden önlendi).
+- `js/chart/ui/chart-settings.js` — Alerts sekmesindeki ayarlar (renk/görünürlük/ses/toast süresi) artık pane'e değil **AlertStore'un global tercihlerine** yazılıyor (bir alarm, o an aktif olmayan bir pane/sembolde de tetiklenebildiği için "hangi pane'in ayarı geçerli" belirsizliği olmasın diye bilinçli mimari karar). `buildSlider()` opsiyonel `key` parametresi aldı (ses düzeyi slider'ı önceden hiçbir `data-key`'e sahip değildi, tamamen kayıp bir ayardı — bu da ayrıca düzeltildi).
+
+**⚠️ Test sırasında bulunan KRİTİK bug (kendi eklediğim kod, hemen düzeltildi):** Alerts sekmesi senkron kodunu yanlışlıkla `if (pane) {...}` bloğunun DIŞINA yazdım — `setCheck`/`setColor` o bloğa scope'lu olduğu için `ReferenceError` fırlatıp **TÜM Settings modalının** (sadece Alerts değil — Cancel/Ok/X butonları dahil TÜMÜ) sessizce çalışmaz hale gelmesine yol açıyordu. Test sırasında (Cancel butonunun bile modalı kapatmadığını fark ederek) yakalandı ve düzeltildi — bkz. rapor.
 
 ### Doğrulama
 
-- 11.1/11.2/11.4: kod içi testlerle doğrulandı (yukarıda özetlendi), lokal sunucuda konsol hatasız.
-- 11.3: henüz uygulanmadı, kullanıcı hangi seçeneği (a/b/c) istediğini belirtince ayrıca ele alınacak.
+- 11.1/11.2/11.4/11.5: kapsamlı kod içi testlerle doğrulandı (yukarıda özetlendi + rapor), lokal sunucuda konsol hatasız. hline/trendline'dan doğru fiyat hesabı, crossing tetikleme, onlyActiveAlerts filtresi, Chart Settings round-trip, property-toolbar + navbar entegrasyonu ayrı ayrı test edildi.
+- 11.3 kalan kısmı (Status line, Scales, Canvas'taki kalan kozmetik kontroller): kullanıcı bu tura dahil etmedi, izleme listesine taşındı.
 
 **Rapor:** `2026-08-10-gorev11-chart-settings-denetimi.md`
 

@@ -102,7 +102,8 @@ class ChartPane {
 
     // Dummy tracking variables for new features
     this._lastPrice = null;
-    this._priceLines = {}; // Store custom lines 
+    this._priceLines = {}; // Store custom lines
+    this._alertPriceLines = {}; // gorevler2.md Görev 11 — AlertStore çizgileri (id -> priceLine)
 
     this.chart      = null;
     this.series     = null;
@@ -422,6 +423,13 @@ class ChartPane {
     EventBus.on('feed:olderCandles', (payload) => this._onOlderCandles(payload));
     EventBus.on('feed:tick',         (payload) => this._onFeedTick(payload));
     EventBus.on('feed:liveCandle',   (payload) => this._onLiveCandle(payload));
+
+    // gorevler2.md Görev 11 (2026-08-10) — AlertStore çizgilerini canlı tut.
+    const _onAlertChange = (a) => { if (!a || a.symbol === this.symbol) this._updateAlertLines(); };
+    EventBus.on('alert:created',      _onAlertChange);
+    EventBus.on('alert:removed',      () => this._updateAlertLines());
+    EventBus.on('alert:triggered',    _onAlertChange);
+    EventBus.on('alert:prefsChanged', () => this._updateAlertLines());
   }
 
   // ── Global Drawing Refresh ──────────────────────────────
@@ -471,6 +479,7 @@ class ChartPane {
     // 2026-08-10, Heikin Ashi açılışında keşfedildi ama her seri yeniden
     // kurulumunu (chart tipi/stil değişimi) etkileyen genel bir bug'dı.
     this._livePriceLine = null;
+    this._alertPriceLines = {}; // aynı sebep — eski seriye bağlı referanslar geçersiz olur
     this.series = this.volSeries = null;
 
     const pScaleId = this.priceSide === 'left' ? 'left' : 'right';
@@ -695,6 +704,7 @@ class ChartPane {
     this._lastCandleTime = last?.time ?? null;
 
     this._updateVisualLines(deduped);
+    this._updateAlertLines();
     requestAnimationFrame(() => this._positionCountdown());
 
     if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
@@ -749,6 +759,7 @@ class ChartPane {
       this._lastPriceIsUp  = safe.close >= safe.open;
       this._lastCandleTime = safe.time;
       this._updateLivePriceLine();
+      this._updateAlertLines(); // eğik çizgiden gelen alarmların çizgisi canlı takip etsin
     } catch (err) {
       console.warn('[ChartPane] _onFeedTick update failed:', err);
       // Lightweight-charts rejects updates older than last bar — safe to ignore
@@ -806,6 +817,7 @@ class ChartPane {
       this._lastPriceIsUp  = safe.close >= safe.open;
       this._lastCandleTime = safe.time;
       this._updateLivePriceLine();
+      this._updateAlertLines(); // eğik çizgiden gelen alarmların çizgisi canlı takip etsin
 
       // candlesData'yı güncelle
       if (lastExistingTime && safe.time === lastExistingTime) {
@@ -959,6 +971,41 @@ class ChartPane {
       addLine('ask', this._lastPrice + 0.5, 'Ask', showLine ? '#f23645' : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
       addLine('bid', this._lastPrice - 0.5, 'Bid', showLine ? '#2962ff' : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
     } else { removeLine('ask'); removeLine('bid'); }
+  }
+
+  // gorevler2.md Görev 11 (2026-08-10) — AlertStore'daki (js/screener/alert-store.js)
+  // bu pane'in sembolüne ait alarmları çizgi olarak render eder. Ayarlar
+  // (renk/görünürlük/sadece-aktif) BİLEREK pane'e değil AlertStore'un global
+  // tercihlerine bağlı — bkz. alert-store.js başlığı notu.
+  _updateAlertLines() {
+    if (!this.series || !window.AlertStore) return;
+    const prefs  = window.AlertStore.getPrefs();
+    const alerts = window.AlertStore.getAlerts(this.symbol);
+    const wanted = new Set();
+
+    if (prefs.alertLines) {
+      alerts.forEach(a => {
+        if (prefs.onlyActiveAlerts && a.triggered) return;
+        wanted.add(a.id);
+        const color = a.triggered ? 'rgba(120,123,134,0.6)' : (prefs.alertLinesColor || '#f23645');
+        if (this._alertPriceLines[a.id]) {
+          this._alertPriceLines[a.id].applyOptions({ price: a.price, color });
+        } else {
+          this._alertPriceLines[a.id] = this.series.createPriceLine({
+            price: a.price, color, lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true, title: 'Alert',
+          });
+        }
+      });
+    }
+
+    Object.keys(this._alertPriceLines).forEach(id => {
+      if (!wanted.has(id)) {
+        try { this.series.removePriceLine(this._alertPriceLines[id]); } catch (_) {}
+        delete this._alertPriceLines[id];
+      }
+    });
   }
 
   // ── Crosshair move ────────────────────────────────────────

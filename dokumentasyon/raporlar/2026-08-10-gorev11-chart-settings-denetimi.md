@@ -1,4 +1,4 @@
-# gorevler2.md Görev 11 — Chart Settings Denetimi (11.1, 11.2, 11.4 Tamamlandı)
+# gorevler2.md Görev 11 — Chart Settings Denetimi (11.1, 11.2, 11.3-kısmen, 11.4, 11.5 Tamamlandı)
 
 **Tarih:** 2026-08-10
 
@@ -94,14 +94,145 @@ Kullanıcının "başka kaydedilmeyen bir şey var mı" sorusu üzerine bulundu:
 sonrası `getState()`'te tüm alanların doğru round-trip ettiği doğrulandı
 (hepsi `true`).
 
-## 11.3 — HENÜZ YAPILMADI (kullanıcı kararı bekliyor)
+## 11.3 — Kullanıcı kararı geldi, kısmen uygulandı (2026-08-10)
 
-Chart Settings modalının ~%60-65'i (Trading sekmesinin tamamı — 18 kontrol,
-Alerts'in tamamı — 5, Events'in tamamı — 9, Status line'ın 6/7'si, Scales'in
-~14 kontrolü, Canvas'ın 4 kontrolü) `applySettings()`'e hiç bağlı değil,
-tamamen kozmetik. Bu büyük bir kapsam kararı gerektiriyor:
-(a) gerçek işleve bağlamak, (b) UI'dan kaldırmak, (c) olduğu gibi bırakmak.
-Kullanıcı hangisini istediğini belirtmeden dokunulmadı.
+- **Trading sekmesi (18 kontrol):** tamamen kaldırıldı — TradingView'ın Paper
+  Trading entegrasyonundan geliyordu, bu projede karşılığı yok. `TABS`
+  dizisinden, `tabTrading()` fonksiyonundan, render satırından silindi.
+- **Events sekmesi (9 kontrol):** 6'sı kaldırıldı (Ideas, Economic events,
+  Only future events, Events breaks, Latest news, News notification) —
+  proje ayrı bir News sekmesine sahip, tekrarı gereksizdi. Sadece "Session
+  breaks" kaldı (henüz `applySettings()`'e bağlı değil, ayrı iş).
+- **Alerts sekmesi (5 kontrol):** gerçek bir özelliğe dönüştürüldü, bkz. 11.5.
+- **Status line (6/7), Scales (~14), Canvas (4) kalan kozmetik kontroller:**
+  kullanıcı bu tura dahil etmedi, izleme listesine taşındı.
+
+## 11.5 — Çizim tabanlı fiyat alarmları (kullanıcı isteği, 2026-08-10) — YENİ
+
+### Kapsam (kullanıcı onaylı)
+
+- Alarm kaynağı: SADECE 7 çizim aracı — trendline, ray, extended, hline,
+  hray, trendangle, infoline.
+- Property toolbar'daki zil ikonu (`property-toolbar.js`, önceden sadece
+  "yakında" `alert()`'i gösteriyordu — kod zaten vardı ama işlevsizdi) ve
+  Navbar'ın ⏰ Alert butonu (önceden sadece "preview, kaydetmiyor" diyen bir
+  modal) artık AYNI `AlertStore`'u paylaşıyor. İki ikon zaten AYNI SVG'ye
+  sahipti (kontrol edildi, ek değişiklik gerekmedi).
+- Tetikleme BU TURDA dahil: `MarketDataStore`'un zaten yayınladığı
+  `mds:tick`'e abone olunuyor (kendi ayrı fiyat akışı AÇILMADI — mimari
+  kural). Fiyat alarm seviyesini geçince: Toast + Web Audio beep + chart
+  çizgisi güncellenir.
+- Kalıcılık: localStorage (`pintrade_alerts` alarmlar, `pintrade_alert_prefs`
+  görsel/bildirim tercihleri).
+- Eğik çizgilerin tetik fiyatı **TradingView'daki gibi çizgiyi canlı
+  takip eder** (bkz. aşağıdaki "İlk versiyon düzeltmesi" — ilk halinde
+  yanlışlıkla oluşturma anında sabitleniyordu, kullanıcı geri bildirimiyle
+  aynı gün düzeltildi).
+
+### Mimari karar — alarm tercihleri neden pane'e değil AlertStore'a
+
+Chart Settings > Alerts sekmesindeki ayarlar (renk, görünürlük, ses,
+toast süresi) BİLEREK `chart-pane.js`'e değil `alert-store.js`'in global
+tek tercih setine yazılıyor: bir alarm, o an aktif OLMAYAN bir pane/sembolde
+de tetiklenebilir — "hangi pane'in ayarı geçerli" belirsizliği olmasın diye.
+
+### Yeni dosya
+
+`js/screener/alert-store.js` — `getAlerts/createFromDrawing/createManual/
+removeAlert/getPrefs/setPrefs/checkPrice/computeDrawingPrice`.
+
+### Değişen dosyalar (11.5 için)
+
+- `js/drawing/ui/property-toolbar.js` — `hasAlert` artık sadece 7 desteklenen
+  araçta true (önceden `!['rotatedrect','triangle','pathtool','circle','arc']`
+  — yani hemen hemen HER araçta görünüyordu), `pt-btn-alert` tıklaması artık
+  `AlertStore.createFromDrawing()` çağırıyor.
+- `js/core/app.js` — Alarm modalı artık `AlertStore.createManual()` çağırıp
+  gerçekten kaydediyor; seçili bir çizgi varsa (`drawing:selected` ile takip
+  ediliyor) fiyatı önceden dolduruyor. `Toast.show()` opsiyonel `duration`
+  parametresi aldı (varsayılan 3000ms, geriye dönük uyumlu).
+- `js/chart/chart-pane.js` — yeni `_updateAlertLines()`, `feed:candles` ve
+  `alert:created/removed/triggered/prefsChanged` event'lerinde çağrılıyor.
+  `_buildSeries()`'te `_alertPriceLines` sıfırlanıyor (Görev 11.1'deki
+  `_livePriceLine` bug'ıyla aynı sınıf — seri yeniden kurulunca eski
+  referanslar geçersiz kalıyordu).
+- `js/chart/ui/chart-settings.js` — Alerts sekmesi artık AlertStore'dan
+  okuyor/yazıyor. `buildSlider()` opsiyonel `key` parametresi aldı — "Alert
+  volume" sürgüsü önceden HİÇBİR `data-key`'e sahip değildi, `readFormState()`
+  onu hiç okuyamıyordu, tamamen kayıp bir ayardı (Status line'daki "Background"
+  sürgüsü de aynı durumda ama bu tur kapsamı dışında, dokunulmadı).
+
+### ⚠️ Test sırasında bulunan kritik bug (kendi eklediğim kod, hemen düzeltildi)
+
+Alerts sekmesinin AlertStore-senkron kodunu yanlışlıkla `if (pane) {...}`
+bloğunun DIŞINA yazdım. O bloktaki `setCheck`/`setColor` yardımcı fonksiyonları
+sadece o bloğa scope'lu — dışarıdan çağrılınca `ReferenceError: setCheck is
+not defined` fırlatıyordu. `EventBus`'ın `settings:open` handler'ını
+try/catch içine aldığı için hata sessizce yutuluyordu — ama bu, handler'ın
+GERİ KALANININ (showTab kurulumu, `.tv-close`/`.tv-btn-cancel`/`.tv-btn-ok`
+click listener'larının atanması) HİÇ ÇALIŞMAMASI anlamına geliyordu.
+Sonuç: **TÜM Settings modalı** (sadece Alerts sekmesi değil — Cancel/Ok/X
+butonlarının hiçbiri) kullanılamaz hale gelmişti.
+
+**Nasıl yakalandı:** "Alert ayarları OK sonrası neden kaydedilmiyor" diye
+test ederken, kontrol amaçlı Cancel butonunun bile modalı kapatmadığını fark
+ettim — bu, sorunun Alerts'e özel değil TÜM modal için olduğunu gösterdi.
+Konsolda `ReferenceError: setCheck is not defined` (chart-settings.js:597)
+görüldü, kök neden netleşti.
+
+**Düzeltme:** AlertStore-senkron bloğu `if (pane) {...}`'in İÇİNE, kapanış
+`}`'inden hemen önce taşındı.
+
+**Test (düzeltme sonrası):** Alerts sekmesinde renk/checkbox/slider değiştirip
+Ok'a basınca `AlertStore.getPrefs()`'in doğru güncellendiği, modalın düzgün
+kapandığı, VE diğer sekmelerdeki (Symbol > showVolume) ayarların da hâlâ
+doğru çalıştığı (regresyon yok) doğrulandı.
+
+### Doğrulama (11.5)
+
+- `hline`(sabit) ve `trendline`(eğimden projekte, elle hesapla karşılaştırıldı:
+  100+(20/3600)*3600=120 ✅) için doğru tetik fiyatı hesabı.
+- Desteklenmeyen araç (`rect`) → `createFromDrawing` `null` döner, property
+  toolbar'da zil ikonu hiç görünmez — ikisi de doğrulandı.
+- Crossing tetikleme: taze bir sembolde önce alt seviyede tick, sonra üst
+  seviyede tick → `triggered` doğru sırada `false`→`true` geçti (ilk testte
+  gerçek BTCUSDT'nin arka planda akan canlı tick'i yanıltıcı sonuç verdi,
+  uydurma bir sembolle temiz tekrar edildi).
+- `onlyActiveAlerts` filtresi: 2 alarm → 2 çizgi, biri tetiklenince → 1
+  çizgi, `onlyActiveAlerts=false` yapılınca → 2 çizgi (tetiklenen gri renkte).
+- Navbar modalı: seçili çizgiden fiyat önceden doluyor, "Create" gerçekten
+  `AlertStore`'a kaydediyor (2→3 alarm sayısı).
+- Property toolbar zil ikonu: tıklanınca gerçekten alarm oluşturuyor (3→4),
+  Toast doğru gösteriliyor.
+- Ekran görüntüsüyle görsel doğrulama: chart üzerinde "Alert 106.500" yeşil
+  kesikli çizgi (kullanıcının ayarladığı renk, localStorage'dan kalıcı
+  şekilde geri geldi — sayfa/sekme değişse de korunuyor) High/Low ve fiyat
+  etiketiyle birlikte sorunsuz render oluyor.
+
+### İlk versiyon düzeltmesi — eğik çizgi alarmları artık gerçekten canlı takip ediyor
+
+İlk implementasyonda (yukarıdaki testler o sürümle yapılmıştı) eğik çizgi
+alarmlarının tetik fiyatı **oluşturma anında hesaplanıp sabitleniyordu** —
+kullanıcı haklı olarak bunun eğik çizgi kullanmanın anlamını ortadan
+kaldırdığını belirtti ("105'te sabit tutacaksan eğik çizginin ne anlamı
+kalır"). Düzeltildi:
+
+- Yeni `_resolveTriggerPrice(alert)`: `sourceDrawingId`'si olan alarmlarda
+  kaynak çizim `State.getDrawings(symbol)`'dan HER fiyat kontrolünde TAZE
+  okunup `computeDrawingPrice()` ile yeniden hesaplanıyor — hem zaman
+  geçtikçe (eğim boyunca ilerler) hem kullanıcı çizgiyi sürükleyip
+  düzenlerse (yeni p1/p2 okunur) alarm güncel kalıyor. Çizim silinmişse son
+  bilinen sabit fiyata düşülüyor (makul bir yedek davranış).
+- `checkPrice()` artık `a.price`'ı sabit okumak yerine her tick'te
+  `_resolveTriggerPrice()` çağırıp güncelliyor — hem crossing kontrolü hem
+  chart'taki görsel çizgi (`_updateAlertLines`, artık `_onFeedTick`/
+  `_onLiveCandle`'da da çağrılıyor) güncel değeri kullanıyor.
+
+**Test:** Bir trendline'dan alarm oluşturulup (t anında çizgi 100$'da, alarm
+100$ ile başladı), sonra çizgi "sürüklenmiş" gibi p2.price State üzerinden
+değiştirildi (130$'a) → bir sonraki fiyat kontrolünde alarmın `price`'ı
+otomatik olarak 130$'a güncellendi (donmadı). Crossing testi de aynı
+mekanizmayla (sabit bir hedefe karşı) doğrulandı.
 
 ## Regresyon
 
@@ -116,4 +247,13 @@ Kullanıcı hangisini istediğini belirtmeden dokunulmadı.
 
 - `js/chart/chart-pane.js`
 - `js/chart/chart-core.js`
+- `js/chart/ui/chart-settings.js`
+- `js/drawing/ui/property-toolbar.js`
+- `js/core/app.js`
+- `index.html` (yeni script etiketi: `js/screener/alert-store.js`)
 - `dokumentasyon/gorevler/gorevler2.md`
+- `dokumentasyon/gorevler/gorevler3.md` (Navbar Alert backlog notu güncellendi)
+
+## Yeni dosyalar
+
+- `js/screener/alert-store.js`
