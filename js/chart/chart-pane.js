@@ -10,6 +10,13 @@ class ChartPane {
     // gösterilmesin (Bybit '45m' için sessizce 1H mumu çekiyordu).
     this.tf           = (s.tf && TF_LIST.includes(s.tf)) ? s.tf : DEFAULTS.tf;
     this.chartType    = s.chartType   ?? DEFAULTS.chartType;
+    // Heikin Ashi (gorevler2.md izleme listesi, 2026-08-10) — series tipi hâlâ
+    // 'candle' kalır (_buildSeries değişmez), sadece render'a giden OHLC verisi
+    // IndicatorEngine.calcHeikinAshi ile dönüştürülür. _haPrevClosed, HA'nın
+    // kayan hesabı için son KAPANMIŞ bar'ın ha_open/ha_close'unu tutar — bkz.
+    // _rebuildHaBase()/_haTransformLive().
+    this.useHeikinAshi = s.useHeikinAshi ?? false;
+    this._haPrevClosed = null;
     this.scaleMode    = s.scaleMode   ?? DEFAULTS.scaleMode;
     this.priceSide    = s.priceSide   ?? DEFAULTS.priceSide;
     this.showGrid     = s.showGrid    ?? DEFAULTS.showGrid;
@@ -509,6 +516,53 @@ class ChartPane {
     if (window.ChartPhantom) ChartPhantom.init(this);
   }
 
+  // ── Heikin Ashi dönüşümü (gorevler2.md izleme listesi, 2026-08-10) ──────
+  // `candles` HAM OHLC (Binance/Bybit'ten geldiği gibi) — burada IndicatorEngine
+  // ile HA'ya çevrilip candlestick-uyumlu {time,open,high,low,close} dizisine
+  // dönüştürülür. `this.candlesData` (magnet mode, ChartPhantom, fiyat çizgileri)
+  // ham veriyle kalmaya devam eder — sadece SERİYE giden veri HA'ya çevrilir.
+  _haFullSeries(rawCandles) {
+    const opens  = rawCandles.map(d => d.open);
+    const highs  = rawCandles.map(d => d.high);
+    const lows   = rawCandles.map(d => d.low);
+    const closes = rawCandles.map(d => d.close);
+    const ha = IndicatorEngine.calcHeikinAshi(opens, highs, lows, closes, true);
+    if (!ha) return rawCandles;
+    // Kayan hesabın tabanı: SON bar'ı değil, bir ÖNCEKİ (kesin kapanmış) bar'ı
+    // baz alıyoruz — geçmiş yüklemesinin son bar'ı genelde hâlâ oluşuyor
+    // olabilir (canlı), sonraki tick'ler bunu bu tabana göre yeniden hesaplar.
+    // Tek bar varsa (ör. ilk yükleme) o bar'ın kendisi taban olur.
+    const baseIdx = ha.series.length >= 2 ? ha.series.length - 2 : ha.series.length - 1;
+    this._haPrevClosed = { haOpen: ha.series[baseIdx].haOpen, haClose: ha.series[baseIdx].haClose };
+    return rawCandles.map((d, i) => ({
+      time: d.time,
+      open: ha.series[i].haOpen, high: ha.series[i].haHigh,
+      low:  ha.series[i].haLow,  close: ha.series[i].haClose,
+      volume: d.volume,
+    }));
+  }
+
+  // Canlı/tekli bir HAM bar'ı, `_haPrevClosed` tabanına göre HA'ya çevirir.
+  // Bar henüz kapanmadıysa (isClosed=false) taban SABİT kalır — sadece bu
+  // bar'ın ha_close/ha_high/ha_low'u her tick'te yeniden hesaplanır (doğru
+  // "kayan hesap" davranışı, bkz. modül başlığı notu). Bar kapandığında
+  // (isClosed=true) az önce gösterilen HA değeri yeni taban olur.
+  _haTransformLive(raw, isClosed) {
+    if (!this._haPrevClosed) {
+      // Taban hiç yok (ör. HA açılır açılmaz ilk canlı tick geldi, henüz
+      // _onFeedCandles hiç çalışmadı) — bu bar'ı kendi tabanı say.
+      this._haPrevClosed = { haOpen: (raw.open + raw.close) / 2, haClose: (raw.open + raw.high + raw.low + raw.close) / 4 };
+    }
+    const prev = this._haPrevClosed;
+    const haOpen  = (prev.haOpen + prev.haClose) / 2;
+    const haClose = (raw.open + raw.high + raw.low + raw.close) / 4;
+    const haHigh  = Math.max(raw.high, haOpen, haClose);
+    const haLow   = Math.min(raw.low, haOpen, haClose);
+    const result = { time: raw.time, open: haOpen, high: haHigh, low: haLow, close: haClose, volume: raw.volume };
+    if (isClosed) this._haPrevClosed = { haOpen, haClose };
+    return result;
+  }
+
   _loadData() {
     if (!this.series) return;
     
@@ -590,7 +644,7 @@ class ChartPane {
     this.series.setData(
       isLine
         ? deduped.map(d => ({ time: d.time, value: d.close }))
-        : deduped
+        : (this.useHeikinAshi ? this._haFullSeries(deduped) : deduped)
     );
 
     if (this.volSeries) {
@@ -649,7 +703,9 @@ class ChartPane {
       return;
     }
 
-    const update = isLine ? { time: safe.time, value: safe.close } : safe;
+    const update = isLine
+      ? { time: safe.time, value: safe.close }
+      : (this.useHeikinAshi ? this._haTransformLive(safe, !!isClosed) : safe);
 
     try {
       this.series.update(update);
@@ -704,7 +760,9 @@ class ChartPane {
     if (lastExistingTime && safe.time < lastExistingTime) return;
 
     const isLine = ['line', 'area'].includes(this.chartType);
-    const update = isLine ? { time: safe.time, value: safe.close } : safe;
+    const update = isLine
+      ? { time: safe.time, value: safe.close }
+      : (this.useHeikinAshi ? this._haTransformLive(safe, !!isClosed) : safe);
 
     try {
       this.series.update(update);
@@ -792,7 +850,7 @@ class ChartPane {
       this.series.setData(
         isLine
           ? deduped.map(d => ({ time: d.time, value: d.close }))
-          : deduped
+          : (this.useHeikinAshi ? this._haFullSeries(deduped) : deduped)
       );
 
       if (this.volSeries) {
@@ -1008,6 +1066,16 @@ class ChartPane {
       const navBtn = document.getElementById('nav-chart-type');
       if (navBtn) navBtn.innerHTML = ICONS[type] ?? ICONS.candle;
     }
+  }
+
+  // gorevler2.md izleme listesi (2026-08-10) — Heikin Ashi'yi aç/kapat.
+  // chartType'a DOKUNMAZ (series tipi hep 'candle' kalır) — sadece render'a
+  // giden OHLC verisinin dönüştürülüp dönüştürülmeyeceğini belirler. Çağıran
+  // (app.js selectStyle) ardından setChartType('candle') çağırarak asıl
+  // _buildSeries()+_loadData() tetiklemesini yapar.
+  setHeikinAshi(enabled) {
+    this.useHeikinAshi = enabled;
+    this._haPrevClosed = null; // sembol/stil değişti, kayan hesabı sıfırla
   }
 
   setScaleMode(mode) {
@@ -1439,6 +1507,7 @@ class ChartPane {
     return {
       idx: this.idx,
       symbol: this.symbol, exchange: this.exchange, tf: this.tf, chartType: this.chartType,
+      useHeikinAshi: this.useHeikinAshi,
       scaleMode: this.scaleMode, priceSide: this.priceSide,
       showGrid: this.showGrid, showVolume: this.showVolume,
       invertScale: this.invertScale,

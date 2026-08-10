@@ -140,23 +140,35 @@ const IndicatorEngine = (() => {
   }
 
   /**
-   * Heikin Ashi — standart iteratif dönüşüm. Sadece SON bar'ın ha_open/ha_close
-   * değerini döner (Kom1'in ihtiyacı bu — tam seri gerekirse ayrıca genişletilebilir).
+   * Heikin Ashi — standart iteratif dönüşüm. Varsayılan modda sadece SON bar'ın
+   * ha_open/ha_close değerini döner (Kom1'in ihtiyacı bu). `returnSeries=true`
+   * verilirse chart'ın render katmanının ihtiyaç duyduğu TAM seri (her bar için
+   * ha_open/ha_high/ha_low/ha_close) de eklenir — geriye dönük uyumlu, mevcut
+   * çağıranlar (Kom1Scanner) etkilenmez.
    * NOT: ilk bar için ha_open = (open+close)/2 kabul edilir (standart yaklaşım) —
    * bu, dizinin BAŞINDAN itibaren mi yoksa gerçek geçmişin başından mı hesaplandığına
    * bağlı olarak son değerde küçük bir sapmaya yol açabilir; dizi yeterince uzunsa
-   * (Kom1 kullanım senaryosunda BARS kadar) bu sapma birkaç bar içinde sönümlenir.
+   * bu sapma birkaç bar içinde sönümlenir.
    */
-  function calcHeikinAshi(opens, highs, lows, closes) {
+  function calcHeikinAshi(opens, highs, lows, closes, returnSeries = false) {
     if (!opens || !opens.length || opens.length !== closes.length) return null;
     let haOpen  = (opens[0] + closes[0]) / 2;
     let haClose = (opens[0] + highs[0] + lows[0] + closes[0]) / 4;
+    let haHigh  = Math.max(highs[0], haOpen, haClose);
+    let haLow   = Math.min(lows[0], haOpen, haClose);
+    const series = returnSeries ? [{ haOpen, haHigh, haLow, haClose }] : null;
     for (let i = 1; i < closes.length; i++) {
       const newHaClose = (opens[i] + highs[i] + lows[i] + closes[i]) / 4;
       const newHaOpen  = (haOpen + haClose) / 2;
+      const newHaHigh  = Math.max(highs[i], newHaOpen, newHaClose);
+      const newHaLow   = Math.min(lows[i], newHaOpen, newHaClose);
       haOpen  = newHaOpen;
       haClose = newHaClose;
+      haHigh  = newHaHigh;
+      haLow   = newHaLow;
+      if (series) series.push({ haOpen, haHigh, haLow, haClose });
     }
+    if (returnSeries) return { haOpen, haClose, haHigh, haLow, series };
     return { haOpen, haClose };
   }
 

@@ -359,14 +359,16 @@ const App = {
       });
     };
 
-    // MS_ORDER'daki 8 stilden sadece 4'ü ChartPane.setChartType()'ın
-    // desteklediği seri tipleriyle örtüşüyor (Görev 10.2 — chart:style:change
-    // event'i yayınlanıyordu ama hiçbir dinleyicisi yoktu, mum tipi seçimi
-    // grafiğe hiç yansımıyordu). heikinashi/hollow/volume/baseline için
-    // chart-pane.js'de ayrı bir seri implementasyonu yok — o dördü için
-    // sessizce "hiçbir şey yapmamak" yerine açık bir "henüz yok" bildirimi
-    // gösteriliyor (mevcut SPOT/dayOpen "coming soon" örüntüsüyle tutarlı).
-    const CHART_TYPE_MAP = { candlestick: 'candle', bar: 'bar', line: 'line', area: 'area' };
+    // MS_ORDER'daki 8 stilden 5'i ChartPane.setChartType()'ın desteklediği seri
+    // tipleriyle örtüşüyor (Görev 10.2 — chart:style:change event'i yayınlanıyordu
+    // ama hiçbir dinleyicisi yoktu, mum tipi seçimi grafiğe hiç yansımıyordu).
+    // heikinashi artık gerçek IndicatorEngine.calcHeikinAshi dönüşümüyle
+    // destekleniyor (gorevler2.md izleme listesi, 2026-08-10) — series tipi
+    // hâlâ 'candle', sadece ChartPane.setHeikinAshi() ile veri dönüştürülüyor.
+    // hollow/volume/baseline için hâlâ ayrı bir seri implementasyonu yok — o
+    // üçü için sessizce "hiçbir şey yapmamak" yerine açık bir "henüz yok"
+    // bildirimi gösteriliyor (mevcut SPOT/dayOpen "coming soon" örüntüsüyle tutarlı).
+    const CHART_TYPE_MAP = { candlestick: 'candle', heikinashi: 'candle', bar: 'bar', line: 'line', area: 'area' };
 
     const selectStyle = (style) => {
       const { icon, label } = getMsMeta(style);
@@ -380,6 +382,7 @@ const App = {
       const chartType = CHART_TYPE_MAP[style];
       const pane = window.LayoutManager?.getActivePane?.();
       if (chartType && pane) {
+        if (typeof pane.setHeikinAshi === 'function') pane.setHeikinAshi(style === 'heikinashi');
         pane.setChartType(chartType);
       } else if (!chartType && window.Toast) {
         Toast.show(`${label} style is not implemented yet — still showing the previous type`, 'info');
