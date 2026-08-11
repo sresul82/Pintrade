@@ -722,6 +722,10 @@
                  alarmlarının listesi. AlarmSignalHistory (dp-alarm-tab, Kom1/2/3 strateji
                  sinyalleri) ile KARIŞTIRILMASIN — ayrı bir kavram, ayrı bir modül. -->
             <div class="dp-root" id="dp-alerts-tab" style="display: none; height:100%;"></div>
+            <!-- Indicators sidebar sekmesi (rsb-indicators, gorevler2.md Görev 14.2, 2026-08-11) —
+                 AKTİF pane'in ChartPane.indicators dizisini (Görev 14.1, EMA/DEMA/RSI)
+                 listeler. Global bir store DEĞİL — aktif chart değişince liste de değişir. -->
+            <div class="dp-root" id="dp-indicators-tab" style="display: none; height:100%;"></div>
             <div class="dp-root" id="dp-detail-tab">
               <!-- Üst Kısım -->
               <div class="dp-tech" id="dp-tech">
@@ -906,6 +910,14 @@
           </svg>
           <span class="rsb-label">Alerts</span>
         </button>
+        <!-- gorevler2.md Görev 14.2 (2026-08-11) — AKTİF pane'in eklenmiş
+             indikatörlerini (Görev 14.1, EMA/DEMA/RSI) listeler. -->
+        <button class="rsb-btn" id="rsb-indicators" title="Indicators">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
+            <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M11 27l5-9 5 5 6-11 6 7"></path>
+          </svg>
+          <span class="rsb-label">Ind.</span>
+        </button>
         </div>
         <div class="rsb-spacer" style="flex:1"></div>
 
@@ -943,6 +955,7 @@
   <script src="js/core/state.js"></script>
   <script src="js/screener/alert-store.js"></script>        <!-- Çizim tabanlı fiyat alarmları (gorevler2.md Görev 11) -->
   <script src="js/screener/alert-list-panel.js"></script>   <!-- Alarm listesi UI (gorevler2.md Görev 13) -->
+  <script src="js/screener/indicator-list-panel.js"></script>   <!-- Aktif pane'in indikatör listesi UI (gorevler2.md Görev 14.2) -->
   <script src="js/drawing/ui/dsd-tabs/dsd-utils.js"></script>
   <script src="js/drawing/ui/dsd-tabs/dsd-fibo-tabs.js"></script>
   <script src="js/drawing/ui/dsd-tabs/dsd-position-tabs.js"></script>

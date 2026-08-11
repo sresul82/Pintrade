@@ -1,4 +1,4 @@
-# gorevler2.md Görev 14.1 — Chart İndikatörleri: EMA/DEMA/RSI (Tamamlandı)
+# gorevler2.md Görev 14.1/14.2 — Chart İndikatörleri: EMA/DEMA/RSI + Sidebar Sekmesi (Tamamlandı)
 
 **Tarih:** 2026-08-11
 
@@ -140,17 +140,56 @@ boyut kullanıldığından fark birkaç piksel, gözle ayırt edilmiyor.
 Gerçek Binance/Bybit canlı veriyle (bu sandbox'ta erişilemedi) bir kez
 daha görsel kontrol önerilir.
 
-## Sırada
+## Görev 14.2 — Indicators sidebar sekmesi
 
-**Görev 14.2** (henüz başlanmadı, kullanıcı onayı bekliyor): Indicators
-sidebar sekmesi — artık gerçek veri var (`ChartPane.indicators`),
-Alerts sekmesine benzer bir liste + edit/delete paneli eklenebilir.
+**Kullanıcı geri bildirimi:** "matematik olarak calisiyor olabilir, ama
+fonksiyon olarak daha tam TVdeki gibi deil. simdilik sidebar sekmesi
+eklemeye devam et" — TV parity'sindeki eksikler (eye-toggle,
+görünürlük, daha fazla stil ayarı) bilinen bir borç olarak bırakıldı,
+kullanıcı sidebar sekmesine geçilmesini istedi.
+
+### Yapılanlar
+
+- `js/screener/indicator-list-panel.js` (yeni) — `AlertListPanel`'in
+  aynı görsel dilini (liste + edit/delete, TV tarzı) kullanıyor ama
+  veri kaynağı global bir store DEĞİL, AKTİF pane'in
+  `ChartPane.indicators` dizisi. Header'da aktif pane'in "SYMBOL, TF"'i
+  + "+" ekle butonu (mevcut navbar arama modalını tetikler, modal
+  tekrar inşa edilmedi). Her satır: renkli nokta + isim + "Length N ·
+  değer" + ⚙ (mevcut Görev 14.1 settings popup'ını açar) + 🗑
+  (`removeIndicator`).
+- `index.html`: `rsb-indicators` sidebar butonu + `dp-indicators-tab` +
+  script tag.
+- `js/core/app.js` `_bindSidebar()`: yeni sekme için standart
+  göster/gizle deseni eklendi.
+- `js/chart/chart-pane.js`: `addIndicator`/`removeIndicator`/
+  `updateIndicatorSettings` artık `EventBus.emit('pane:indicatorsChanged',
+  {paneIdx})` yayınlıyor (önceden bu event yoktu) — liste panelinin
+  canlı güncellenmesi için. Ayrıca mevcut `pane:activated` event'i de
+  dinleniyor (aktif chart değişince liste yenilensin diye).
+
+### Doğrulama
+
+- Sayfa yenilendikten sonra (localStorage restore) önceki turdan kalan
+  2 indikatör + yeni eklenen 2 indikatör TOPLAM 4 satır doğru
+  listelendi — bu aynı zamanda 14.1'in kalıcılığının da dolaylı
+  doğrulaması. ✅
+- Listeden 🗑 → satır ve `pane.indicators`'dan kayboldu (4→3). ✅
+- Listeden ⚙ → 14.1'in settings popup'ı doğru açıldı. ✅
+- "+" → Add Indicator arama modalını doğru açtı. ✅
+- Ekran görüntüsü: header "BTCUSDT, 1H" + "+", satırlar (nokta, isim,
+  Length+değer, ⚙/🗑) TV'ye yakın bir liste görünümünde render oldu. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
 
 ## Değişen/yeni dosyalar
 
 - `js/screener/indicator-engine.js` (`calcEMAFull`/`calcDEMAFull`/
   `calcRSIFull` eklendi, mevcut bot fonksiyonlarına dokunulmadı)
 - `js/chart/chart-pane.js` (indikatör alt-sistemi: overlay series, RSI
-  alt-chart, legend, canlı güncelleme, kalıcılık)
+  alt-chart, legend, canlı güncelleme, kalıcılık, `pane:indicatorsChanged`
+  event'i — 14.2)
 - `js/core/app.js` (`_bindIndicatorsModal()` — arama/ekleme modalı +
-  ayar popup'ı)
+  ayar popup'ı; `_bindSidebar()`'a `rsb-indicators` eklendi — 14.2)
+- `js/screener/indicator-list-panel.js` (yeni — 14.2)
+- `index.html` (`rsb-indicators` butonu + `dp-indicators-tab` + script
+  tag — 14.2)

@@ -594,6 +594,7 @@ class ChartPane {
     this.indicators.push(cfg);
     this._rebuildIndicatorOverlays();
     this._recomputeAllIndicators();
+    EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
     return cfg;
   }
 
@@ -602,6 +603,7 @@ class ChartPane {
     if (idx === -1) return;
     this.indicators.splice(idx, 1);
     this._rebuildIndicatorOverlays();
+    EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
   }
 
   updateIndicatorSettings(id, patch) {
@@ -610,6 +612,7 @@ class ChartPane {
     Object.assign(cfg, patch);
     this._rebuildIndicatorOverlays();
     this._recomputeAllIndicators();
+    EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
   }
 
   /** Aktif `this.indicators`e göre series/alt-chart'ları (yeniden) kurar. */

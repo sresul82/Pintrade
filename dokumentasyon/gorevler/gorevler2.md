@@ -818,11 +818,62 @@ birkaç piksel, gözle fark edilmiyor. Gerçek Binance/Bybit canlı
 veriyle (bu sandbox'ta erişilemedi) ayrıca bir kez daha görsel kontrol
 önerilir.
 
-### Sıradaki (Görev 14.2, henüz başlanmadı)
+### Kullanıcı geri bildirimi (14.1 sonrası)
 
-Indicators sidebar sekmesi (Alerts sekmesine benzer, hızlı) — artık
-gerçek veri var (`ChartPane.indicators`), listelenip düzenlenip
-silinebilir. Kullanıcı onayı bekliyor.
+"matematik olarak calisiyor olabilir, ama fonksiyon olarak daha tam
+TVdeki gibi deil. simdilik sidebar sekmesi eklemeye devam et" — TV
+parity'sindeki eksikler (ör. görünürlük/eye-toggle, çok daha fazla
+indikatör türü, stil sekmesi) bilinen bir borç olarak kaldı, kullanıcı
+şimdilik 14.2'ye (sidebar sekmesi) geçilmesini istedi.
+
+## [x] Görev 14.2 — Indicators sidebar sekmesi (2026-08-11)
+
+AlertListPanel'in aynı görsel dilini (liste + edit/delete ikonları, TV
+tarzı) kullanan yeni bir modül: `js/screener/indicator-list-panel.js`.
+**Önemli fark:** AlertStore gibi global bir store'dan OKUMUYOR — veri
+kaynağı AKTİF pane'in `ChartPane.indicators` dizisi (Görev 14.1).
+Multi-symbol grid layout'ta aktif chart değişince liste de değişir.
+
+### Yapılanlar
+
+- `IndicatorListPanel` — header'da aktif pane'in "SYMBOL, TF"'i + mavi
+  "+" ekle butonu (tıklanınca navbar'daki mevcut arama modalını —
+  `#btn-indicators` — tetikler, ayrı bir modal inşa edilmedi). Her satır:
+  renkli nokta + isim(kısaltma) + "Length N · değer", hover'sız her
+  zaman görünen ⚙ (settings, mevcut Görev 14.1 popup'ını
+  `indicator:editRequested` event'iyle açar) ve 🗑 (doğrudan
+  `pane.removeIndicator()`).
+- `index.html`: `rsb-indicators` sidebar butonu (Alerts'in yanına,
+  basit bir "trend line" SVG ikonu — navbar'ın Indicators ikonuna
+  DOKUNULMADI, ayrı bir ikon), `dp-indicators-tab` içerik alanı, script
+  tag.
+- `js/core/app.js` `_bindSidebar()`: `btns` dizisine `rsb-indicators`
+  eklendi, diğer sekmelerle aynı göster/gizle deseni.
+- `js/chart/chart-pane.js`: `addIndicator`/`removeIndicator`/
+  `updateIndicatorSettings` artık `EventBus.emit('pane:indicatorsChanged',
+  {paneIdx})` yayınlıyor — liste panelinin canlı güncellenmesi için
+  (önceden bu event hiç yoktu, sadece legend kendi DOM'unu güncelliyordu).
+  `IndicatorListPanel` ayrıca mevcut `pane:activated` event'ini de
+  dinliyor (aktif chart değişince liste yenilensin diye).
+
+### Doğrulama (tarayıcıda, gerçek modüllerle)
+
+- Sayfa yenilendikten sonra (localStorage'dan restore) önceki turda
+  eklenen 2 indikatörün + yeni eklenen 2 indikatörün TOPLAM 4 satır
+  olarak doğru listelendiği doğrulandı — bu aynı zamanda Görev 14.1'in
+  `getState()`/constructor kalıcılığının GERÇEKTEN çalıştığının da
+  dolaylı kanıtı. ✅
+- Listeden 🗑: satır kayboldu, `pane.indicators`'dan da silindi
+  (4→3 satır). ✅
+- Listeden ⚙: Görev 14.1'in settings popup'ı doğru açıldı. ✅
+- "+" butonu: navbar'daki Add Indicator arama modalını doğru açtı. ✅
+- Ekran görüntüsü: header "BTCUSDT, 1H" + mavi "+", 4 satır (renkli
+  nokta, isim, Length+değer, ⚙/🗑) TV'ye yakın bir liste görünümünde
+  render oldu. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
+**Rapor:** `2026-08-11-gorev14-chart-indikatorleri-ema-dema-rsi.md`
+(14.1 ile birlikte, aynı dosyaya eklendi)
 
 **Rapor:** `2026-XX-XX-gorev14-chart-indikator-sistemi.md`
 

@@ -727,7 +727,8 @@ const App = {
     // 'rsb-news' kaldırıldı — genel piyasa haberleri artık ayrı bir panel
     // değil, News sekmesinin (dp-news-tab) snipe kontrolü ile birleştirildi.
     // 'rsb-alerts' — gorevler2.md Görev 13 (2026-08-11), AlertStore listesi.
-    const btns = ['rsb-watchlist', 'rsb-alarms', 'rsb-alerts'];
+    // 'rsb-indicators' — gorevler2.md Görev 14.2 (2026-08-11), aktif pane'in indikatör listesi.
+    const btns = ['rsb-watchlist', 'rsb-alarms', 'rsb-alerts', 'rsb-indicators'];
     
     btns.forEach(id => {
       const btn = document.getElementById(id);
@@ -773,12 +774,16 @@ const App = {
         // dp-alerts-tab: rsb-alerts'e özel — AlertStore'daki kullanıcı fiyat
         // alarmlarının listesi (gorevler2.md Görev 13). alarmTab'dan AYRI.
         const alertsTab = document.getElementById('dp-alerts-tab');
+        // dp-indicators-tab: rsb-indicators'a özel — AKTİF pane'in
+        // ChartPane.indicators listesi (gorevler2.md Görev 14.2).
+        const indicatorsTab = document.getElementById('dp-indicators-tab');
 
         if (detailTab) detailTab.style.display = 'none';
         if (signalsTab) signalsTab.style.display = 'none';
         if (newsTab) newsTab.style.display = 'none';
         if (alarmTab) alarmTab.style.display = 'none';
         if (alertsTab) alertsTab.style.display = 'none';
+        if (indicatorsTab) indicatorsTab.style.display = 'none';
 
         // Hide/Show Watchlist components based on active tab
         const wlEls = document.querySelectorAll('.wl-header, #wl-search, #wl-col-header, #wl-list, #detail-resize, .detail-tabs');
@@ -835,6 +840,14 @@ const App = {
             detailTabBtn?.classList.remove('active');
             newsTabBtn?.classList.remove('active');
             if (window.AlertListPanel) AlertListPanel.init();
+          }
+
+          if (tab === 'rsb-indicators' && indicatorsTab) {
+            indicatorsTab.style.display = 'block';
+            signalsTabBtn?.classList.add('active'); // bkz. yukarıdaki 'detail' korumasi notu
+            detailTabBtn?.classList.remove('active');
+            newsTabBtn?.classList.remove('active');
+            if (window.IndicatorListPanel) IndicatorListPanel.init();
           }
         }
       }
