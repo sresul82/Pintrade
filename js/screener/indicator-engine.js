@@ -204,4 +204,9 @@ const IndicatorEngine = (() => {
   };
 })();
 
-window.IndicatorEngine = IndicatorEngine;
+// gorevler3.md Görev 5 (2026-08-11) — sunucu tarafı Kom1 shadow-logger
+// (js/screener/kom1-server-watcher.js) bu modülü Node'da require() ile
+// kullanabilsin diye izomorfik hâle getirildi. Tarayıcıda `window` var,
+// Node'da yok — davranış/hesap değişmedi, sadece dışa açma yolu eklendi.
+if (typeof window !== 'undefined') window.IndicatorEngine = IndicatorEngine;
+if (typeof module !== 'undefined' && module.exports) module.exports = IndicatorEngine;

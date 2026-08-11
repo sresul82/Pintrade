@@ -185,13 +185,53 @@ bu yüzden henüz başlamadı.
   başındaki karara sadık kalındı). Sorun çıkarsa doğrudan koda müdahale
   edilir, bir "ayar paneli" bu turda kurulmaz.
 
-### Yapılacak
+### [x] Ban kalktı, gözlem fiilen başladı (2026-08-11)
 
-- Ban geçtikten sonra (~2026-08-11 07:13 UTC), production'da Kom1Scanner'ın
-  gerçekten backfill tamamlayıp sinyal üretmeye başladığını doğrula.
-- İlk 10 kesinleşen sinyali (`Kom1Scanner.getConfirmedSignals()` veya alarm
-  sekmesi üzerinden) topla, her birini manuel değerlendir.
-- Bu süre boyunca ban/hata sıklığını izle (konsol/production logları).
+Production'da doğrulandı: backfill 22/22 istek başarılı, ban yok. Aynı gün
+iki büyük TF sinyali gerçekten ateşlendi (ONDOUSDT 1h, BERAUSDT 1h — 5dk
+onay penceresi açıldı).
+
+### [x] Sunucu taraflı "shadow" gözlemci eklendi (2026-08-11, kullanıcı isteği)
+
+Kullanıcı, çok saatlik/günlük gözlem süresini Claude Code oturumundan
+bağımsız, herhangi bir bilgisayardan kontrol edebileceği bir mekanizma
+istedi. **Bu, Görev 7'nin (tam sunucu taraflı izleme + Telegram/email) YERİNE
+GEÇMİYOR** — sadece Görev 5'in gözlem ihtiyacını karşılayan, dar kapsamlı
+bir parça:
+
+- Yeni `js/screener/kom1-server-watcher.js` — `kom1-scanner.js`'in (asıl,
+  yetkili motor) AYNI kuralını ve AYNI `IndicatorEngine` fonksiyonlarını
+  kullanarak, periyodik REST anlık görüntüleriyle (5dk'da bir) yaklaşık
+  olarak tekrar hesaplar. `IndicatorEngine` bu yüzden izomorfik hâle
+  getirildi (`window.X` + Node `module.exports`, tek kaynak — iki ayrı
+  hesaplama yolu YOK).
+- Sunucuda yeni `Kom1SignalLog` koleksiyonu (30 gün TTL — Görev 12'nin
+  Candle hatasından ders alınıp baştan eklendi).
+- `GET /api/kom1/signals` (kesinleşmiş sinyaller) ve `GET /api/kom1/status`
+  (o an bekleyen sinyaller — izleyicinin canlı olduğunu görmek için)
+  endpoint'leri eklendi.
+- **Bilinen fark:** TOLERANCE_BARS burada bar-sayısı değil, eşdeğer
+  duvar-saati süresine çevrildi (1h→3sa, 4h→12sa) — periyodik REST anlık
+  görüntüsü mimarisi, WS bar-sayacı mimarisiyle birebir aynı değil, küçük
+  bir zamanlama sapması olabilir. Bu yüzden "shadow/gözlemci" — asıl kayıt
+  kaynağı hâlâ tarayıcıdaki `kom1-scanner.js` + Watchlist/alarm entegrasyonu.
+- Telegram/email gönderimi burada YOK — hâlâ Görev 7'ye bağlı.
+
+**Doğrulama:** Lokal `node -c` ile syntax, `require()` ile Node'da
+`IndicatorEngine` doğru yüklendi, `/api/kom1/status` endpoint'i lokal
+sunucuda test edildi (doğru sembol/TF listesi döndü). `/api/kom1/signals`
+lokalde MongoDB bağlı olmadığı için beklenen timeout hatasını verdi (proje
+standardı, diğer tüm Mongo-bağımlı endpoint'lerle aynı davranış). Gerçek
+ağ/DB testi ancak production'da yapılabilir (sandbox'ın bilinen DNS
+kısıtı) — deploy sonrası orada doğrulanacak.
+
+### Yapılacak (devam)
+
+- İlk 10 kesinleşen sinyali (`Kom1Scanner.getConfirmedSignals()`, alarm
+  sekmesi, veya artık `GET /api/kom1/signals` üzerinden) topla, her birini
+  manuel değerlendir.
+- Bu süre boyunca ban/hata sıklığını izle (konsol/production logları +
+  `/api/kom1/status`).
 - 10 sinyal toplanınca veya kritik bir sorun çıkarsa kullanıcıya rapor et,
   Görev 6'dan önceki DUR kapısına gelindiğinde onay bekle.
 
@@ -232,6 +272,14 @@ Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlam
 ---
 
 ## [ ] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — henüz başlanmadı)
+
+**Not (2026-08-11):** Görev 5'in gözlem ihtiyacı için DAR kapsamlı bir
+sunucu-taraflı Kom1 gözlemcisi zaten eklendi (`js/screener/kom1-server-watcher.js`,
+detay Görev 5'te) — ama bu Görev 7'yi TAMAMLAMIYOR. Eksik kalanlar: fiyat
+alarmlarının (`AlertStore`, hâlâ localStorage) sunucuya taşınması, Telegram/email
+gönderimi, ve asıl Kom1Scanner'ın kendisinin (client-side) sunucuya taşınması/entegre
+edilmesi (şimdiki gözlemci sadece yaklaşık bir "shadow" kopya, resmi/yetkili motor
+değil). Bu görev hâlâ olduğu gibi kuyrukta duruyor.
 
 ### Sade dille — bu görev ne, neden hemen yapılmadı
 

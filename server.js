@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const https   = require('https');
 const path    = require('path');
 const rateLimit = require('express-rate-limit');
+const Kom1ServerWatcher = require('./js/screener/kom1-server-watcher.js');
 
 const app  = express();
 const PORT = process.env.PORT || 5500;
@@ -187,6 +188,24 @@ symbolStatusEventSchema.index({ exchange: 1, market: 1, timestamp: -1 });
 // TTL: 30 gün — delist/yeni-listelenme uyarıları bu kadar süre "aktif" sayılır
 symbolStatusEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 const SymbolStatusEvent = mongoose.model('SymbolStatusEvent', symbolStatusEventSchema);
+
+// ── Kom1 Sunucu Gözlemi (gorevler3.md Görev 5, 2026-08-11) ──────────
+// js/screener/kom1-server-watcher.js'in bulduğu kesinleşmiş sinyaller —
+// bkz. o dosyanın başlığındaki "shadow gözlemci, asıl motorun yerini
+// tutmaz" notu. TTL: 30 gün (Candle koleksiyonunda TTL unutulup depolama
+// dolduğu hatadan ders alındı, bkz. gorevler2.md Görev 12 — bu sefer
+// baştan eklendi).
+const kom1SignalSchema = new mongoose.Schema({
+  symbol: { type: String, required: true },
+  bigTf:  { type: String, required: true },
+  rcMid: Number, wtVal: Number, wtPrev: Number, price: Number,
+  haOpen: Number, haClose: Number, dema9: Number,
+  firedAt: Date, confirmedAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+kom1SignalSchema.index({ confirmedAt: -1 });
+kom1SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+const Kom1SignalLog = mongoose.model('Kom1SignalLog', kom1SignalSchema);
 
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
@@ -649,6 +668,19 @@ mongoose.connection.once('open', () => {
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
   _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
+
+  // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11) — 22 büyük TF
+  // isteği + birkaç küçük TF onay isteği, ~5 dakikada bir (mum toplayıcıyla
+  // aynı sıklık, ağırlığı ondan çok daha hafif).
+  _staggeredStart(() => {
+    // tick() bir Promise döner — yakalanmadan bırakılırsa (unhandled rejection)
+    // Node bu sürümde process'i çökertebilir; _staggeredStart'ın diğer
+    // toplayıcıları kendi içinde try/catch'li, burada da aynı güvenlik sağlanıyor.
+    Kom1ServerWatcher.tick(async (confirmed) => {
+      try { await Kom1SignalLog.create(confirmed); }
+      catch (err) { console.warn('[Kom1ServerWatcher] Sinyal kaydedilemedi:', err.message); }
+    }).catch(err => console.error('[Kom1ServerWatcher] tick hatası:', err.message));
+  }, 25000, 5 * 60 * 1000);
 });
 
 // ==========================================
@@ -837,6 +869,25 @@ app.get('/api/history/candles/:exchange/:symbol', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Kom1 Sunucu Gözlemi (gorevler3.md Görev 5) ────────────────────────
+// GET /api/kom1/signals — kesinleşmiş sinyaller (en yeni önce)
+app.get('/api/kom1/signals', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const records = await Kom1SignalLog.find({}, { _id: 0, __v: 0 })
+      .sort({ confirmedAt: -1 }).limit(limit).lean();
+    res.json(records);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/kom1/status — o an bekleyen (henüz kesinleşmemiş) büyük TF sinyalleri,
+// izleyicinin gerçekten çalıştığını görmek için (tarayıcı hiç açılmasa bile).
+app.get('/api/kom1/status', (req, res) => {
+  res.json({ pending: Kom1ServerWatcher.getPending(), symbols: Kom1ServerWatcher.SYMBOLS, bigTfs: Kom1ServerWatcher.BIG_TFS });
 });
 
 // ── Sağlık Kontrolü ─────────────────────────────────────────────────
