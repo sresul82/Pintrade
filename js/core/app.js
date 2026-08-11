@@ -1103,7 +1103,7 @@ const App = {
                          : expiryChoice === 'week'  ? now + 7 * 24 * 60 * 60 * 1000
                          : expiryChoice === 'month' ? now + 30 * 24 * 60 * 60 * 1000
                          : null;
-        const opts = { condition: cond, triggerMode, expiresAt, message, notifyToast, notifyTelegram };
+        const opts = { condition: cond, triggerMode, expiresAt, message, notifyToast, notifyTelegram, tf };
 
         // ÖNEMLİ: manuel (sourceDrawing'siz) alarmlarda fiyat input'u DOM'dan
         // burada okunmalı — close() (backdrop.remove()) bundan SONRA çağrılmalı,

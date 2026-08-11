@@ -559,6 +559,41 @@ düzenle/sil/aktif-pasif yap seçenekleri olur.
   kaynaksız) alarm oluşturma/düzenleme SESSİZCE başarısız oluyordu. Form
   değerleri artık `close()`'dan önce okunuyor.
 
+### 2. tur (2026-08-11, aynı gün) — kullanıcı TV ekran görüntüleri paylaştı
+
+Kullanıcı geri bildirimi: (1) alarm çizgisi kırmızı/dolgun görünüyordu,
+TV'de gri-beyaz kesikli; (2) liste panelindeki rozet/pill'ler "çocuksu/neon"
+görünüyordu, TV düz renkli metin kullanıyor; (3) TV'de silme öncesi onay
+diyaloğu var; (4) TV'de satır üzerine gelince zengin bir detay balonu
+çıkıyor.
+
+- `AlertStore` `alertLinesColor` varsayılanı `#f23645` (kırmızı) →
+  `#9598a1` (gri-beyaz) — zaten var olan Chart Settings → Alerts sekmesi
+  renk seçicisi üzerinden de değiştirilebilir (doğrulandı, önceden de
+  bağlıydı, sadece varsayılan renk kötüydü).
+- `AlertListPanel` satırları rozet/pill kullanmayı bıraktı — TV'deki gibi
+  iki satırlı düzen: üst satır başlık ("{Symbol}, {TF}, {Condition}
+  {Kaynak}"), alt satır düz renkli durum metni ("Live" yeşil, "Stopped —
+  Triggered" turuncu, "Stopped — Expired" kırmızımsı — pill/arkaplan yok).
+- Play/pause (durdur/yeniden başlat), düzenle, sil ikonları satırda sağda;
+  tarih en sağda.
+- Satır üzerine gelince (`mouseover`) TV'ninkine yakın bir detay balonu:
+  tam başlık, durum, oluşturulma/son tetiklenme/süre dolma zamanları, mesaj.
+- Silme artık TV'nin "Delete this alert?" diyaloğuyla birebir aynı düzende
+  onay istiyor (açıklama metni + Cancel + kırmızı Delete butonu) — önceden
+  tek tıkla anında siliniyordu.
+- Alarm nesnesine `tf` (zaman dilimi) alanı eklendi (`AlertStore`,
+  `_extraOpts`) — liste/başlık/tooltip'te "SYMBOL, TF" gösterimi için,
+  Create Alert modalından otomatik dolduruluyor.
+- **Bulunan ve düzeltilen 2. bug (aynı turda):** Play/pause butonunun
+  "yeniden başlat" davranışı `active: !a.active` kullanıyordu — ama
+  tetiklenmiş bir alarmda `active` zaten `true` kalıyordu (sadece
+  `triggered` `true` oluyordu), bu yüzden "Restart" tıklanınca alarm
+  YANLIŞ YÖNE (durdurulmuşa) gidiyordu. Düzeltme: hedef durum artık
+  gösterilen ikonun anlamına göre açıkça belirleniyor (duraklatılmışsa
+  her zaman `{active:true, triggered:false}`, aktifse her zaman
+  `{active:false}`).
+
 ### Doğrulama
 
 - Manuel create: fiyat/condition/mesaj doğru kaydedildi (bug düzeltmesi
@@ -573,6 +608,13 @@ düzenle/sil/aktif-pasif yap seçenekleri olur.
 - Satıra tıklama: `symbol:change` event'i doğru sembolle tetiklendi.
 - Ekran görüntüsüyle görsel doğrulama yapıldı, konsol hatasız (bilinen
   sandbox ağ hataları hariç).
+- **2. tur:** Silme onay diyaloğu ekran görüntüsüyle TV'ninkiyle karşılaştırıldı
+  (metin/düzen birebir). Play/pause: tetikle→restart→durdur sırası test
+  edilip her adımda `active`/`triggered` doğru değerlere ulaştığı
+  doğrulandı (bug düzeltmesi sonrası — önce yanlış yöne gittiği görülüp
+  düzeltildi). Hover tooltip doğru içerikle açıldığı doğrulandı. Ekran
+  görüntüsüyle rozet/pill'lerin kalktığı, düz renkli durum metninin
+  (Live/Stopped — Triggered/Expired) doğru render olduğu doğrulandı.
 
 **Rapor:** `2026-08-11-gorev13-alarm-listesi-ui.md`
 

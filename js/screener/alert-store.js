@@ -52,7 +52,10 @@ const AlertStore = (() => {
   }
 
   // alertVolume = ses açık/kapalı (checkbox), alertVolumeLevel = ses düzeyi 0-100 (slider) — ayrı iki ayar
-  const DEFAULT_PREFS = { alertLines: true, alertLinesColor: '#f23645', onlyActiveAlerts: true, alertVolume: true, alertVolumeLevel: 50, autoHideToasts: true };
+  // alertLinesColor varsayılanı gri-beyaz arası kesikli çizgi (TradingView'ın
+  // kendi Alert çizgisi stili) — 2026-08-11, kullanıcı geri bildirimi:
+  // önceki kırmızı (#f23645) "çocuksu/neon" görünüyordu.
+  const DEFAULT_PREFS = { alertLines: true, alertLinesColor: '#9598a1', onlyActiveAlerts: true, alertVolume: true, alertVolumeLevel: 50, autoHideToasts: true };
   function _loadPrefs() {
     try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(LS_PREFS_KEY) || '{}') }; } catch (_) { return { ...DEFAULT_PREFS }; }
   }
@@ -128,6 +131,7 @@ const AlertStore = (() => {
       message: opts.message || '',
       notifyToast: opts.notifyToast !== false,
       notifyTelegram: !!opts.notifyTelegram, // bkz. modül başlığı — henüz GÖNDERMİYOR, sadece tercih olarak kaydediliyor
+      tf: opts.tf || '', // Görev 13 — alarm listesinde "SYMBOL, TF" gösterimi için, sadece görsel
     };
   }
 
@@ -164,7 +168,7 @@ const AlertStore = (() => {
   function updateAlert(id, fields = {}) {
     const alert = _alerts.find(a => a.id === id);
     if (!alert) return null;
-    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message', 'notifyToast', 'notifyTelegram', 'active'];
+    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message', 'notifyToast', 'notifyTelegram', 'active', 'tf'];
     ALLOWED.forEach(k => { if (fields[k] !== undefined) alert[k] = fields[k]; });
     alert.triggered = false;
     alert.lastKnownPrice = null;
