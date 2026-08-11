@@ -57,11 +57,10 @@ const AlertListPanel = (() => {
     expired:   { text: 'Stopped — Expired',   color: '#e05c5c' },
   };
 
+  // 2026-08-11 — AlertStore.formatPrice ile TEK kaynak (modal ile aynı
+  // formatlamayı kullanır, iki ayrı yerde farklı yuvarlama olmasın diye).
   function _fmtPrice(p) {
-    if (p == null || isNaN(p)) return '—';
-    const n = Number(p);
-    const decimals = n >= 100 ? 2 : n >= 1 ? 4 : 6;
-    return n.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '');
+    return window.AlertStore?.formatPrice ? window.AlertStore.formatPrice(p) : String(p ?? '—');
   }
 
   function _fmtDate(ts) {
@@ -96,9 +95,12 @@ const AlertListPanel = (() => {
     return list;
   }
 
+  // --accent-blue projenin global teması (#00f3ff, gerçek neon cyan) — burada
+  // BİLEREK kullanılmıyor, TV'nin kendi imza mavisi (#2962ff) kullanılıyor
+  // (kullanıcı geri bildirimi: "neon renk kullanma çocuksu görünüyor").
   function _segBtnStyle(active) {
     return active
-      ? 'background:var(--accent-blue); color:#fff; opacity:1;'
+      ? 'background:#2962ff; color:#fff; opacity:1;'
       : 'background:transparent; color:var(--text-secondary); opacity:0.7;';
   }
 

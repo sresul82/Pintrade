@@ -105,6 +105,20 @@ const AlertStore = (() => {
     return p1.price + slope * (now - p1.time);
   }
 
+  // 2026-08-11 — TEK ortak fiyat formatlama fonksiyonu (Create Alert modalı
+  // VE Alerts listesi burayı kullanır). Önceki bug: modal sabit `.toFixed(4)`
+  // kullanıyordu — HOMEUSDT gibi küçük fiyatlı bir coinde gerçek değer
+  // (ör. 0.009256) 4 basamağa yuvarlanınca 0.0093 gibi görünüp kullanıcıya
+  // "sapma" gibi görünüyordu; aslında ekstrapolasyon hatası değil, saf
+  // gösterim/yuvarlama hatasıydı (relDiff düzeltmesi bunu ÇÖZMEDİ, ayrı bir
+  // hataydı). Ondalık basamak sayısı artık fiyatın büyüklüğüne göre uyarlanıyor.
+  function formatPrice(p) {
+    if (p == null || isNaN(p)) return '—';
+    const n = Number(p);
+    const decimals = n >= 1000 ? 2 : n >= 1 ? 4 : n >= 0.01 ? 6 : 8;
+    return n.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
   /**
    * Bir alarmın O ANKİ (güncel) tetik fiyatı. `sourceDrawingId` varsa
    * çizim State'ten TAZE okunup yeniden hesaplanır (eğik çizgide çizginin
@@ -149,6 +163,7 @@ const AlertStore = (() => {
       notifyToast: opts.notifyToast !== false,
       notifyTelegram: !!opts.notifyTelegram, // bkz. modül başlığı — henüz GÖNDERMİYOR, sadece tercih olarak kaydediliyor
       tf: opts.tf || '', // Görev 13 — alarm listesinde "SYMBOL, TF" gösterimi için, sadece görsel
+      name: opts.name || '', // TV'nin "Alert name" alanı — henüz sadece kaydediliyor/gösteriliyor
     };
   }
 
@@ -185,7 +200,7 @@ const AlertStore = (() => {
   function updateAlert(id, fields = {}) {
     const alert = _alerts.find(a => a.id === id);
     if (!alert) return null;
-    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message', 'notifyToast', 'notifyTelegram', 'active', 'tf'];
+    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message', 'notifyToast', 'notifyTelegram', 'active', 'tf', 'name'];
     ALLOWED.forEach(k => { if (fields[k] !== undefined) alert[k] = fields[k]; });
     alert.triggered = false;
     alert.lastKnownPrice = null;
@@ -279,7 +294,7 @@ const AlertStore = (() => {
     });
   }
 
-  return { getAlerts, createFromDrawing, createManual, updateAlert, removeAlert, getPrefs, setPrefs, checkPrice, computeDrawingPrice, SUPPORTED_TOOLS };
+  return { getAlerts, createFromDrawing, createManual, updateAlert, removeAlert, getPrefs, setPrefs, checkPrice, computeDrawingPrice, formatPrice, SUPPORTED_TOOLS };
 })();
 
 window.AlertStore = AlertStore;

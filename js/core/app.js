@@ -1025,63 +1025,126 @@ const App = {
         initExpiry = remaining <= 25 * 60 * 60 * 1000 ? 'eod' : remaining <= 8 * 24 * 60 * 60 * 1000 ? 'week' : 'month';
       }
 
+      // gorevler2.md Görev 13, 4. tur (2026-08-11) — kullanıcı 4 TV ekran
+      // görüntüsü daha paylaşıp Trigger/Expiration'a ikon+tarih, Message'ı
+      // ayrı bir alt-görünüme, ve "neon" olmayan bir accent rengi istedi.
+      // TV_BLUE: projenin genel --accent-blue'su (#00f3ff) gerçekten neon
+      // cyan — bunu GLOBAL değiştirmek riskli (tüm uygulamayı etkiler),
+      // bunun yerine bu modalde TV'nin kendi imza mavisini (#2962ff — zaten
+      // bu projede sessionBreaks varsayılan rengi olarak kullanılıyordu)
+      // kullanıyoruz.
+      const TV_BLUE = '#2962ff';
+
+      const CONDITION_ICONS = {
+        crossing: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg>',
+        above:    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13 13 3M6 3h7v7"/></svg>',
+        below:    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l10 10M13 6v7H6"/></svg>',
+      };
+      const TRIGGER_ICONS = {
+        once:              '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.3" stroke-linecap="round"/></svg>',
+        once_per_bar:      '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 8V4.5" stroke-linecap="round"/></svg>',
+        once_per_bar_close:'<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M4 2.5v11M12 2.5v11M4 8h8"/></svg>',
+        once_per_minute:   '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M13 8A5 5 0 1 1 8.2 3.02"/><path d="M8 1.5v2.2M11.5 4l1.6-.6"/></svg>',
+      };
+      const CONDITION_LABELS = { crossing: 'Crossing', above: 'Crossing Up', below: 'Crossing Down' };
+      const TRIGGER_LABELS = { once: 'Once only', once_per_bar: 'Once per bar', once_per_bar_close: 'Once per bar close', once_per_minute: 'Once per minute' };
+
+      // Expiration seçeneklerinin sağında TV'deki gibi gerçek hesaplanmış
+      // tarih gösterilir (dropdown açıldığı anda, saniyelik hassasiyet
+      // gerekmiyor).
+      const _now = Date.now();
+      const _eodDate   = new Date(); _eodDate.setHours(23, 59, 59, 999);
+      const _weekDate  = new Date(_now + 7 * 24 * 60 * 60 * 1000);
+      const _monthDate = new Date(_now + 30 * 24 * 60 * 60 * 1000);
+      const _fmtShort = (d) => d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) + ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const EXPIRY_LABELS = { open: 'Open-ended', eod: 'End of day', week: '1 week', month: '1 month' };
+      const EXPIRY_SUBLABELS = { open: "Won't expire", eod: _fmtShort(_eodDate), week: _fmtShort(_weekDate), month: _fmtShort(_monthDate) };
+
+      // Basit, tekrar kullanılabilir custom dropdown — native <select> ikon/
+      // alt-etiket gösteremediği için (TV'nin kendi tasarımı custom dropdown
+      // kullanıyor, biz de aynısını yapıyoruz).
+      function _buildDropdown(id, options, initValue, icons, labels, sublabels, note) {
+        const selLabel = labels[initValue] || initValue;
+        const selIcon = icons ? (icons[initValue] || '') : '';
+        return `
+          <div class="cd" id="${id}" data-value="${initValue}" style="position:relative; margin-bottom:${note ? '2px' : '8px'};">
+            <button type="button" class="cd-trigger form-input" style="width:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; text-align:left; cursor:pointer; gap:6px;">
+              <span class="cd-trigger-content" style="display:flex; align-items:center; gap:6px; min-width:0;">${selIcon}<span>${_esc(selLabel)}</span></span>
+              <span style="color:var(--text-secondary); font-size:9px; flex-shrink:0;">▾</span>
+            </button>
+            <div class="cd-menu" style="display:none; position:absolute; top:calc(100% + 2px); left:0; right:0; background:#1a1e27; border:1px solid var(--border-primary); border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,0.45); z-index:20; max-height:220px; overflow-y:auto; padding:4px;">
+              ${options.map(v => `
+                <div class="cd-option" data-value="${v}" data-parent="${id}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 8px; border-radius:4px; cursor:pointer; font-size:12px;">
+                  <span style="display:flex; align-items:center; gap:6px; color:var(--text-primary); min-width:0;">${icons ? (icons[v] || '') : ''}<span>${_esc(labels[v])}</span></span>
+                  ${sublabels ? `<span style="color:var(--text-secondary); font-size:10px; flex-shrink:0;">${_esc(sublabels[v])}</span>` : ''}
+                </div>`).join('')}
+            </div>
+          </div>
+          ${note ? `<p style="font-size:10px; color:var(--text-muted); margin:0 0 10px;">${note}</p>` : ''}`;
+      }
+
       const backdrop = document.createElement('div');
       backdrop.id = 'alarm-modal-backdrop';
       backdrop.className = 'modal-backdrop';
       backdrop.innerHTML = `
         <div class="modal" style="width:340px;">
-          <div class="modal-header">
-            <span>${editingAlert ? 'Edit' : 'Create'} alert on ${sym}${tf ? ', ' + tf : ''}</span>
+          <div class="modal-header" id="alarm-modal-header">
+            <span id="alarm-modal-title">${editingAlert ? 'Edit' : 'Create'} alert on ${sym}${tf ? ', ' + tf : ''}</span>
             <button id="alarm-modal-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
           </div>
-          <div class="modal-body">
-            <label class="form-label">Condition</label>
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Price</div>
-            <select class="form-input" id="alarm-modal-cond" style="margin-bottom:8px;">
-              <option value="crossing" ${initCond === 'crossing' ? 'selected' : ''}>Crossing</option>
-              <option value="above" ${initCond === 'above' ? 'selected' : ''}>Crossing Up</option>
-              <option value="below" ${initCond === 'below' ? 'selected' : ''}>Crossing Down</option>
-            </select>
-            ${hasSource ? `
-              <div class="form-input" style="margin-bottom:10px; color:var(--text-secondary); display:flex; justify-content:space-between;">
-                <span>${sourceToolLabel}</span>
-                <span>~${livePrice != null ? (livePrice.toFixed ? livePrice.toFixed(4) : livePrice) : '—'}</span>
-              </div>
-            ` : `
-              <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" value="${editingAlert ? editingAlert.price : ''}" style="margin-bottom:10px;">
-            `}
 
-            <label class="form-label">Trigger</label>
-            <select class="form-input" id="alarm-modal-trigger" style="margin-bottom:2px;">
-              <option value="once" ${initTrigger === 'once' ? 'selected' : ''}>Once only</option>
-              <option value="once_per_bar" ${initTrigger === 'once_per_bar' ? 'selected' : ''}>Once per bar</option>
-              <option value="once_per_bar_close" ${initTrigger === 'once_per_bar_close' ? 'selected' : ''}>Once per bar close</option>
-              <option value="once_per_minute" ${initTrigger === 'once_per_minute' ? 'selected' : ''}>Once per minute</option>
-            </select>
-            <p style="font-size:10px; color:var(--text-muted); margin:0 0 10px;">Only "Once only" is active for now — the rest need server-side monitoring (queued, see task list).</p>
+          <div id="alarm-main-view">
+            <div class="modal-body">
+              <label class="form-label">Condition</label>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Price</div>
+              ${_buildDropdown('alarm-cd-cond', ['crossing', 'above', 'below'], initCond, CONDITION_ICONS, CONDITION_LABELS)}
+              ${hasSource ? `
+                <div class="form-input" style="margin-bottom:10px; color:var(--text-secondary); display:flex; justify-content:space-between;">
+                  <span>${sourceToolLabel}</span>
+                  <span>~${window.AlertStore ? window.AlertStore.formatPrice(livePrice) : livePrice}</span>
+                </div>
+              ` : `
+                <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" value="${editingAlert ? editingAlert.price : ''}" style="margin-bottom:10px;">
+              `}
 
-            <label class="form-label">Expiration</label>
-            <select class="form-input" id="alarm-modal-expiry" style="margin-bottom:10px;">
-              <option value="open" ${initExpiry === 'open' ? 'selected' : ''}>Open-ended</option>
-              <option value="eod" ${initExpiry === 'eod' ? 'selected' : ''}>End of day</option>
-              <option value="week" ${initExpiry === 'week' ? 'selected' : ''}>1 week</option>
-              <option value="month" ${initExpiry === 'month' ? 'selected' : ''}>1 month</option>
-            </select>
+              <label class="form-label">Trigger</label>
+              ${_buildDropdown('alarm-cd-trigger', ['once', 'once_per_bar', 'once_per_bar_close', 'once_per_minute'], initTrigger, TRIGGER_ICONS, TRIGGER_LABELS, null,
+                'Only "Once only" is active for now — the rest need server-side monitoring (queued, see task list).')}
 
-            <label class="form-label">Message</label>
-            <textarea class="form-input" id="alarm-modal-message" rows="2" style="margin-bottom:10px; resize:vertical;" placeholder="${sym} ${hasSource ? sourceToolLabel : 'price'} crossing">${_esc(initMessage)}</textarea>
+              <label class="form-label">Expiration</label>
+              ${_buildDropdown('alarm-cd-expiry', ['open', 'eod', 'week', 'month'], initExpiry, null, EXPIRY_LABELS, EXPIRY_SUBLABELS)}
 
-            <label class="form-label">Notifications</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0;">
-              <input type="checkbox" id="alarm-modal-notify-toast" ${initToast ? 'checked' : ''}> Toast notification
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; color:var(--text-secondary);">
-              <input type="checkbox" id="alarm-modal-notify-telegram" ${initTelegram ? 'checked' : ''}> Telegram <span style="font-size:10px;">(server setup pending — won't send yet)</span>
-            </label>
+              <label class="form-label">Message</label>
+              <button type="button" id="alarm-open-message" class="form-input" style="width:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; text-align:left; cursor:pointer; margin-bottom:10px; color:var(--text-primary);">
+                <span id="alarm-message-preview" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;">${_esc(initMessage) || `${_esc(sym)} ${hasSource ? _esc(sourceToolLabel) : 'price'} crossing`}</span>
+                <span style="color:var(--text-secondary); flex-shrink:0; margin-left:8px;">›</span>
+              </button>
+
+              <label class="form-label">Notifications</label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0;">
+                <input type="checkbox" id="alarm-modal-notify-toast" ${initToast ? 'checked' : ''}> Toast notification
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; color:var(--text-secondary);">
+                <input type="checkbox" id="alarm-modal-notify-telegram" ${initTelegram ? 'checked' : ''}> Telegram <span style="font-size:10px;">(server setup pending — won't send yet)</span>
+              </label>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" id="alarm-modal-cancel">Cancel</button>
+              <button class="btn" id="alarm-modal-create" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">${editingAlert ? 'Save' : 'Create'}</button>
+            </div>
           </div>
-          <div class="modal-footer">
-            <button class="btn" id="alarm-modal-cancel">Cancel</button>
-            <button class="btn btn-primary" id="alarm-modal-create">${editingAlert ? 'Save' : 'Create'}</button>
+
+          <div id="alarm-message-view" style="display:none;">
+            <div class="modal-body">
+              <label class="form-label">Alert name</label>
+              <input class="form-input" id="alarm-modal-name" type="text" placeholder="" value="${_esc(editingAlert?.name || '')}" style="margin-bottom:10px;">
+              <label class="form-label">Message</label>
+              <textarea class="form-input" id="alarm-modal-message" rows="4" style="margin-bottom:10px; resize:vertical;" placeholder="${_esc(sym)} ${hasSource ? _esc(sourceToolLabel) : 'price'} crossing">${_esc(initMessage)}</textarea>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" id="alarm-message-cancel">Cancel</button>
+              <button class="btn" id="alarm-message-apply" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">Apply</button>
+            </div>
           </div>
         </div>`;
       document.body.appendChild(backdrop);
@@ -1090,20 +1153,73 @@ const App = {
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
       document.getElementById('alarm-modal-close')?.addEventListener('click', close);
       document.getElementById('alarm-modal-cancel')?.addEventListener('click', close);
+
+      // ── Custom dropdown davranışı (Condition/Trigger/Expiration ortak) ──
+      backdrop.querySelectorAll('.cd-trigger').forEach(trigger => {
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const menu = trigger.nextElementSibling;
+          const wasOpen = menu.style.display === 'block';
+          backdrop.querySelectorAll('.cd-menu').forEach(m => m.style.display = 'none');
+          if (!wasOpen) menu.style.display = 'block';
+        });
+      });
+      backdrop.querySelectorAll('.cd-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const cd = document.getElementById(opt.dataset.parent);
+          cd.dataset.value = opt.dataset.value;
+          // Option'ın İLK çocuğu (ikon+etiket span'ı, sublabel HARİÇ) doğrudan
+          // trigger'a kopyalanır — _buildDropdown'ın ürettiği sabit yapıya
+          // dayanıyor (bkz. yukarıdaki fonksiyon).
+          const firstSpan = opt.querySelector(':scope > span:first-child');
+          const triggerContent = cd.querySelector('.cd-trigger-content');
+          if (firstSpan && triggerContent) triggerContent.innerHTML = firstSpan.innerHTML;
+          cd.querySelector('.cd-menu').style.display = 'none';
+        });
+      });
+      document.addEventListener('click', function _closeDropdowns(e) {
+        if (!backdrop.isConnected) { document.removeEventListener('click', _closeDropdowns); return; }
+        if (!e.target.closest('.cd')) backdrop.querySelectorAll('.cd-menu').forEach(m => m.style.display = 'none');
+      });
+
+      // ── Message alt-görünümü ─────────────────────────────────────────
+      const mainView = document.getElementById('alarm-main-view');
+      const msgView  = document.getElementById('alarm-message-view');
+      const titleEl  = document.getElementById('alarm-modal-title');
+      const mainTitle = titleEl.textContent;
+      document.getElementById('alarm-open-message')?.addEventListener('click', () => {
+        mainView.style.display = 'none';
+        msgView.style.display = 'block';
+        titleEl.textContent = 'Edit message';
+      });
+      const _backToMain = () => {
+        msgView.style.display = 'none';
+        mainView.style.display = 'block';
+        titleEl.textContent = mainTitle;
+      };
+      document.getElementById('alarm-message-cancel')?.addEventListener('click', _backToMain);
+      document.getElementById('alarm-message-apply')?.addEventListener('click', () => {
+        const msg = document.getElementById('alarm-modal-message')?.value || '';
+        const preview = document.getElementById('alarm-message-preview');
+        if (preview) preview.textContent = msg || `${sym} ${hasSource ? sourceToolLabel : 'price'} crossing`;
+        _backToMain();
+      });
+
       document.getElementById('alarm-modal-create')?.addEventListener('click', () => {
-        const cond = document.getElementById('alarm-modal-cond')?.value || 'crossing';
-        const triggerMode = document.getElementById('alarm-modal-trigger')?.value || 'once';
-        const expiryChoice = document.getElementById('alarm-modal-expiry')?.value || 'open';
+        const cond = document.getElementById('alarm-cd-cond')?.dataset.value || 'crossing';
+        const triggerMode = document.getElementById('alarm-cd-trigger')?.dataset.value || 'once';
+        const expiryChoice = document.getElementById('alarm-cd-expiry')?.dataset.value || 'open';
         const message = document.getElementById('alarm-modal-message')?.value?.trim() || '';
+        const name = document.getElementById('alarm-modal-name')?.value?.trim() || '';
         const notifyToast = !!document.getElementById('alarm-modal-notify-toast')?.checked;
         const notifyTelegram = !!document.getElementById('alarm-modal-notify-telegram')?.checked;
 
-        const now = Date.now();
-        const expiresAt = expiryChoice === 'eod'   ? new Date().setHours(23, 59, 59, 999)
-                         : expiryChoice === 'week'  ? now + 7 * 24 * 60 * 60 * 1000
-                         : expiryChoice === 'month' ? now + 30 * 24 * 60 * 60 * 1000
+        const expiresAt = expiryChoice === 'eod'   ? _eodDate.getTime()
+                         : expiryChoice === 'week'  ? _weekDate.getTime()
+                         : expiryChoice === 'month' ? _monthDate.getTime()
                          : null;
-        const opts = { condition: cond, triggerMode, expiresAt, message, notifyToast, notifyTelegram, tf };
+        const opts = { condition: cond, triggerMode, expiresAt, message, name, notifyToast, notifyTelegram, tf };
 
         // ÖNEMLİ: manuel (sourceDrawing'siz) alarmlarda fiyat input'u DOM'dan
         // burada okunmalı — close() (backdrop.remove()) bundan SONRA çağrılmalı,
@@ -1133,7 +1249,7 @@ const App = {
         } else {
           alert = window.AlertStore.createManual(sym, exchange, manualPrice, cond, opts);
         }
-        if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${alert.price}` : 'Could not create alert', alert ? 'success' : 'error');
+        if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${window.AlertStore.formatPrice(alert.price)}` : 'Could not create alert', alert ? 'success' : 'error');
       });
     });
   },

@@ -628,6 +628,67 @@ kalktı.
 3. Horizontal Line aracı → zaten etkilenmiyordu, referans olarak
    doğrulandı (`55555` sabit). ✅
 
+### 4. tur (aynı gün) — kullanıcı: "hâlâ yuvarlama yapıyor" + tasarım detayları
+
+Kullanıcı 3. turun ekstrapolasyon (`relDiff`) düzeltmesinden sonra bile
+sapmanın sürdüğünü bildirdi. İnceleme sonucu **GERÇEKTEN AYRI, ikinci bir
+hata** bulundu: `relDiff` düzeltmesi `computeDrawingPrice()`'ın HESAPLAMA
+tarafını düzeltmişti, ama Create Alert modalındaki GÖSTERİM tarafı
+(`app.js`) `livePrice.toFixed(4)` ile SABİT 4 ondalık basamağa
+yuvarlıyordu — 0.009256 → 0.0093 (kullanıcının bildirdiği "sapma" aslında
+buydu, ekstrapolasyonla hiç ilgisi yoktu, saf gösterim/yuvarlama hatasıydı).
+
+**Düzeltme:** `AlertStore.formatPrice(p)` adında TEK bir ortak fiyat
+formatlama fonksiyonu eklendi (fiyatın büyüklüğüne göre dinamik ondalık
+basamak — `alert-list-panel.js`'deki eski `_fmtPrice` de buna
+yönlendirildi, iki ayrı yuvarlama mantığı kalmadı). Modal artık bunu
+kullanıyor, sabit `.toFixed(4)` kaldırıldı.
+
+Aynı turda kullanıcı 4 TV ekran görüntüsü daha paylaşıp şunları istedi:
+- Trigger/Condition seçeneklerinin yanında ikon.
+- Expiration seçeneklerinin sağında gerçek hesaplanmış tarih.
+- Message alanı tıklanınca ayrı bir "Edit message" alt-görünümü (Alert
+  name + Message + Cancel/Apply).
+- "Neon renk kullanma" — kaynağı bulundu: projenin GENEL `--accent-blue`
+  CSS değişkeni gerçekten `#00f3ff` (elektrik/neon cyan). Global değişkeni
+  değiştirmek riskli (tüm uygulamayı etkiler) — bunun yerine SADECE bu
+  modalde ve Alerts listesindeki segment vurgusunda TV'nin kendi imza
+  mavisi (`#2962ff`, zaten bu projede `sessionBreaks` varsayılan rengi
+  olarak kullanılıyordu) kullanılıyor.
+
+**Yapılanlar:**
+- Native `<select>` yerine custom dropdown (`.cd`/`.cd-trigger`/`.cd-menu`/
+  `.cd-option`) — Condition/Trigger/Expiration üçü de bunu kullanıyor,
+  ikon + (varsa) sağ taraf alt-etiket gösterebiliyor.
+- Expiration'ın alt-etiketleri modal açılırken hesaplanan gerçek tarihler
+  (`Aug 18, 03:52 PM` gibi).
+- Message artık modal body'de doğrudan bir textarea değil, tıklanabilir
+  bir önizleme satırı — tıklanınca `#alarm-main-view` gizlenip
+  `#alarm-message-view` gösteriliyor (Alert name + Message + Cancel/Apply),
+  başlık "Edit message" olarak değişiyor, Apply'da eski görünüme dönüp
+  önizleme metnini güncelliyor.
+- `AlertStore`'a `name` alanı eklendi (TV'nin "Alert name"i, henüz sadece
+  kaydediliyor/gösteriliyor, fonksiyonel bir kullanımı yok).
+- `Create`/`Save`/`Apply` butonları ve Alerts listesi segment vurgusu
+  `#2962ff` kullanıyor, global `--accent-blue`'ya dokunulmadı.
+
+**Doğrulama (tarayıcıda, gerçek modüllerle):**
+- `AlertStore.formatPrice(0.009256)` → `"0.009256"` (artık yuvarlanmıyor). ✅
+- Modal, yatay çizilmiş bir Trend Line'dan (`~0.009258`) tam hassasiyetle
+  gösterdi. ✅
+- Trigger dropdown: açılıp "Once per bar" seçilince değer+etiket doğru
+  güncellendi, menü kapandı. ✅
+- Expiration dropdown: her seçeneğin sağında doğru hesaplanmış tarih
+  göründü (`Aug 18, 03:52 PM` vb.). ✅
+- Message alt-görünümü: açılış/kapanış, başlık değişimi, Apply sonrası
+  önizleme güncellemesi doğru çalıştı. ✅
+- Tam form doldurulup "Create"e basılınca `AlertStore`'da `price`
+  (tam hassasiyetle), `triggerMode`, `message`, `name` hepsi doğru
+  kaydedildi. ✅
+- Edit modu: condition/trigger/message doğru prefill oldu, "Save" butonu
+  doğru etiketle göründü. ✅
+- Konsol hatasız (bilinen sandbox ağ hataları hariç). ✅
+
 ### Doğrulama
 
 - Manuel create: fiyat/condition/mesaj doğru kaydedildi (bug düzeltmesi

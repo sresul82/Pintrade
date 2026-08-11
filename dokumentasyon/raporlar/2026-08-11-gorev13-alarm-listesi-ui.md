@@ -172,6 +172,85 @@ if (relDiff < 0.0005) return p2.price;
 
 Konsol hatasız (bilinen sandbox ağ hataları hariç).
 
+## 4. tur (aynı gün) — kullanıcı: "hâlâ yuvarlama yapıyor" + tasarım detayları
+
+Kullanıcı 3. turun `relDiff` düzeltmesinden sonra bile aynı sapmanın
+sürdüğünü bildirdi: "Trend Line çizgisine alarm kurduğumda hâlâ yuvarlama
+yapıyor, az önce konuştuk ama hâlâ düzelmiş değil."
+
+### Kök neden — GERÇEKTEN AYRI, ikinci bir bug
+
+3. turdaki `relDiff` düzeltmesi `computeDrawingPrice()`'ın HESAPLAMA
+tarafını (ekstrapolasyon) düzeltmişti. Ama kullanıcının modalde GÖRDÜĞÜ
+sapma bambaşka bir yerden geliyordu: `js/core/app.js`'deki Create Alert
+modalı, hesaplanan `livePrice`'ı `livePrice.toFixed(4)` ile SABİT 4
+ondalık basamağa yuvarlayarak gösteriyordu. HOMEUSDT gibi düşük fiyatlı
+coinlerde (~0.009256), 4 ondalık basamak yeterli hassasiyet sağlamıyor:
+`0.009256.toFixed(4)` → `"0.0093"`. Bu, kullanıcının orijinal şikayetinde
+bildirdiği "0.009256 vs 0.0093" farkıyla BİREBİR örtüşüyor — yani 3.
+turda düzeltilen ekstrapolasyon bug'ı gerçek olsa da, kullanıcının asıl
+gördüğü sapmanın kaynağı büyük olasılıkla hep bu gösterim hatasıydı.
+
+### Düzeltme
+
+`AlertStore`'a tek, ortak bir `formatPrice(p)` fonksiyonu eklendi —
+fiyatın büyüklüğüne göre dinamik ondalık basamak sayısı kullanıyor
+(`>=1000`→2, `>=1`→4, `>=0.01`→6, aksi halde 8 basamak, sondaki
+gereksiz sıfırlar temizleniyor). Modal artık `livePrice.toFixed(4)`
+yerine bunu kullanıyor; Toast mesajları da `alert.price` yerine
+`AlertStore.formatPrice(alert.price)` kullanıyor;
+`alert-list-panel.js`'deki eski `_fmtPrice` de aynı fonksiyona
+yönlendirildi (iki ayrı yuvarlama mantığı kalmadı).
+
+### Aynı turdaki tasarım istekleri (4 yeni TV ekran görüntüsü)
+
+Kullanıcı: "Bu şekilde tasarım istiyorum, ikonlar olsun, message
+tıklayınca ayrı pencere açılsın, neon renkleri kullanma demiştim."
+
+- **Custom dropdown'lar:** Condition/Trigger/Expiration artık native
+  `<select>` değil, ikon + (Expiration için) sağda gerçek hesaplanmış
+  tarih gösterebilen `.cd`/`.cd-trigger`/`.cd-menu`/`.cd-option` yapısı
+  kullanıyor (native select ikon gösteremediği için).
+- **Ayrı "Edit message" alt-görünümü:** Message artık modal body'de
+  doğrudan textarea değil, tıklanabilir bir önizleme satırı. Tıklanınca
+  `#alarm-main-view` gizlenip `#alarm-message-view` (Alert name + Message
+  + Cancel/Apply) gösteriliyor, başlık "Edit message" oluyor, Apply'da
+  eski görünüme dönüp önizlemeyi güncelliyor.
+- **Neon renk kaynağı bulundu:** Create/Save butonu `.btn-primary`
+  kullanıyordu, bu da projenin GENEL `--accent-blue` CSS değişkenine
+  (`css/variables.css`, dark tema) bağlanıyor — değeri gerçekten
+  `#00f3ff` (elektrik/neon cyan). Global değişkeni değiştirmek tüm
+  uygulamayı etkileyeceğinden riskli görüldü; bunun yerine SADECE bu
+  modalde ve Alerts listesindeki segment vurgusunda, projede zaten
+  `sessionBreaks` varsayılan rengi olarak kullanılan TV'nin kendi imza
+  mavisi `#2962ff` inline olarak kullanılıyor. Global `--accent-blue`
+  değişmedi.
+- `AlertStore`'a `name` alanı eklendi (TV'nin "Alert name"i).
+
+### Kendi kendine yakalanan bug (kullanıcı bildirmedi)
+
+`.cd-option` click handler'ı ilk yazımda karmaşık/anlamsız iç içe
+ternary string mantığı içeriyordu; test etmeden önce kendi kod
+okumamda fark edip temiz bir `firstSpan.innerHTML` kopyalama mantığıyla
+değiştirdim.
+
+### Doğrulama (4. tur, tarayıcıda gerçek modüllerle)
+
+- `AlertStore.formatPrice(0.009256)` → `"0.009256"` (artık yuvarlanmıyor). ✅
+- Yatay çizilmiş bir Trend Line'dan (`~0.009258`) modal tam hassasiyetle
+  gösterdi. ✅
+- Trigger dropdown: "Once per bar" seçilince değer+etiket doğru
+  güncellendi, menü kapandı. ✅
+- Expiration dropdown: her seçeneğin sağında doğru hesaplanmış tarih
+  göründü. ✅
+- Message alt-görünümü: açılış/kapanış, başlık değişimi, Apply sonrası
+  önizleme güncellemesi doğru çalıştı. ✅
+- Tam form doldurulup Create'e basılınca `price` (tam hassasiyetle),
+  `triggerMode`, `message`, `name` hepsi doğru kaydedildi. ✅
+- Edit modu: condition/trigger/message doğru prefill oldu, "Save"
+  butonu doğru etiketle göründü. ✅
+- Konsol hatasız (bilinen sandbox ağ hataları hariç). ✅
+
 ## Doğrulama (1. tur, tarayıcıda, gerçek modüllerle)
 
 1. Manuel create (fiyat=150, condition='below') → `AlertStore`'da doğru
@@ -203,4 +282,8 @@ Konsol hatasız (bilinen sandbox ağ hataları hariç).
 - `js/chart/ui/chart-settings.js` (2. tur: Alerts sekmesindeki gösterilen
   varsayılan renk swatch'ı güncellendi)
 - `js/core/app.js` (`_bindSidebar` genişletildi, `_bindAlarmModal` edit
-  moduna + kritik bug düzeltmesine kavuştu; 2. tur: `tf` alarma geçiliyor)
+  moduna + kritik bug düzeltmesine kavuştu; 2. tur: `tf` alarma geçiliyor;
+  4. tur: custom dropdown'lar, ayrı Message alt-görünümü, `#2962ff`
+  buton rengi, `formatPrice` kullanımı)
+- `js/screener/alert-store.js` (4. tur: `formatPrice()` eklendi, `name`
+  alanı eklendi)
