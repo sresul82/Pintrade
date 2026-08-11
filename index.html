@@ -717,6 +717,11 @@
                  tamamen bağımsız. FR/M1/MA/V3/4S rafı burada asla render edilmez,
                  sadece AlarmSignalHistory modülünün kartları gösterilir. -->
             <div class="dp-root" id="dp-alarm-tab" style="display: none; height:100%;"></div>
+            <!-- Alerts sidebar sekmesi (rsb-alerts, gorevler2.md Görev 13, 2026-08-11) —
+                 AlertStore'daki kullanıcı tarafından oluşturulan çizim/manuel fiyat
+                 alarmlarının listesi. AlarmSignalHistory (dp-alarm-tab, Kom1/2/3 strateji
+                 sinyalleri) ile KARIŞTIRILMASIN — ayrı bir kavram, ayrı bir modül. -->
+            <div class="dp-root" id="dp-alerts-tab" style="display: none; height:100%;"></div>
             <div class="dp-root" id="dp-detail-tab">
               <!-- Üst Kısım -->
               <div class="dp-tech" id="dp-tech">
@@ -892,6 +897,15 @@
           </svg>
           <span class="rsb-label">Alarm</span>
         </button>
+        <!-- gorevler2.md Görev 13 (2026-08-11) — AlertStore'daki kullanıcı
+             fiyat alarmlarının listesi. dp-alarm-tab'daki Kom1/2/3 strateji
+             sinyal kartlarından (AlarmSignalHistory) AYRI bir kavram. -->
+        <button class="rsb-btn" id="rsb-alerts" title="Alerts">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="24" height="24">
+            <path fill="currentColor" fill-rule="evenodd" d="M22 10a9 9 0 0 0-9 9v4.17l-2 4V29h22v-1.83l-2-4V19a9 9 0 0 0-9-9Zm-8 8a8 8 0 1 1 16 0v4.4l1.76 3.52.24.48v.6H12v-.6l.24-.48L14 22.4V18Zm5 13a3 3 0 0 0 6 0h-1a2 2 0 0 1-4 0h-1Z"></path>
+          </svg>
+          <span class="rsb-label">Alerts</span>
+        </button>
         </div>
         <div class="rsb-spacer" style="flex:1"></div>
 
@@ -928,6 +942,7 @@
   <script src="js/core/event-bus.js"></script>
   <script src="js/core/state.js"></script>
   <script src="js/screener/alert-store.js"></script>        <!-- Çizim tabanlı fiyat alarmları (gorevler2.md Görev 11) -->
+  <script src="js/screener/alert-list-panel.js"></script>   <!-- Alarm listesi UI (gorevler2.md Görev 13) -->
   <script src="js/drawing/ui/dsd-tabs/dsd-utils.js"></script>
   <script src="js/drawing/ui/dsd-tabs/dsd-fibo-tabs.js"></script>
   <script src="js/drawing/ui/dsd-tabs/dsd-position-tabs.js"></script>

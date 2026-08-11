@@ -519,7 +519,7 @@ zamanla TEKRAR birikecek. Kullanıcı: "ileride detaylıca bakarız" dedi —
 
 ---
 
-## [ ] Görev 13 — Alarm listesi görünümü + düzenleme/silme (2026-08-10, kullanıcı isteği — henüz başlanmadı)
+## [x] Görev 13 — Alarm listesi görünümü + düzenleme/silme (2026-08-11 tamamlandı)
 
 **Bağlam:** Görev 11.5/11.6'da çizim tabanlı fiyat alarmı sistemi kuruldu
 (`js/screener/alert-store.js`) — alarm oluşturmak (Navbar ⏰ Alert butonu
@@ -533,29 +533,48 @@ TradingView'da bu, sağ kenar çubuğundaki ayrı bir "Alerts" sekmesi/paneli
 — tüm aktif/tetiklenmiş alarmları liste hâlinde gösterir, her satırda
 düzenle/sil/aktif-pasif yap seçenekleri olur.
 
-### Yapılacak (kapsam netleşince detaylandırılacak — henüz tasarlanmadı)
+### Yapıldı
 
-- Bir "Alerts" listesi paneli/sekmesi (muhtemelen mevcut sağ sidebar
-  yapısına — Watchlist/Alarm sekmeleri gibi — eklenir, ama tam yer/tasarım
-  netleşmedi).
-- Her alarm satırında: sembol, fiyat, condition (crossing/above/below),
-  durum (aktif/tetiklendi/süresi doldu), kaynak (hangi çizimden geldiği
-  varsa), sil butonu, düzenle butonu.
-- Düzenleme: en azından fiyat/condition/expiration/message alanlarının
-  değiştirilebilmesi — `AlertStore`'a yeni bir `updateAlert(id, fields)`
-  fonksiyonu eklenmesi gerekecek (şu an sadece create/remove var).
-- Silme: zaten var olan `removeAlert(id)`'i UI'dan çağırmak.
+- Sağ sidebar'a yeni bağımsız sekme: **`rsb-alerts`** ("Alerts") —
+  mevcut Watchlist/Alarm sekmeleriyle aynı desende, ama AlarmSignalHistory'nin
+  (Kom1/2/3 strateji sinyal kartları, `dp-alarm-tab`) içeriğinden TAMAMEN
+  ayrı — kullanıcı kararı: "navbardaki ikonu değiştirme, menüleri TV
+  benzeri yap" (navbar'ın mevcut Alert ikonuna dokunulmadı).
+- Yeni `js/screener/alert-list-panel.js` (`AlertListPanel`): TradingView'ın
+  Alerts panel düzenine yakın liste — All/Active/Triggered filtre
+  segmentleri, arama, her satırda condition ikonu (Crossing/Up/Down —
+  TV'nin kendi asset kaynağına erişimimiz olmadığı için aynı kavramsal
+  anlamda kendi çizdiğimiz SVG'ler), sembol, fiyat, kaynak/mesaj, durum
+  rozeti (Active/Triggered/Expired), düzenle (kalem) ve sil (çöp) ikonları.
+  Satıra tıklayınca chart o sembole gidiyor.
+- `AlertStore.updateAlert(id, fields)` eklendi — kısmi patch, düzenlenince
+  `triggered`/`lastKnownPrice` sıfırlanır (alarm "yeniden canlandırılmış" sayılır).
+- `js/core/app.js` `_bindAlarmModal`: AYNI Create Alert modalı artık
+  `{editAlertId}` payload'ıyla açılınca DÜZENLEME moduna geçiyor — tüm
+  alanlar mevcut alarmın değerleriyle önceden dolu, buton "Save", kaynak
+  çizimi varsa fiyat hâlâ salt-okunur/canlı gösteriliyor.
+- **Bulunan ve düzeltilen kritik bug (aynı turda):** Hem create hem edit
+  akışında `close()` (modalı DOM'dan kaldırma) form değerlerini (özellikle
+  fiyat input'unu) okumadan ÖNCE çağrılıyordu — bu yüzden manuel (çizim
+  kaynaksız) alarm oluşturma/düzenleme SESSİZCE başarısız oluyordu. Form
+  değerleri artık `close()`'dan önce okunuyor.
 
 ### Doğrulama
 
-- Oluşturulan tüm alarmlar listede doğru görünüyor mu (sembol/pane
-  bağımsız — bir alarm başka bir sembolde de listelenmeli)?
-- Silme gerçekten `AlertStore`'dan kaldırıyor mu, chart'taki çizgi de
-  kayboluyor mu?
-- Düzenleme sonrası tetikleme mantığı (crossing kontrolü) doğru güncel
-  değerlerle çalışıyor mu?
+- Manuel create: fiyat/condition/mesaj doğru kaydedildi (bug düzeltmesi
+  sonrası doğrulandı).
+- Düzenleme: mevcut bir alarmın fiyatı/condition'ı/mesajı değiştirilip
+  "Save" ile kaydedildiğinde `AlertStore`'da gerçekten güncellendiği
+  doğrulandı.
+- Silme: `AlertListPanel`'den silinen alarm `AlertStore.getAlerts()`'ten
+  gerçekten kayboldu.
+- Filtreler: All/Active/Triggered segmentleri doğru sayıda satır gösterdi
+  (5 toplam, 4 aktif, 1 tetiklenmiş — test verisiyle doğrulandı).
+- Satıra tıklama: `symbol:change` event'i doğru sembolle tetiklendi.
+- Ekran görüntüsüyle görsel doğrulama yapıldı, konsol hatasız (bilinen
+  sandbox ağ hataları hariç).
 
-**Rapor:** `2026-XX-XX-gorev13-alarm-listesi-ui.md`
+**Rapor:** `2026-08-11-gorev13-alarm-listesi-ui.md`
 
 ---
 

@@ -725,7 +725,8 @@ const App = {
   _bindSidebar() {
     // 'rsb-news' kaldırıldı — genel piyasa haberleri artık ayrı bir panel
     // değil, News sekmesinin (dp-news-tab) snipe kontrolü ile birleştirildi.
-    const btns = ['rsb-watchlist', 'rsb-alarms'];
+    // 'rsb-alerts' — gorevler2.md Görev 13 (2026-08-11), AlertStore listesi.
+    const btns = ['rsb-watchlist', 'rsb-alarms', 'rsb-alerts'];
     
     btns.forEach(id => {
       const btn = document.getElementById(id);
@@ -768,11 +769,15 @@ const App = {
         // dp-alarm-tab: rsb-alarms'a özel, Bot Signals'tan (dp-signals-tab)
         // tamamen bağımsız içerik — bkz. AlarmSignalHistory modülü.
         const alarmTab = document.getElementById('dp-alarm-tab');
+        // dp-alerts-tab: rsb-alerts'e özel — AlertStore'daki kullanıcı fiyat
+        // alarmlarının listesi (gorevler2.md Görev 13). alarmTab'dan AYRI.
+        const alertsTab = document.getElementById('dp-alerts-tab');
 
         if (detailTab) detailTab.style.display = 'none';
         if (signalsTab) signalsTab.style.display = 'none';
         if (newsTab) newsTab.style.display = 'none';
         if (alarmTab) alarmTab.style.display = 'none';
+        if (alertsTab) alertsTab.style.display = 'none';
 
         // Hide/Show Watchlist components based on active tab
         const wlEls = document.querySelectorAll('.wl-header, #wl-search, #wl-col-header, #wl-list, #detail-resize, .detail-tabs');
@@ -821,6 +826,14 @@ const App = {
             detailTabBtn?.classList.remove('active');
             newsTabBtn?.classList.remove('active');
             if (window.AlarmSignalHistory) AlarmSignalHistory.init();
+          }
+
+          if (tab === 'rsb-alerts' && alertsTab) {
+            alertsTab.style.display = 'block';
+            signalsTabBtn?.classList.add('active'); // bkz. yukarıdaki 'detail' korumasi notu
+            detailTabBtn?.classList.remove('active');
+            newsTabBtn?.classList.remove('active');
+            if (window.AlertListPanel) AlertListPanel.init();
           }
         }
       }
@@ -961,6 +974,8 @@ const App = {
   _lastSelectedDrawing: null,
 
   _bindAlarmModal() {
+    const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     EventBus.on('drawing:selected', (data) => {
       if (!data || !data.id) { this._lastSelectedDrawing = null; return; }
       const drawings = State.getDrawings(data.symbol);
@@ -971,14 +986,44 @@ const App = {
     EventBus.on('modal:alarm:open', (payload) => {
       if (document.getElementById('alarm-modal-backdrop')) return; // zaten açık
 
-      const sym = State.get('activeSymbol') || '—';
+      // gorevler2.md Görev 13 (2026-08-11) — {editAlertId} verilirse Alerts
+      // listesinden "Edit" ile açılmış demektir; AYNI modal, mevcut alarmın
+      // değerleriyle önceden dolu, "Create" yerine "Save" ile updateAlert() çağırır.
+      const editingAlert = payload?.editAlertId && window.AlertStore
+        ? window.AlertStore.getAlerts().find(a => a.id === payload.editAlertId) : null;
+
+      const sym = editingAlert ? editingAlert.symbol : (State.get('activeSymbol') || '—');
       const tf  = window.LayoutManager?.getActivePane?.()?.tf || '';
-      const exchange = State.get('activeExchange') || 'binance';
-      const fromPayload = payload?.drawing && window.AlertStore?.SUPPORTED_TOOLS.includes(payload.drawing.tool) ? payload.drawing : null;
-      const fromTracked  = (this._lastSelectedDrawing && this._lastSelectedDrawing.symbol === sym) ? this._lastSelectedDrawing.drawing : null;
-      const sourceDrawing = fromPayload || fromTracked;
-      const livePrice = sourceDrawing && window.AlertStore ? window.AlertStore.computeDrawingPrice(sourceDrawing) : null;
+      const exchange = editingAlert ? editingAlert.exchange : (State.get('activeExchange') || 'binance');
       const TOOL_LABELS = { trendline: 'Trend Line', ray: 'Ray', extended: 'Extended Line', hline: 'Horizontal Line', hray: 'Horizontal Ray', trendangle: 'Trend Angle', infoline: 'Info Line' };
+
+      let sourceDrawing = null;
+      if (editingAlert?.sourceDrawingId) {
+        const drawings = State.getDrawings(sym) || [];
+        sourceDrawing = drawings.find(d => d.id === editingAlert.sourceDrawingId) || null;
+      } else if (!editingAlert) {
+        const fromPayload = payload?.drawing && window.AlertStore?.SUPPORTED_TOOLS.includes(payload.drawing.tool) ? payload.drawing : null;
+        const fromTracked  = (this._lastSelectedDrawing && this._lastSelectedDrawing.symbol === sym) ? this._lastSelectedDrawing.drawing : null;
+        sourceDrawing = fromPayload || fromTracked;
+      }
+      const hasSource = !!(sourceDrawing || editingAlert?.sourceDrawingId);
+      const livePrice = sourceDrawing && window.AlertStore ? window.AlertStore.computeDrawingPrice(sourceDrawing)
+        : (editingAlert ? editingAlert.price : null);
+      const sourceToolLabel = TOOL_LABELS[sourceDrawing?.tool || editingAlert?.sourceTool] || sourceDrawing?.tool || editingAlert?.sourceTool || '';
+
+      const initCond    = editingAlert?.condition || 'crossing';
+      const initTrigger = editingAlert?.triggerMode || 'once';
+      const initMessage = editingAlert?.message || '';
+      const initToast    = editingAlert ? editingAlert.notifyToast !== false : true;
+      const initTelegram = editingAlert ? !!editingAlert.notifyTelegram : false;
+      // Expiration select'i mevcut expiresAt'e en yakın kategoriye tahmini
+      // eşler — kullanıcı dokunmazsa "Save" bu kategoriden yeniden hesaplar,
+      // pratikte aynı sonucu verir (birkaç saniyelik fark önemsiz).
+      let initExpiry = 'open';
+      if (editingAlert?.expiresAt) {
+        const remaining = editingAlert.expiresAt - Date.now();
+        initExpiry = remaining <= 25 * 60 * 60 * 1000 ? 'eod' : remaining <= 8 * 24 * 60 * 60 * 1000 ? 'week' : 'month';
+      }
 
       const backdrop = document.createElement('div');
       backdrop.id = 'alarm-modal-backdrop';
@@ -986,57 +1031,57 @@ const App = {
       backdrop.innerHTML = `
         <div class="modal" style="width:340px;">
           <div class="modal-header">
-            <span>Create alert on ${sym}${tf ? ', ' + tf : ''}</span>
+            <span>${editingAlert ? 'Edit' : 'Create'} alert on ${sym}${tf ? ', ' + tf : ''}</span>
             <button id="alarm-modal-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
           </div>
           <div class="modal-body">
             <label class="form-label">Condition</label>
             <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Price</div>
             <select class="form-input" id="alarm-modal-cond" style="margin-bottom:8px;">
-              <option value="crossing">Crossing</option>
-              <option value="above">Crossing Up</option>
-              <option value="below">Crossing Down</option>
+              <option value="crossing" ${initCond === 'crossing' ? 'selected' : ''}>Crossing</option>
+              <option value="above" ${initCond === 'above' ? 'selected' : ''}>Crossing Up</option>
+              <option value="below" ${initCond === 'below' ? 'selected' : ''}>Crossing Down</option>
             </select>
-            ${sourceDrawing ? `
+            ${hasSource ? `
               <div class="form-input" style="margin-bottom:10px; color:var(--text-secondary); display:flex; justify-content:space-between;">
-                <span>${TOOL_LABELS[sourceDrawing.tool] || sourceDrawing.tool}</span>
-                <span>~${livePrice != null ? livePrice.toFixed ? livePrice.toFixed(4) : livePrice : '—'}</span>
+                <span>${sourceToolLabel}</span>
+                <span>~${livePrice != null ? (livePrice.toFixed ? livePrice.toFixed(4) : livePrice) : '—'}</span>
               </div>
             ` : `
-              <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" style="margin-bottom:10px;">
+              <input class="form-input" id="alarm-modal-price" type="number" step="any" placeholder="e.g. 65000" value="${editingAlert ? editingAlert.price : ''}" style="margin-bottom:10px;">
             `}
 
             <label class="form-label">Trigger</label>
             <select class="form-input" id="alarm-modal-trigger" style="margin-bottom:2px;">
-              <option value="once">Once only</option>
-              <option value="once_per_bar">Once per bar</option>
-              <option value="once_per_bar_close">Once per bar close</option>
-              <option value="once_per_minute">Once per minute</option>
+              <option value="once" ${initTrigger === 'once' ? 'selected' : ''}>Once only</option>
+              <option value="once_per_bar" ${initTrigger === 'once_per_bar' ? 'selected' : ''}>Once per bar</option>
+              <option value="once_per_bar_close" ${initTrigger === 'once_per_bar_close' ? 'selected' : ''}>Once per bar close</option>
+              <option value="once_per_minute" ${initTrigger === 'once_per_minute' ? 'selected' : ''}>Once per minute</option>
             </select>
             <p style="font-size:10px; color:var(--text-muted); margin:0 0 10px;">Only "Once only" is active for now — the rest need server-side monitoring (queued, see task list).</p>
 
             <label class="form-label">Expiration</label>
             <select class="form-input" id="alarm-modal-expiry" style="margin-bottom:10px;">
-              <option value="open">Open-ended</option>
-              <option value="eod">End of day</option>
-              <option value="week">1 week</option>
-              <option value="month">1 month</option>
+              <option value="open" ${initExpiry === 'open' ? 'selected' : ''}>Open-ended</option>
+              <option value="eod" ${initExpiry === 'eod' ? 'selected' : ''}>End of day</option>
+              <option value="week" ${initExpiry === 'week' ? 'selected' : ''}>1 week</option>
+              <option value="month" ${initExpiry === 'month' ? 'selected' : ''}>1 month</option>
             </select>
 
             <label class="form-label">Message</label>
-            <textarea class="form-input" id="alarm-modal-message" rows="2" style="margin-bottom:10px; resize:vertical;" placeholder="${sym} ${sourceDrawing ? TOOL_LABELS[sourceDrawing.tool] || sourceDrawing.tool : 'price'} crossing"></textarea>
+            <textarea class="form-input" id="alarm-modal-message" rows="2" style="margin-bottom:10px; resize:vertical;" placeholder="${sym} ${hasSource ? sourceToolLabel : 'price'} crossing">${_esc(initMessage)}</textarea>
 
             <label class="form-label">Notifications</label>
             <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0;">
-              <input type="checkbox" id="alarm-modal-notify-toast" checked> Toast notification
+              <input type="checkbox" id="alarm-modal-notify-toast" ${initToast ? 'checked' : ''}> Toast notification
             </label>
             <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:4px 0; color:var(--text-secondary);">
-              <input type="checkbox" id="alarm-modal-notify-telegram"> Telegram <span style="font-size:10px;">(server setup pending — won't send yet)</span>
+              <input type="checkbox" id="alarm-modal-notify-telegram" ${initTelegram ? 'checked' : ''}> Telegram <span style="font-size:10px;">(server setup pending — won't send yet)</span>
             </label>
           </div>
           <div class="modal-footer">
             <button class="btn" id="alarm-modal-cancel">Cancel</button>
-            <button class="btn btn-primary" id="alarm-modal-create">Create</button>
+            <button class="btn btn-primary" id="alarm-modal-create">${editingAlert ? 'Save' : 'Create'}</button>
           </div>
         </div>`;
       document.body.appendChild(backdrop);
@@ -1060,16 +1105,33 @@ const App = {
                          : null;
         const opts = { condition: cond, triggerMode, expiresAt, message, notifyToast, notifyTelegram };
 
+        // ÖNEMLİ: manuel (sourceDrawing'siz) alarmlarda fiyat input'u DOM'dan
+        // burada okunmalı — close() (backdrop.remove()) bundan SONRA çağrılmalı,
+        // aksi halde element DOM'dan kalkmış olur, .value her zaman undefined
+        // gelir ve create/update sessizce başarısız olur (2026-08-11'de bulunan
+        // gerçek bug, düzeltildi).
+        let manualPrice = null;
+        if (!hasSource) {
+          const priceStr = document.getElementById('alarm-modal-price')?.value;
+          if (!priceStr) { if (window.Toast) Toast.show('No price entered', 'info'); return; }
+          manualPrice = parseFloat(priceStr);
+        }
+
         close();
         if (!window.AlertStore) return;
+
+        if (editingAlert) {
+          if (manualPrice != null) opts.price = manualPrice;
+          const updated = window.AlertStore.updateAlert(editingAlert.id, opts);
+          if (window.Toast) Toast.show(updated ? `Alert updated — ${sym}` : 'Could not update alert', updated ? 'success' : 'error');
+          return;
+        }
 
         let alert;
         if (sourceDrawing) {
           alert = window.AlertStore.createFromDrawing(sym, exchange, sourceDrawing, opts);
         } else {
-          const price = document.getElementById('alarm-modal-price')?.value;
-          if (!price) { if (window.Toast) Toast.show('No price entered', 'info'); return; }
-          alert = window.AlertStore.createManual(sym, exchange, price, cond, opts);
+          alert = window.AlertStore.createManual(sym, exchange, manualPrice, cond, opts);
         }
         if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${alert.price}` : 'Could not create alert', alert ? 'success' : 'error');
       });

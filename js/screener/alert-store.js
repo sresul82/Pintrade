@@ -32,6 +32,7 @@
  *   AlertStore.getAlerts(symbol?)
  *   AlertStore.createFromDrawing(symbol, exchange, drawing) -> alert|null
  *   AlertStore.createManual(symbol, exchange, price, condition) -> alert
+ *   AlertStore.updateAlert(id, fields) -> alert|null (gorevler2.md Görev 13)
  *   AlertStore.removeAlert(id)
  *   AlertStore.getPrefs() / setPrefs({...})
  *   AlertStore.SUPPORTED_TOOLS
@@ -152,6 +153,26 @@ const AlertStore = (() => {
     return true;
   }
 
+  // gorevler2.md Görev 13 (2026-08-11) — Alarm listesi UI'ından düzenleme.
+  // Sadece belirtilen alanlar güncellenir (kısmi patch). Manuel (çizim
+  // kaynaksız) alarmda `price` de değiştirilebilir; çizim kaynaklı alarmda
+  // fiyat zaten `_resolveTriggerPrice`'tan canlı geliyor, elle değiştirmek
+  // bir sonraki `checkPrice()`'ta hemen ezilir — bu yüzden UI, kaynak
+  // çizimi olan alarmlarda fiyat alanını göstermemeli (zaten Create Alert
+  // modalı bunu yapıyor). Düzenlenince `triggered`/`lastKnownPrice` SIFIRLANIR
+  // — kullanıcı bilinçli olarak alarmı yeniden "canlandırmış" sayılır.
+  function updateAlert(id, fields = {}) {
+    const alert = _alerts.find(a => a.id === id);
+    if (!alert) return null;
+    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message', 'notifyToast', 'notifyTelegram', 'active'];
+    ALLOWED.forEach(k => { if (fields[k] !== undefined) alert[k] = fields[k]; });
+    alert.triggered = false;
+    alert.lastKnownPrice = null;
+    _save();
+    _emit('alert:updated', alert);
+    return alert;
+  }
+
   function _beep(volumePct) {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -237,7 +258,7 @@ const AlertStore = (() => {
     });
   }
 
-  return { getAlerts, createFromDrawing, createManual, removeAlert, getPrefs, setPrefs, checkPrice, computeDrawingPrice, SUPPORTED_TOOLS };
+  return { getAlerts, createFromDrawing, createManual, updateAlert, removeAlert, getPrefs, setPrefs, checkPrice, computeDrawingPrice, SUPPORTED_TOOLS };
 })();
 
 window.AlertStore = AlertStore;
