@@ -173,6 +173,7 @@ const App = {
     this._bindSyncKey();
     this._bindChartBottomBar();
     this._bindAlarmModal();
+    this._bindIndicatorsModal();
 
     EventBus.on('feed:price', data => {
       if (data.symbol === State.get('activeSymbol')) {
@@ -1250,6 +1251,118 @@ const App = {
           alert = window.AlertStore.createManual(sym, exchange, manualPrice, cond, opts);
         }
         if (window.Toast) Toast.show(alert ? `Alert created — ${sym} @ ${window.AlertStore.formatPrice(alert.price)}` : 'Could not create alert', alert ? 'success' : 'error');
+      });
+    });
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri (ilk sürüm: EMA/DEMA/RSI)
+  // İki modal: (1) navbar'daki Indicators butonu → arama/ekleme listesi,
+  // (2) legend'deki ⚙ ikonu → minimal ayar popup'ı (period/renk/kaldır).
+  // ══════════════════════════════════════════════════════════════
+  _bindIndicatorsModal() {
+    const TV_BLUE = '#2962ff';
+    const CATALOG = [
+      { type: 'ema',  name: 'Moving Average Exponential', short: 'EMA',  desc: 'Overlay — ana chart üzerinde' },
+      { type: 'dema', name: 'Double EMA',                 short: 'DEMA', desc: 'Overlay — ana chart üzerinde' },
+      { type: 'rsi',  name: 'Relative Strength Index',    short: 'RSI',  desc: 'Alt-pencere — ayrı, senkronize chart' },
+    ];
+
+    const btn = document.getElementById('btn-indicators');
+    btn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (document.getElementById('ind-search-backdrop')) return;
+
+      const backdrop = document.createElement('div');
+      backdrop.id = 'ind-search-backdrop';
+      backdrop.className = 'modal-backdrop';
+      backdrop.innerHTML = `
+        <div class="modal" style="width:340px;">
+          <div class="modal-header">
+            <span>Indicators</span>
+            <button id="ind-search-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
+          </div>
+          <div class="modal-body" style="padding-bottom:6px;">
+            <input class="form-input" id="ind-search-input" type="text" placeholder="Search indicator" style="margin-bottom:8px;">
+            <div id="ind-search-list"></div>
+          </div>
+        </div>`;
+      document.body.appendChild(backdrop);
+      const close = () => backdrop.remove();
+      backdrop.addEventListener('click', (e2) => { if (e2.target === backdrop) close(); });
+      document.getElementById('ind-search-close')?.addEventListener('click', close);
+
+      const listEl = document.getElementById('ind-search-list');
+      const renderList = (filter = '') => {
+        const f = filter.trim().toLowerCase();
+        const items = CATALOG.filter(c => !f || c.name.toLowerCase().includes(f) || c.short.toLowerCase().includes(f));
+        listEl.innerHTML = items.map(c => `
+          <div class="ind-search-row" data-type="${c.type}" style="display:flex; flex-direction:column; gap:1px; padding:8px 6px; border-radius:4px; cursor:pointer;">
+            <span style="font-size:12px; color:var(--text-primary);">${c.name} <span style="color:var(--text-secondary);">(${c.short})</span></span>
+            <span style="font-size:10px; color:var(--text-muted);">${c.desc}</span>
+          </div>`).join('') || `<div style="padding:16px; text-align:center; color:var(--text-muted); font-size:11px;">No match</div>`;
+        listEl.querySelectorAll('.ind-search-row').forEach(row => {
+          row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.05)');
+          row.addEventListener('mouseleave', () => row.style.background = 'transparent');
+          row.addEventListener('click', () => {
+            const pane = window.LayoutManager?.getActivePane?.();
+            if (!pane) return;
+            const cfg = pane.addIndicator(row.dataset.type);
+            if (window.Toast) Toast.show(`${cfg.type.toUpperCase()} added — ${pane.symbol}`, 'success');
+            close();
+          });
+        });
+      };
+      renderList();
+      document.getElementById('ind-search-input')?.addEventListener('input', (e2) => renderList(e2.target.value));
+      document.getElementById('ind-search-input')?.focus();
+    });
+
+    // ── Ayar popup'ı (legend ⚙) ─────────────────────────────────────
+    EventBus.on('indicator:editRequested', ({ paneIdx, indicatorId }) => {
+      if (document.getElementById('ind-settings-backdrop')) return;
+      const pane = window.LayoutManager?.panes?.[paneIdx];
+      const cfg = pane?.indicators.find(i => i.id === indicatorId);
+      if (!pane || !cfg) return;
+
+      const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
+      const backdrop = document.createElement('div');
+      backdrop.id = 'ind-settings-backdrop';
+      backdrop.className = 'modal-backdrop';
+      backdrop.innerHTML = `
+        <div class="modal" style="width:280px;">
+          <div class="modal-header">
+            <span>${NAME[cfg.type]} settings</span>
+            <button id="ind-settings-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label">Length</label>
+            <input class="form-input" id="ind-settings-period" type="number" min="1" step="1" value="${cfg.period}" style="margin-bottom:10px;">
+            <label class="form-label">Color</label>
+            <input id="ind-settings-color" type="color" value="${cfg.color}" style="width:100%; height:32px; margin-bottom:4px; background:transparent; border:1px solid var(--border-primary); border-radius:6px; cursor:pointer;">
+          </div>
+          <div class="modal-footer" style="justify-content:space-between;">
+            <button class="btn" id="ind-settings-remove" style="color:#e05c5c;">Remove</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn" id="ind-settings-cancel">Cancel</button>
+              <button class="btn" id="ind-settings-apply" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">Apply</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(backdrop);
+      const close = () => backdrop.remove();
+      backdrop.addEventListener('click', (e2) => { if (e2.target === backdrop) close(); });
+      document.getElementById('ind-settings-close')?.addEventListener('click', close);
+      document.getElementById('ind-settings-cancel')?.addEventListener('click', close);
+      document.getElementById('ind-settings-remove')?.addEventListener('click', () => {
+        close();
+        pane.removeIndicator(indicatorId);
+      });
+      document.getElementById('ind-settings-apply')?.addEventListener('click', () => {
+        const period = parseInt(document.getElementById('ind-settings-period')?.value, 10);
+        const color = document.getElementById('ind-settings-color')?.value || cfg.color;
+        close();
+        pane.updateIndicatorSettings(indicatorId, { period: (Number.isFinite(period) && period > 0) ? period : cfg.period, color });
       });
     });
   },

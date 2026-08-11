@@ -715,7 +715,7 @@ Aynı turda kullanıcı 4 TV ekran görüntüsü daha paylaşıp şunları isted
 
 ---
 
-## [ ] Görev 14 — Chart üzerinde gerçek indikatör sistemi + Indicators sidebar sekmesi (2026-08-11, kullanıcı isteği — henüz başlanmadı, sadece kayıt altına alındı)
+## [x] Görev 14.1 — Chart üzerinde gerçek indikatör sistemi: EMA/DEMA/RSI (2026-08-11)
 
 **Bağlam:** Kullanıcı, Alerts sekmesinin yanına, chart'a eklenen
 indikatörleri ve ayarlarını görebileceği bir "Indicators" sekmesi
@@ -742,12 +742,87 @@ bağlanmamış (bkz. gorevler2.md izleme listesi, eski not).
 (2), (1) olmadan anlamsız — listelecek gerçek bir veri yok. Bu yüzden
 kapsam netleşip kullanıcı onayı geldiğinde önce (1)'e başlanmalı.
 
-### Doğrulama (kapsam netleştikten sonra)
+**Kullanıcı onayı:** "RSI EMA ve DEMA indikatorlerinden başlayalım" —
+overlay (EMA/DEMA) ve alt-pencere (RSI) ayrımını bildiğini teyit
+istedi, ayrıca "TV ile aynı sonucu verir mi?" diye sordu. Cevap:
+matematik TV'nin `ta.ema()`'sıyla (SMA-seed) birebir eşleştirilirse ve
+tüm geçmiş üzerinden (sadece görünen barlar değil) hesaplanırsa evet —
+bu ikisi de uygulandı (aşağıda).
 
-- Chart'a en az bir gerçek indikatör (örn. RSI veya DEMA9) eklenip
-  görselleştirilebiliyor mu?
-- Indicators sekmesinde eklenen indikatör(ler) doğru listeleniyor,
-  düzenlenip silinebiliyor mu?
+### Teknik yaklaşım
+
+- **Kütüphane kısıtı:** proje `lightweight-charts v4.1.3` kullanıyor —
+  bu sürümde TV'nin native "pane" (chart'ı bölüp alt panel açma)
+  desteği yok (v5'te geldi). v5'e geçmek `chart-pane.js`'in
+  `addLineSeries`/`addHistogramSeries` gibi tüm v4 API çağrılarını
+  yeniden yazmayı gerektirir — kapsam dışı/riskli.
+- **EMA/DEMA** → ana chart'a overlay `addLineSeries()` (basit, ekstra
+  pencere gerekmez).
+- **RSI** → v4-döneminin standart çözümü: ikinci, senkronize bir
+  `createChart()` örneği (`js/chart/chart-pane.js` → `_ensureRsiPane()`),
+  zaman ekseni (`subscribeVisibleLogicalRangeChange`) VE crosshair
+  (`subscribeCrosshairMove` + `setCrosshairPosition`) iki yönlü elle
+  senkronlanıyor. 30/70 referans çizgileri dahil.
+- **TV parity:** `js/screener/indicator-engine.js`'e YENİ, ayrı
+  `calcEMAFull`/`calcDEMAFull`/`calcRSIFull` fonksiyonları eklendi
+  (tam seri döndürüyorlar, SMA-seed EMA kullanıyorlar — TV'nin
+  `ta.ema()`'sıyla birebir eşleşiyor). Botların (M1Hammer, Kom1Scanner)
+  kullandığı eski `calcRSI`/`calcDEMA`/`_emaSeries` bot-architecture
+  kuralı gereği DOKUNULMADI (davranışları/sinyalleri değişmesin diye) —
+  iki aile paralel yaşıyor.
+- **Çoklu indikatör + kalıcılık:** `ChartPane.indicators` dizisi (her biri
+  `{id, type, period, color}`), `getState()`/localStorage'a kaydediliyor,
+  sayfa yenilenince geri yükleniyor. Aynı anda EMA+DEMA+RSI birlikte
+  eklenebiliyor.
+- **UI:** Navbar'daki "Indicators" butonu (`btn-indicators`, önceden
+  hiç bağlı değildi) artık TV'ye benzer bir arama/ekleme modalı açıyor
+  (`js/core/app.js` → `_bindIndicatorsModal()`). Chart'ın sol-üst
+  köşesinde TV tarzı bir legend (`EMA(9) 43210.5`), hover'da ⚙/✕
+  ikonları — ⚙ minimal bir ayar popup'ı açıyor (period + renk +
+  Remove), ✕ direkt kaldırıyor.
+- **Canlı güncelleme:** `_onFeedTick`/`_onLiveCandle`'da tam seri
+  yeniden hesaplanıyor (ucuz, O(n) döngü) ama LWC serisine sadece SON
+  nokta `update()` ile yollanıyor (`tickOnly` modu) — her tick'te tüm
+  seriyi `setData()` ile yeniden çizmek yerine.
+
+### Doğrulama (tarayıcıda, gerçek modüllerle — sentetik mum verisiyle,
+sandbox'ın Binance API erişimi 502 verdiği için gerçek veri yerine)
+
+- `IndicatorEngine.calcEMAFull`: bilinen 9-periyotluk örnek veriyle ilk
+  değerin SMA(ilk 9 close)'a EŞİT olduğu doğrulandı (TV-seed). ✅
+- `IndicatorEngine.calcRSIFull`: klasik Wilder RSI örnek verisiyle
+  (StockCharts.com referansı, RSI≈70.5 beklenen) 14. barda 70.46
+  hesaplandı — referansla uyumlu. ✅
+- Sentetik 100 barlık mum verisiyle pane'e EMA(9)+DEMA(9)+RSI(14)
+  eklendi: overlay çizgileri chart üzerinde doğru renklerde (mavi/turuncu)
+  render oldu, RSI için ayrı senkronize alt-chart açıldı, legend
+  `EMA(9) 101.47` / `DEMA(9) 101.11` / `RSI(14) 42.47` doğru gösterdi. ✅
+- Canlı tick simülasyonu (`_onFeedTick` ile forming bar'a +5 fiyat):
+  EMA/RSI değerleri ve legend metni anında güncellendi. ✅
+- "Indicators" modalı: arama filtresi ("rsi" yazınca sadece RSI
+  kalıyor), tıklayınca `addIndicator()` çağrılıp aktif pane'e ekleniyor. ✅
+- Legend hover: ⚙/✕ ikonları doğru açılıp kapanıyor. ⚙ → ayar popup'ı
+  (Length/Color/Remove/Cancel/Apply) açılıyor, period değiştirip Apply'a
+  basınca indikatör yeniden hesaplanıyor (9→21 test edildi). ✅
+- Remove: indikatör kaldırılınca ilgili series/legend satırı kayboluyor;
+  son RSI kaldırılınca alt-chart tamamen yok ediliyor (`_destroyRsiPane`). ✅
+- `getState()`: `indicators` dizisi runtime `_lastValue` sızdırmadan
+  temiz `{id,type,period,color}` şeklinde döndü (localStorage'a
+  kaydedilecek şekli doğru). ✅
+- Konsol hatasız (bilinen sandbox 502/Binance ağ hataları hariç). ✅
+
+**Not:** RSI alt-chart'ının fiyat ekseni genişliği ana chart'la piksel
+piksel eşleşmiyor olabilir (iki ayrı `createChart()` örneği, v4'te
+ortak genişlik zorlaması yok) — pratikte fontlar aynı olduğu için fark
+birkaç piksel, gözle fark edilmiyor. Gerçek Binance/Bybit canlı
+veriyle (bu sandbox'ta erişilemedi) ayrıca bir kez daha görsel kontrol
+önerilir.
+
+### Sıradaki (Görev 14.2, henüz başlanmadı)
+
+Indicators sidebar sekmesi (Alerts sekmesine benzer, hızlı) — artık
+gerçek veri var (`ChartPane.indicators`), listelenip düzenlenip
+silinebilir. Kullanıcı onayı bekliyor.
 
 **Rapor:** `2026-XX-XX-gorev14-chart-indikator-sistemi.md`
 

@@ -194,6 +194,76 @@ const IndicatorEngine = (() => {
     return { mid, slope, intercept };
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // gorevler2.md Görev 14 (2026-08-11) — Chart overlay/alt-pencere
+  // indikatörleri için TAM SERİ döndüren, TradingView'in ta.ema()
+  // ile birebir eşleşen (SMA-seed) fonksiyonlar.
+  //
+  // NOT: Yukarıdaki calcRSI/calcDEMA/_emaLast/_emaSeries bot'lar
+  // (M1Hammer, Kom1Scanner) tarafından kullanılıyor — bot-architecture
+  // kuralı gereği DAVRANIŞLARI DEĞİŞTİRİLMEDİ (ilk EMA değerini ham
+  // ilk kapanışla seed ediyorlar, TV ile birebir eşleşmiyor ama bot
+  // sinyalleri zaten bu davranışa göre kalibre). Chart'ın ihtiyacı
+  // ayrı — bu yüzden burada YENİ, SMA-seed kullanan bir aile var.
+  // ══════════════════════════════════════════════════════════════
+
+  /** TV'nin ta.ema() davranışı: ilk değer SMA(ilk `period` bar), sonrası EMA. */
+  function _smaSeedEmaSeries(values, period) {
+    const out = new Array(values.length).fill(null);
+    if (values.length < period) return out;
+    const k = 2 / (period + 1);
+    let sum = 0;
+    for (let i = 0; i < period; i++) sum += values[i];
+    let ema = sum / period;
+    out[period - 1] = ema;
+    for (let i = period; i < values.length; i++) {
+      ema = values[i] * k + ema * (1 - k);
+      out[i] = ema;
+    }
+    return out;
+  }
+
+  /** EMA — tam seri, chart overlay için. */
+  function calcEMAFull(closes, period = 20) {
+    return _smaSeedEmaSeries(closes, period);
+  }
+
+  /** DEMA — tam seri, chart overlay için. DEMA = 2*EMA1 - EMA(EMA1). */
+  function calcDEMAFull(closes, period = DEMA_PERIOD_DEFAULT) {
+    const ema1 = _smaSeedEmaSeries(closes, period);
+    const firstValid = ema1.findIndex(v => v != null);
+    const out = new Array(closes.length).fill(null);
+    if (firstValid === -1) return out;
+    const ema1Valid = ema1.slice(firstValid);
+    const ema2Valid = _smaSeedEmaSeries(ema1Valid, period);
+    for (let i = 0; i < ema2Valid.length; i++) {
+      if (ema2Valid[i] == null) continue;
+      out[firstValid + i] = 2 * ema1Valid[i] - ema2Valid[i];
+    }
+    return out;
+  }
+
+  /** RSI (Wilder) — tam seri, yuvarlanmamış, chart alt-pencere için. */
+  function calcRSIFull(closes, period = RSI_PERIOD_DEFAULT) {
+    const out = new Array(closes.length).fill(null);
+    if (closes.length < period + 1) return out;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const d = closes[i] - closes[i - 1];
+      if (d > 0) gains += d; else losses -= d;
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period + 1; i < closes.length; i++) {
+      const d = closes[i] - closes[i - 1];
+      avgGain = (avgGain * (period - 1) + Math.max(d, 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + Math.max(-d, 0)) / period;
+      out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return out;
+  }
+
   return {
     calcRSI,
     calcSRSI,
@@ -201,6 +271,9 @@ const IndicatorEngine = (() => {
     calcDEMA,
     calcHeikinAshi,
     calcRegressionChannel,
+    calcEMAFull,
+    calcDEMAFull,
+    calcRSIFull,
   };
 })();
 

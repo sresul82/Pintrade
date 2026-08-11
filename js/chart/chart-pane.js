@@ -112,6 +112,16 @@ class ChartPane {
     this.loaded     = false;
     this.syncing    = false;
 
+    // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri (EMA/DEMA/RSI)
+    this.indicators   = Array.isArray(s.indicators) ? s.indicators.map(i => ({ ...i })) : [];
+    this._indSeries   = {};   // id -> LWC line series (overlay: ema/dema)
+    this._rsiChart    = null; // ayrı senkronize chart (RSI için)
+    this._rsiWrap     = null;
+    this._rsiSeries   = {};   // id -> LWC line series (RSI chart içinde)
+    this._rsiBand70   = null;
+    this._rsiBand30   = null;
+    this._indLegendEl = null;
+
     this._build();
     this._initChart();
     this._bindEvents();
@@ -312,6 +322,11 @@ class ChartPane {
 
     this._buildSeries();
 
+    // gorevler2.md Görev 14 — kayıtlı state'ten geri yüklenen indikatörlerin
+    // series/alt-chart'ları burada kurulur (veri henüz gelmedi, değerler
+    // _onFeedCandles gelince _recomputeAllIndicators() ile doldurulur).
+    if (this.indicators.length) this._rebuildIndicatorOverlays();
+
     this.chart.subscribeCrosshairMove(p => {
       this._onCrosshairMove(p);
       this._syncDrawingCanvasClip(); // Fix Issue 1: dynamic scale width
@@ -351,7 +366,10 @@ class ChartPane {
         const { width, height } = e.contentRect;
         if (width > 0 && height > 0) {
           this.chart.resize(width, height);
-          
+
+          // gorevler2.md Görev 14 — RSI alt-chart'ı ana chart'la aynı genişlikte kalsın
+          if (this._rsiChart) { try { this._rsiChart.resize(width, 120); } catch (_) {} }
+
           // Fix Issue 1: Sync drawing canvas to dynamic price/time scale sizes
           this._syncDrawingCanvasClip();
           if (this.redrawDrawings) this.redrawDrawings();
@@ -552,6 +570,304 @@ class ChartPane {
     if (window.ChartPhantom) ChartPhantom.init(this);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
+  // EMA/DEMA: ana chart'a overlay line series.
+  // RSI: v4.1.3'te native "pane" desteği yok (v5'e ilk kez geldi) —
+  // bu yüzden ikinci, senkronize bir createChart() örneği kullanılıyor
+  // (zaman ekseni + crosshair elle senkronlanıyor, standart v4-dönemi
+  // çözümü). indicator-engine.js'deki calcEMAFull/calcDEMAFull/
+  // calcRSIFull TV'nin ta.ema()/RSI'ıyla birebir eşleşen SMA-seed
+  // matematiği kullanıyor.
+  // ══════════════════════════════════════════════════════════════
+
+  /** indicators: [{id, type:'ema'|'dema'|'rsi', period, color}] eklenir/kaldırılır. */
+  addIndicator(type, opts = {}) {
+    const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800', rsi: '#7e57c2' };
+    const DEFAULT_PERIOD = { ema: 20, dema: 9, rsi: 14 };
+    const cfg = {
+      id: 'ind_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      type,
+      period: opts.period ?? DEFAULT_PERIOD[type] ?? 14,
+      color: opts.color || DEFAULT_COLOR[type] || '#2962ff',
+    };
+    this.indicators.push(cfg);
+    this._rebuildIndicatorOverlays();
+    this._recomputeAllIndicators();
+    return cfg;
+  }
+
+  removeIndicator(id) {
+    const idx = this.indicators.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    this.indicators.splice(idx, 1);
+    this._rebuildIndicatorOverlays();
+  }
+
+  updateIndicatorSettings(id, patch) {
+    const cfg = this.indicators.find(i => i.id === id);
+    if (!cfg) return;
+    Object.assign(cfg, patch);
+    this._rebuildIndicatorOverlays();
+    this._recomputeAllIndicators();
+  }
+
+  /** Aktif `this.indicators`e göre series/alt-chart'ları (yeniden) kurar. */
+  _rebuildIndicatorOverlays() {
+    const pScaleId = this.priceSide === 'left' ? 'left' : 'right';
+    const wanted = new Set(this.indicators.map(i => i.id));
+
+    // Artık listede olmayan overlay series'leri kaldır
+    Object.keys(this._indSeries).forEach(id => {
+      if (!wanted.has(id)) {
+        try { this.chart.removeSeries(this._indSeries[id]); } catch (_) {}
+        delete this._indSeries[id];
+      }
+    });
+
+    this.indicators.forEach(cfg => {
+      if (cfg.type === 'rsi') return; // ayrı alt-chart'ta, aşağıda ele alınıyor
+      if (this._indSeries[cfg.id]) {
+        this._indSeries[cfg.id].applyOptions({ color: cfg.color });
+        return;
+      }
+      this._indSeries[cfg.id] = this.chart.addLineSeries({
+        color: cfg.color, lineWidth: 2, priceScaleId: pScaleId,
+        priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
+        lastValueVisible: false, priceLineVisible: false,
+      });
+    });
+
+    const hasRsi = this.indicators.some(i => i.type === 'rsi');
+    if (hasRsi) this._ensureRsiPane(); else this._destroyRsiPane();
+
+    this._updateIndicatorLegend();
+  }
+
+  /** İkinci, senkronize bir chart — RSI'ın 0-100 ölçeği ana fiyat ölçeğiyle uyuşmaz. */
+  _ensureRsiPane() {
+    if (this._rsiChart) return;
+
+    this._rsiWrap = document.createElement('div');
+    this._rsiWrap.className = 'pane-rsi-wrap';
+    this._rsiWrap.style.cssText = 'position:relative; height:120px; border-top:1px solid var(--border-primary); flex-shrink:0;';
+    this.wrap.appendChild(this._rsiWrap);
+
+    this._rsiChart = LightweightCharts.createChart(this._rsiWrap, {
+      width: 100, height: 120,
+      layout: {
+        background: { type: 'solid', color: this.bgColor1 },
+        textColor: this.scaleTextColor,
+        fontSize: parseInt(this.scaleFontSize, 10) || 11,
+        fontFamily: "'JetBrains Mono', monospace",
+      },
+      grid: { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: this.crosshairColor, labelBackgroundColor: COLORS.crosshairLbl },
+        horzLine: { color: this.crosshairColor, labelBackgroundColor: COLORS.crosshairLbl },
+      },
+      rightPriceScale: {
+        borderColor: this.scaleLinesColor,
+        scaleMargins: { top: 0.15, bottom: 0.15 },
+        visible: this.priceSide === 'right',
+      },
+      leftPriceScale: {
+        borderColor: this.scaleLinesColor,
+        scaleMargins: { top: 0.15, bottom: 0.15 },
+        visible: this.priceSide === 'left',
+      },
+      timeScale: { borderColor: this.scaleLinesColor, timeVisible: true, secondsVisible: false, rightOffset: 12 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true },
+      handleScale:  { mouseWheel: true, pinch: true },
+    });
+
+    // 30/70 referans çizgileri — TV'nin RSI varsayılan bant çizgileri.
+    this._rsiSeries = {};
+    const bandOpts = { color: 'rgba(120,130,150,0.25)', lineWidth: 1, priceScaleId: this.priceSide === 'left' ? 'left' : 'right', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false };
+    this._rsiBand70 = this._rsiChart.addLineSeries(bandOpts);
+    this._rsiBand30 = this._rsiChart.addLineSeries(bandOpts);
+
+    // ── Zaman ekseni senkronu (ana chart ↔ RSI chart) ─────────────
+    let syncing = false;
+    this._rsiUnsyncMain = () => {};
+    const mainRange = this.chart.timeScale().getVisibleLogicalRange();
+    if (mainRange) { try { this._rsiChart.timeScale().setVisibleLogicalRange(mainRange); } catch (_) {} }
+
+    const fromMain = this.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (!range || syncing || !this._rsiChart) return;
+      syncing = true;
+      try { this._rsiChart.timeScale().setVisibleLogicalRange(range); } catch (_) {}
+      syncing = false;
+    });
+    const fromRsi = this._rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (!range || syncing || !this.chart) return;
+      syncing = true;
+      try { this.chart.timeScale().setVisibleLogicalRange(range); } catch (_) {}
+      syncing = false;
+    });
+
+    // ── Crosshair senkronu (dikey çizgi hizası) ────────────────────
+    const fromMainCross = this.chart.subscribeCrosshairMove(param => {
+      if (!this._rsiChart) return;
+      if (!param || !param.time) { this._rsiChart.clearCrosshairPosition(); return; }
+      const anySeries = Object.values(this._rsiSeries)[0] || this._rsiBand70;
+      if (anySeries) { try { this._rsiChart.setCrosshairPosition(50, param.time, anySeries); } catch (_) {} }
+    });
+    const fromRsiCross = this._rsiChart.subscribeCrosshairMove(param => {
+      if (!this.series) return;
+      if (!param || !param.time) { this.chart.clearCrosshairPosition(); return; }
+      try { this.chart.setCrosshairPosition(this._lastPrice ?? 0, param.time, this.series); } catch (_) {}
+    });
+
+    this._rsiUnsync = () => {
+      try { this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(fromMain); } catch (_) {}
+      try { this.chart.unsubscribeCrosshairMove(fromMainCross); } catch (_) {}
+    };
+
+    // Genişlik ana chart'la aynı (yükseklik sabit 120px, RO ile güncellenir).
+    const rect = this.cvs.getBoundingClientRect();
+    if (rect.width > 0) this._rsiChart.resize(rect.width, 120);
+  }
+
+  _destroyRsiPane() {
+    if (!this._rsiChart) return;
+    if (this._rsiUnsync) this._rsiUnsync();
+    try { this._rsiChart.remove(); } catch (_) {}
+    if (this._rsiWrap?.parentNode) this._rsiWrap.parentNode.removeChild(this._rsiWrap);
+    this._rsiChart = null;
+    this._rsiWrap = null;
+    this._rsiSeries = {};
+    this._rsiBand70 = null;
+    this._rsiBand30 = null;
+  }
+
+  /** `this.candlesData`'dan tüm aktif indikatörleri yeniden hesaplar.
+   *  `tickOnly`: canlı tick'lerde (saniyede birkaç kez tetiklenebilir) tüm seriyi
+   *  yeniden çizdirmek (`setData`) yerine sadece SON bar'ı `update()` ile
+   *  günceller — matematik yine tam seriden hesaplanır (ucuz, O(n) döngü),
+   *  ama LWC serisine sadece tek nokta yollanır (gereksiz tam redraw yok). */
+  // `liveOverride` — feed:tick'ten (candlesData'yı kendi güncellemez) gelen henüz
+  // kaydedilmemiş son close/time'ı geçici olarak seriye eklemek için (bkz. _onFeedTick).
+  _recomputeAllIndicators(tickOnly = false, liveOverride = null) {
+    if (!this.indicators.length || !this.candlesData || !this.candlesData.length) {
+      this._updateIndicatorLegend();
+      return;
+    }
+    const closes = this.candlesData.map(d => d.close);
+    let times = this.candlesData.map(d => d.time);
+    if (liveOverride) {
+      const lastKnownTime = times[times.length - 1];
+      if (liveOverride.time === lastKnownTime) {
+        closes[closes.length - 1] = liveOverride.close;
+      } else if (liveOverride.time > lastKnownTime) {
+        closes.push(liveOverride.close);
+        times.push(liveOverride.time);
+      }
+    }
+    const lastTime = times[times.length - 1];
+
+    const applyPoints = (series, points, lastPoint) => {
+      if (!series) return;
+      if (tickOnly && lastPoint) series.update(lastPoint);
+      else series.setData(points);
+    };
+
+    this.indicators.forEach(cfg => {
+      if (cfg.type === 'ema' || cfg.type === 'dema') {
+        const arr = cfg.type === 'ema'
+          ? IndicatorEngine.calcEMAFull(closes, cfg.period)
+          : IndicatorEngine.calcDEMAFull(closes, cfg.period);
+        const points = [];
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i] == null) continue;
+          points.push({ time: times[i], value: arr[i] });
+        }
+        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
+        applyPoints(this._indSeries[cfg.id], points, lastPoint);
+        cfg._lastValue = points.length ? points[points.length - 1].value : null;
+      } else if (cfg.type === 'rsi') {
+        if (!this._rsiChart) return;
+        if (!this._rsiSeries[cfg.id]) {
+          this._rsiSeries[cfg.id] = this._rsiChart.addLineSeries({
+            color: cfg.color, lineWidth: 2,
+            priceScaleId: this.priceSide === 'left' ? 'left' : 'right',
+            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            lastValueVisible: false, priceLineVisible: false,
+          });
+        } else {
+          this._rsiSeries[cfg.id].applyOptions({ color: cfg.color });
+        }
+        const arr = IndicatorEngine.calcRSIFull(closes, cfg.period);
+        const points = [];
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i] == null) continue;
+          points.push({ time: times[i], value: arr[i] });
+        }
+        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
+        applyPoints(this._rsiSeries[cfg.id], points, lastPoint);
+        cfg._lastValue = points.length ? points[points.length - 1].value : null;
+
+        if (this._rsiBand70 && this._rsiBand30 && points.length && !tickOnly) {
+          this._rsiBand70.setData([{ time: points[0].time, value: 70 }, { time: points[points.length - 1].time, value: 70 }]);
+          this._rsiBand30.setData([{ time: points[0].time, value: 30 }, { time: points[points.length - 1].time, value: 30 }]);
+        } else if (this._rsiBand70 && this._rsiBand30 && points.length && tickOnly) {
+          this._rsiBand70.update({ time: lastTime, value: 70 });
+          this._rsiBand30.update({ time: lastTime, value: 30 });
+        }
+      }
+    });
+
+    this._updateIndicatorLegend(tickOnly);
+  }
+
+  /** TV tarzı, chart'ın sol-üst köşesindeki basit indikatör listesi (isim/değer + düzenle/kaldır).
+   *  `valuesOnly`: canlı tick'lerde DOM'u (ve hover listener'larını) yeniden kurmadan sadece
+   *  değer metnini günceller — her tick'te tüm satırı yeniden inşa etmek hover'ı bozar/gereksiz. */
+  _updateIndicatorLegend(valuesOnly = false) {
+    if (valuesOnly && this._indLegendEl) {
+      this.indicators.forEach(cfg => {
+        const row = this._indLegendEl.querySelector(`.pane-ind-row[data-ind-id="${cfg.id}"] .pane-ind-val`);
+        if (row) row.textContent = cfg._lastValue != null ? (Math.round(cfg._lastValue * 100) / 100) : '—';
+      });
+      return;
+    }
+    if (!this.indicators.length) {
+      if (this._indLegendEl) this._indLegendEl.innerHTML = '';
+      return;
+    }
+    if (!this._indLegendEl) {
+      this._indLegendEl = document.createElement('div');
+      this._indLegendEl.className = 'pane-ind-legend';
+      this._indLegendEl.style.cssText = 'position:absolute; top:6px; left:8px; z-index:2; font-size:11px; font-family:"JetBrains Mono",monospace; pointer-events:auto;';
+      this.cvs.appendChild(this._indLegendEl);
+    }
+    const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
+    this._indLegendEl.innerHTML = this.indicators.map(cfg => `
+      <div class="pane-ind-row" data-ind-id="${cfg.id}" style="display:flex; align-items:center; gap:5px; padding:1px 0; color:${cfg.color};">
+        <span>${NAME[cfg.type]}(${cfg.period})</span>
+        <span class="pane-ind-val" style="color:var(--text-secondary);">${cfg._lastValue != null ? (Math.round(cfg._lastValue * 100) / 100) : '—'}</span>
+        <span class="pane-ind-actions" style="display:none; gap:4px; margin-left:2px;">
+          <button type="button" class="pane-ind-edit" title="Settings" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:0; font-size:11px; line-height:1;">⚙</button>
+          <button type="button" class="pane-ind-remove" title="Remove" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:0; font-size:11px; line-height:1;">✕</button>
+        </span>
+      </div>`).join('');
+
+    this._indLegendEl.querySelectorAll('.pane-ind-row').forEach(row => {
+      const actions = row.querySelector('.pane-ind-actions');
+      row.addEventListener('mouseenter', () => { actions.style.display = 'flex'; });
+      row.addEventListener('mouseleave', () => { actions.style.display = 'none'; });
+      row.querySelector('.pane-ind-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeIndicator(row.dataset.indId);
+      });
+      row.querySelector('.pane-ind-edit').addEventListener('click', (e) => {
+        e.stopPropagation();
+        EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: row.dataset.indId });
+      });
+    });
+  }
+
   // ── Heikin Ashi dönüşümü (gorevler2.md izleme listesi, 2026-08-10) ──────
   // `candles` HAM OHLC (Binance/Bybit'ten geldiği gibi) — burada IndicatorEngine
   // ile HA'ya çevrilip candlestick-uyumlu {time,open,high,low,close} dizisine
@@ -705,6 +1021,7 @@ class ChartPane {
 
     this._updateVisualLines(deduped);
     this._updateAlertLines();
+    this._recomputeAllIndicators();
     requestAnimationFrame(() => this._positionCountdown());
 
     if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
@@ -760,6 +1077,7 @@ class ChartPane {
       this._lastCandleTime = safe.time;
       this._updateLivePriceLine();
       this._updateAlertLines(); // eğik çizgiden gelen alarmların çizgisi canlı takip etsin
+      if (this.indicators.length) this._recomputeAllIndicators(true, { time: safe.time, close: safe.close });
     } catch (err) {
       console.warn('[ChartPane] _onFeedTick update failed:', err);
       // Lightweight-charts rejects updates older than last bar — safe to ignore
@@ -825,6 +1143,7 @@ class ChartPane {
       } else {
         this.candlesData.push(safe); // Yeni mum ekle
       }
+      if (this.indicators.length) this._recomputeAllIndicators(true);
     } catch(err) {
       console.warn('[ChartPane] _onLiveCandle update failed:', err);
     }
@@ -904,6 +1223,7 @@ class ChartPane {
 
       // Phantom'ı güncelle — birleşik veriyle zaman eksenini yenile
       if (window.ChartPhantom) ChartPhantom.update(this);
+      this._recomputeAllIndicators(); // eski mumlar eklendi — indikatör serileri de baştan hesaplanmalı
 
       // Visible range'i geri yükle — kullanıcının baktığı yere geri dön
       if (savedRange) {
@@ -1649,6 +1969,8 @@ class ChartPane {
       symName: this.symName, symValue: this.symValue, symLine: this.symLine,
       watermarkMode: this.watermarkMode,
       marginTop: this.marginTop, marginBottom: this.marginBottom,
+      // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
+      indicators: this.indicators.map(({ _lastValue, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
     };
   }
 
@@ -1656,6 +1978,7 @@ class ChartPane {
     this._destroyed = true;
     if (this._countdownTimer) clearInterval(this._countdownTimer);
     if (this.ro) this.ro.disconnect();
+    this._destroyRsiPane();
     // Disconnect live WebSocket feed for this pane
     DataFeed.unload(`pane_${this.idx}`);
     // [ChartPhantom] Clean up the phantom series before destroying the chart pane
