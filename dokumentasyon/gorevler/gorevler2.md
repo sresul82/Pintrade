@@ -594,6 +594,40 @@ diyaloğu var; (4) TV'de satır üzerine gelince zengin bir detay balonu
   her zaman `{active:true, triggered:false}`, aktifse her zaman
   `{active:false}`).
 
+### 3. tur (aynı gün) — kullanıcı gerçek bir fiyat sapması bildirdi
+
+Kullanıcı, "Trend Line" aracıyla (Ray/Extended değil) **yatay** çizdiği
+bir çizgiden alarm oluşturunca, alarmdaki fiyatın fiyat cetvelindeki
+gerçek değerden ~%0.5 saptığını bildirdi (0.009256 vs 0.0093). Önceki
+açıklamam ("Horizontal Line kullan, orada sapma olmaz") bu spesifik
+durumu yanlış yorumlamıştı — kullanıcı zaten doğru aracı (Trend Line)
+kullanıyordu, sadece yatay çizmişti.
+
+**Kök neden (`computeDrawingPrice`, `alert-store.js`):** `hline`/`hray`
+dışındaki TÜM araçlar (trendline dahil) HER ZAMAN eğim formülünden
+geçiyordu — çizgi görsel olarak yatay çizilse bile. Fare/piksel
+hassasiyeti yüzünden `p1.price` ve `p2.price` matematiksel olarak
+birebir eşit olmuyordu (örn. 0.009256 vs 0.009258 gibi ihmal edilebilir
+bir fark) — bu ÇOK KÜÇÜK fark, alarmın oluşturulduğu andan (`p1.time`)
+SAATLER sonrasına ekstrapole edilirken (eğim × büyük zaman farkı)
+büyütülüp gerçek dışı, gözle görülür bir sapmaya dönüşüyordu.
+
+**Düzeltme:** `p1.price`/`p2.price` arasındaki göreceli fark %0.05'in
+altındaysa çizgi FİİLEN yatay kabul edilip ekstrapolasyon YAPILMAZ,
+doğrudan sabit fiyat (`p2.price`) döner. Gerçek eğik çizgiler (fark
+%0.05'in üzerinde) eskisi gibi normal ekstrapolasyon kullanmaya devam
+ediyor — sadece piksel-gürültüsü kaynaklı yanlış "eğik" algısı ortadan
+kalktı.
+
+**Test (üç senaryo, tarayıcıda gerçek modülle):**
+1. Görsel yatay ama p1/p2 arasında %0.02 fark, p1.time 12 saat önce →
+   düzeltmeden önce büyük bir sapma üretirdi, düzeltme sonrası tam
+   `p2.price` (0.009258) döndü. ✅
+2. Gerçek eğik çizgi (%5 fark, 1 saatte 100→110) → ekstrapolasyon
+   bozulmadı, `p2.time`'da tam `110` döndü. ✅
+3. Horizontal Line aracı → zaten etkilenmiyordu, referans olarak
+   doğrulandı (`55555` sabit). ✅
+
 ### Doğrulama
 
 - Manuel create: fiyat/condition/mesaj doğru kaydedildi (bug düzeltmesi

@@ -128,6 +128,50 @@ her zaman `{active:false}`.
   gözlemlenip doğrulandı, sonra düzeltilip yeniden test edildi). ✅
 - Konsol hatasız (bilinen sandbox ağ hataları hariç). ✅
 
+## 3. tur (aynı gün) — gerçek fiyat sapması bug'ı (kullanıcı geri bildirimi)
+
+Kullanıcı "Trend Line" aracıyla (Ray/Extended değil) **yatay** çizdiği bir
+çizgiden alarm oluşturunca, alarmın fiyatının fiyat cetvelindeki gerçek
+değerden ~%0.5 saptığını (0.009256 vs 0.0093) bildirdi. Önceki turda
+verdiğim açıklama ("Horizontal Line kullan, orada sapma olmaz") bu
+spesifik senaryoyu yanlış değerlendirmişti — kullanıcı zaten doğru aracı
+kullanıyordu.
+
+### Kök neden
+
+`computeDrawingPrice()` (`alert-store.js`), `hline`/`hray` DIŞINDAKİ tüm
+araçlarda (trendline dahil) HER ZAMAN eğim formülünden geçiyordu — çizgi
+görsel olarak yatay çizilse bile. Fare/piksel hassasiyeti yüzünden
+`p1.price` ve `p2.price` matematiksel olarak birebir eşit olmuyordu
+(ör. 0.009256 vs 0.009258, ihmal edilebilir bir fark) — bu çok küçük
+fark, alarmın oluşturulduğu andan (`p1.time`) SAATLER sonrasına ekstrapole
+edilirken (eğim × büyük zaman farkı) büyütülüp gerçek dışı bir sapmaya
+dönüşüyordu.
+
+### Düzeltme
+
+`p1.price`/`p2.price` arasındaki göreceli fark %0.05'in altındaysa çizgi
+FİİLEN yatay kabul edilip ekstrapolasyon YAPILMAZ, doğrudan sabit fiyat
+(`p2.price`) döner. Gerçek eğik çizgiler (fark %0.05'in üzerinde) eskisi
+gibi normal ekstrapolasyon kullanmaya devam ediyor.
+
+```js
+const relDiff = Math.abs(p2.price - p1.price) / Math.max(Math.abs(p1.price), 1e-12);
+if (relDiff < 0.0005) return p2.price;
+```
+
+### Doğrulama (üç senaryo, tarayıcıda gerçek modülle)
+
+1. Görsel yatay ama p1/p2 arasında %0.02 fark, p1.time 12 saat önce →
+   düzeltmeden önce büyük bir sapma üretirdi, düzeltme sonrası tam
+   `p2.price` (0.009258) döndü. ✅
+2. Gerçek eğik çizgi (%5 fark, 1 saatte 100→110) → ekstrapolasyon
+   bozulmadı, `p2.time`'da tam `110` döndü. ✅
+3. Horizontal Line aracı → zaten etkilenmiyordu, referans olarak
+   doğrulandı (`55555` sabit). ✅
+
+Konsol hatasız (bilinen sandbox ağ hataları hariç).
+
 ## Doğrulama (1. tur, tarayıcıda, gerçek modüllerle)
 
 1. Manuel create (fiyat=150, condition='below') → `AlertStore`'da doğru

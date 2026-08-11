@@ -83,6 +83,23 @@ const AlertStore = (() => {
     const p1 = drawing.p1, p2 = drawing.p2;
     if (!p1 || !p2 || p1.price == null || p2.price == null) return null;
     if (p2.time === p1.time) return p2.price;
+
+    // 2026-08-11 bug düzeltmesi (kullanıcı geri bildirimi) — "Trend Line"
+    // aracıyla GÖRSEL OLARAK yatay çizilmiş bir çizgide bile p1.price ve
+    // p2.price matematiksel olarak birebir eşit olmayabilir (fare/piksel
+    // hassasiyeti, iki tık arasındaki sub-pixel yuvarlama farkı). Bu ÇOK
+    // KÜÇÜK fark, alarm oluşturma anından (p1.time) UZAK bir "now"'a
+    // ekstrapole edilirken (eğim × büyük zaman farkı) büyütülüp gerçek
+    // dışı, gözle görülür bir sapmaya (%0.5+ gibi) yol açıyordu — "Horizontal
+    // Line" aracı bu yüzden etkilenmiyordu (drawing.price'ı doğrudan
+    // kullanıyor, hiç ekstrapolasyon yok), ama "Trend Line" aracı yatay
+    // çizilse bile HER ZAMAN bu eğim formülünden geçiyordu. Fark göreceli
+    // olarak ihmal edilebilir düzeydeyse (< %0.05) çizgi FİİLEN yatay
+    // kabul edilip ekstrapolasyon YAPILMAZ, doğrudan son çizilen fiyat
+    // (p2.price) döner.
+    const relDiff = Math.abs(p2.price - p1.price) / Math.max(Math.abs(p1.price), 1e-12);
+    if (relDiff < 0.0005) return p2.price;
+
     const slope = (p2.price - p1.price) / (p2.time - p1.time);
     const now = Math.floor(Date.now() / 1000);
     return p1.price + slope * (now - p1.time);
