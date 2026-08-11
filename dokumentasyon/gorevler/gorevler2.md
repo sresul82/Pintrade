@@ -654,6 +654,44 @@ kalktı.
 
 ---
 
+## [ ] Görev 14 — Chart üzerinde gerçek indikatör sistemi + Indicators sidebar sekmesi (2026-08-11, kullanıcı isteği — henüz başlanmadı, sadece kayıt altına alındı)
+
+**Bağlam:** Kullanıcı, Alerts sekmesinin yanına, chart'a eklenen
+indikatörleri ve ayarlarını görebileceği bir "Indicators" sekmesi
+istedi. Araştırma sonucu: **bu şu an mümkün değil çünkü chart'a gerçek
+indikatör ekleme özelliği hiç yok.** Navbar'daki "Indicators" butonu ve
+favori menüsü (`btn-indicators`, `indicator-fav-menu`) sadece bir
+kabuk/placeholder — `State.get('indicators')` alanı var ama hiçbir
+yerden doldurulmuyor, `drawing-core.js`'teki `_clearIndicators()`
+dışında gerçek bir işlevi yok. `IndicatorEngine`'in matematiği
+(RSI/DEMA9/HA/WT/RC — gorevler3.md Görev 1) hâlâ sadece Kom1Scanner/
+M1Hammer gibi botlarda gömülü kullanılıyor, chart render katmanına hiç
+bağlanmamış (bkz. gorevler2.md izleme listesi, eski not).
+
+**İki ayrı iş olarak ele alınmalı:**
+1. **Chart'a gerçek indikatör ekleme/ayarlama sistemi** (büyük iş) —
+   arama/ekleme UI'ı, `IndicatorEngine`'in chart-pane.js'e (lightweight-charts
+   overlay serisi olarak) bağlanması, her indikatörün kendi ayar paneli
+   (renk, periyot vb.), pane-bazlı kalıcılık (`getState()`/localStorage).
+2. **Indicators sidebar sekmesi** (Alerts'e çok benzer, hızlı) — (1)
+   tamamlanınca, eklenmiş indikatörleri listeleyip düzenleme/silme —
+   bu iş, AlertListPanel'in aynı desenini (liste + edit/delete + TV
+   tarzı görsel dil) kullanabilir.
+
+(2), (1) olmadan anlamsız — listelecek gerçek bir veri yok. Bu yüzden
+kapsam netleşip kullanıcı onayı geldiğinde önce (1)'e başlanmalı.
+
+### Doğrulama (kapsam netleştikten sonra)
+
+- Chart'a en az bir gerçek indikatör (örn. RSI veya DEMA9) eklenip
+  görselleştirilebiliyor mu?
+- Indicators sekmesinde eklenen indikatör(ler) doğru listeleniyor,
+  düzenlenip silinebiliyor mu?
+
+**Rapor:** `2026-XX-XX-gorev14-chart-indikator-sistemi.md`
+
+---
+
 ## Kuyrukta olmayan, kullanıcı ayrıca planlayacak (değişmedi)
 
 - **Kom1/Kom2/Kom3 sinyal motoru** — büyük iş, L/S artık hazır olduğu için önü açık, ama ayrı, kendi turunda ele alınacak.
