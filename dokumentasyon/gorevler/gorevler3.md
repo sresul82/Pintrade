@@ -363,9 +363,40 @@ olarak eklenebilir.
 ### Doğrulama (canlı, production'da — devam ediyor)
 
 - Ban sinyali yok mu (uzun süreli gözlem)? — **izleniyor**, günlük
-  zamanlanmış kontrol + kullanıcı gözlemiyle.
+  zamanlanmış kontrol + kullanıcı gözlemiyle. İlk deploy sonrası
+  (2026-08-12 ~18:03 UTC) doğrulandı: `universe.total=527`
+  (tier1=100/tier2=200/tier3=227, matematik doğru), ilk gerçek sinyal
+  (BIOUSDT 1h) yakalandı, `/api/binance/futures` proxy'si 200 dönmeye
+  devam etti.
 - Stream sayısı 200 sınırının altında mı? — **N/A**, REST-only mimari
   seçildi, stream kavramı yok.
+
+### ⚠️ Bulunan ve düzeltilen ek risk (aynı gün) — toplayıcı çakışması
+
+Kullanıcı "sitede coin analiz ederken ban riski var mı" diye sordu.
+Bulundu: kullanıcının kendi tarayıcı istekleri de (`/api/binance/futures`
+proxy) arka plan toplayıcılarıyla AYNI sunucu IP'sini paylaşıyor —
+2026-08-08'deki 11 saatlik ban ile aynı sınıf risk. Somut çakışma:
+`collectBinanceCandles` (en ağır, ~527 sembol, 15sn'de başlayıp
+~31sn'de bitiyor) ile Kom1'in taraması (eskiden 25sn'de başlıyordu,
+Görev 6 sonrası artık o da yüzlerce sembolü kapsıyor) ~6sn'lik bir
+pencerede çakışıyordu. **Düzeltildi:** Kom1'in gecikmesi 25000ms→40000ms
+(`server.js`, commit `fb9056c`), production'da doğrulandı (ban yok,
+proxy sağlıklı). Detay: `2026-08-12-gorev6-tum-piyasa-genisletme.md`
+"Bulunan ve düzeltilen ek risk" bölümü. Bu bulgu, kalıcı mimari kural
+olarak `.claude/CLAUDE.md`'nin "bot-architecture" bölümüne de eklendi
+(yeni toplayıcı/bot eklerken herkesin bilmesi gereken bir gerçek).
+
+### Sonraki oturum için (özet — tam detay rapor dosyasında)
+
+Görev **kapanmadı**, gözlem sürüyor, kod tarafında yapılacak bir şey
+YOK. Kontrol: `GET /api/kom1/status`, `/api/kom1/signals`, `/health`
+(`kom1-daily-signal-check` bunu her gün 11:00'de otomatik yapıyor).
+Henüz doğrulanmadı: tier3'ün (3 saatte bir) gerçekten rotasyona girip
+girmediği — bunun için en az 3 saatlik gözlem gerekiyor. ATR14
+volatilite filtresi hâlâ uygulanmadı (bilinçli, kullanıcı net onay
+vermedi). Tam detay ve "sonraki oturum için" checklist'i:
+`2026-08-12-gorev6-tum-piyasa-genisletme.md`.
 
 **Rapor:** `2026-08-12-gorev6-tum-piyasa-genisletme.md`
 
