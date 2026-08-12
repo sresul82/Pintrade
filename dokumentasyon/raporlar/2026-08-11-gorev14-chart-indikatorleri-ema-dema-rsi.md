@@ -187,6 +187,58 @@ vb.) artık kullanıcının scroll/zoom'unu bozmuyor (tek seferlik).
   değerlere güncellendi. ✅
 - Konsol hatasız (bilinen sandbox 502 hariç). ✅
 
+## Düzeltme 2 (2026-08-12) — tek zaman ekseni + sürüklenebilir ayırıcı + zoom/scroll kilitlenmesi
+
+Kullanıcı iki ekran görüntüsü paylaştı: TV'de RSI eklenince zaman
+cetveli sadece en altta (RSI'da) var, projede hem ana chart'ın hem
+RSI'ın altında ayrı zaman cetveli vardı. Ayrıca kritik bir regresyon
+bildirdi: "chartı eskisi gibi zoom in/out yapamıyorum ve sola
+kaydıramıyorum, en son mum sağa doğru yapışmış."
+
+### Kök neden (regresyon)
+
+Düzeltme 1'deki zaman-bazlı senkron İKİ YÖNLÜYDÜ (main↔RSI). RSI
+chart'ın phantom'u olmadığı için çok daha dar bir gösterim kapasitesi
+var — main'in geniş (phantom'lu) aralığı RSI'a yazılınca RSI bunu
+kendi kapasitesine göre kırpıyordu, kırpılmış değer RSI→main yönünde
+geri yazılınca ana chart'ın kaydırma/zoom aralığı RSI'ın dar
+kapasitesine kilitleniyordu.
+
+### Düzeltmeler
+
+1. Ana chart'ın kendi zaman ekseni RSI aktifken gizleniyor
+   (`_destroyRsiPane()`'de geri açılıyor) — artık TV'deki gibi TEK
+   zaman ekseni var.
+2. RSI→main senkronu artık SADECE kullanıcının faresi gerçekten RSI
+   alanının üzerindeyken (`_rsiHoverActive`) uygulanıyor — kendi
+   programatik senkronumuzdan (main→RSI) kaynaklanan RSI değişiklikleri
+   artık asla main'e geri yazılmıyor, kırpma/geri-besleme döngüsü kırıldı.
+3. Ana chart ile RSI arasına sürüklenebilir bir ayırıcı eklendi
+   (`.pane-rsi-splitter`) — yükseklik `rsiPaneHeight` olarak
+   `getState()`'e kaydediliyor.
+
+### Doğrulama (tarayıcıda, gecikmeli okumalarla — LWC'nin senkron
+okuması `setVisibleLogicalRange()`'den hemen sonra bayat değer
+döndürebiliyor)
+
+- RSI varken `setVisibleLogicalRange({from:50,to:700})` artık set
+  edilen değerde kalıyor, eskiden olduğu gibi `{from:0,to:1111}`'e
+  geri dönmüyor (regresyon düzeltmesi doğrulandı). ✅
+- Hover aktif değilken RSI'ın kendi range'i programatik değişince main
+  etkilenmedi. ✅
+- Ana chart'ın zaman ekseni RSI eklenince gizlendi, kaldırılınca geri
+  açıldı. ✅
+- Sürüklenebilir ayırıcı: sentetik pointerdown→pointermove(-40px)→
+  pointerup sonrası `rsiPaneHeight` 120→160 doğru güncellendi, RSI
+  penceresi ekranda gerçekten büyüdü. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
+**Bilinen sınır:** RSI alanı üzerinden doğrudan sürükleyerek pan/zoom
+yapma bu sürümde garanti değil (LWC'nin kırpma davranışı programatik
+testlerde tutarsız sonuç verdi) — ana riskli regresyon (ana chart'ın
+KENDİ sürüklemesinin kilitlenmesi) kesin düzeltildi, bu ikincil UX
+inceliği ileride ayrıca gözden geçirilebilir.
+
 ## Görev 14.2 — Indicators sidebar sekmesi
 
 **Kullanıcı geri bildirimi:** "matematik olarak calisiyor olabilir, ama

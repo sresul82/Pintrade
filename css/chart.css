@@ -626,6 +626,13 @@
   background: var(--accent-blue, #2962ff);
 }
 
+/* gorevler2.md Görev 14 (2026-08-12) — RSI alt-pencere ile ana chart
+   arasındaki sürüklenebilir yükseklik ayırıcısı (js/chart/chart-pane.js
+   _ensureRsiPane()). .resize-handle'ın (yatay, col-resize) dikey eşdeğeri. */
+.pane-rsi-splitter:hover {
+  background: var(--accent-blue, #2962ff);
+}
+
 /* ── Pane dropdown (TF / type in pane header) ───────────────── */
 .pane-dd {
   position: fixed; background: var(--bg-elevated, #1a1e2d);

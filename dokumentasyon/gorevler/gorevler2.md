@@ -858,6 +858,68 @@ bozmuyor (tek seferlik).
   kaydır) sonrası RSI aralığı ANINDA aynı değerlere güncellendi. ✅
 - Konsol hatasız (bilinen sandbox 502 hariç). ✅
 
+### Düzeltme 2 (aynı gün, 2026-08-12) — tek zaman ekseni + sürüklenebilir ayırıcı + zoom/scroll kilitlenmesi
+
+Kullanıcı iki TV/proje ekran görüntüsü paylaştı: (1) TV'de RSI eklenince
+zaman cetveli SADECE en altta (RSI'da) var, bizim projede hem ana
+chart'ın hem RSI'ın altında AYRI AYRI zaman cetveli vardı — kaldırılmalı,
+ana chart ile RSI arasındaki ayıraç da yukarı/aşağı sürüklenebilir olmalı.
+Ayrıca: "son yaptığın değişiklikten sonra ben chartı eskisi gibi zoom
+in/out yapamıyorum ve sola kaydıramıyorum, en son mum sağa doğru
+yapışmış kaydırılamıyor" — ciddi bir REGRESYON bildirdi.
+
+**Kök neden (regresyon):** Düzeltme 1'deki `subscribeVisibleTimeRangeChange`
+senkronu İKİ YÖNLÜYDÜ (main↔RSI). RSI chart'ın phantom'u olmadığı için
+çok daha DAR bir gösterim kapasitesi var — main'in geniş (phantom'lu)
+aralığı RSI'a yazılınca RSI bunu kendi kapasitesine göre KIRPIYORDU,
+kırpılmış (dar) değer RSI→main yönünde GERİ YAZILINCA ana chart'ın
+kaydırma/zoom aralığı RSI'ın dar kapasitesine KİLİTLENİYORDU — "son mum
+sağa yapışmış, sola kaydırılamıyor" hissi buradan geliyordu.
+
+**Düzeltmeler:**
+1. Ana chart'ın kendi zaman ekseni RSI aktifken gizleniyor
+   (`this.chart.applyOptions({ timeScale: { visible: false } })`,
+   `_destroyRsiPane()`'de geri açılıyor) — artık TV'deki gibi TEK zaman
+   ekseni (RSI'ınki) var.
+2. **RSI→main senkronu artık her zaman değil, SADECE kullanıcının
+   faresi GERÇEKTEN RSI alanının üzerindeyken** (`_rsiHoverActive`,
+   `_rsiWrap`'e `pointerenter`/`pointerleave` ile takip ediliyor)
+   uygulanıyor. Bizim kendi programatik senkronumuzdan (main→RSI)
+   kaynaklanan RSI aralık değişiklikleri artık ASLA main'e geri
+   yazılmıyor — kırpma/geri-besleme döngüsü kırıldı.
+3. Ana chart (`.pane-cvs`) ile RSI alt-penceresi arasına sürüklenebilir
+   bir ayırıcı eklendi (`.pane-rsi-splitter`, `pointerdown`/`pointermove`/
+   `pointerup`) — yükseklik `rsiPaneHeight` olarak `getState()`'e
+   kaydediliyor, sayfa yenilenince korunuyor.
+
+**Doğrulama (tarayıcıda, gerçek modüllerle, gecikmeli okumalarla —
+LWC'nin `setVisibleLogicalRange()`'den hemen sonraki senkron okuması
+bayat/stale değer döndürebiliyor, bu yüzden ~300-400ms sonra okundu):**
+- RSI YOKKEN: `setVisibleLogicalRange({from:50,to:700})` set edilen
+  değerde KALIYOR (referans/baseline). ✅
+- RSI VARKEN, aynı çağrı: artık YİNE set edilen değerde kalıyor,
+  ESKİDEN olduğu gibi `{from:0,to:1111}`'e geri dönmüyor (regresyon
+  düzeltmesi doğrulandı). ✅
+- Hover AKTİF DEĞİLKEN RSI'ın kendi range'i programatik değişince main
+  ETKİLENMEDİ (`unaffected:true`). ✅
+- Ana chart'ın kendi zaman ekseni RSI eklenince gizlendi
+  (`timeScaleVisible:false`→ göründü tekrar RSI kaldırılınca `true`). ✅
+- Sürüklenebilir ayırıcı: sentetik `pointerdown`→`pointermove`(-40px)→
+  `pointerup` sonrası `rsiPaneHeight` 120→160 doğru güncellendi, RSI
+  penceresi ekranda gerçekten büyüdü (ekran görüntüsüyle doğrulandı). ✅
+- Ekran görüntüsü: tek zaman ekseni (sadece RSI'da), ayırıcı sürükleme
+  sonrası RSI'ın büyümüş hâli doğru render oldu. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
+**Bilinen sınır:** RSI alanı üzerinden doğrudan sürükleyerek pan/zoom
+yapma (TV'nin gerçek tek-chart mimarisinde çalışan bir özellik) bu
+sürümde garanti değil — `_rsiHoverActive` iken RSI'ın kendi native
+sürükleme/zoom'u senkronu main'e YAZMAYA çalışıyor ama LWC'nin kırpma/
+event-suppression davranışı programatik testlerde tutarsız sonuç verdi.
+Ana riskli regresyon (ana chart'ın KENDİ sürüklemesinin kilitlenmesi)
+kesin olarak düzeltildi — bu ikincil UX inceliği ileride ayrıca
+gözden geçirilebilir.
+
 ### Kullanıcı geri bildirimi (14.1 sonrası)
 
 "matematik olarak calisiyor olabilir, ama fonksiyon olarak daha tam

@@ -121,6 +121,8 @@ class ChartPane {
     this._rsiBand70   = null;
     this._rsiBand30   = null;
     this._rsiRangeSynced = false; // bkz. _recomputeAllIndicators — bir kerelik ilk zaman senkronu
+    this._rsiHoverActive = false; // bkz. _ensureRsiPane — RSI→main senkronu sadece bu true iken uygulanır
+    this.rsiPaneHeight = s.rsiPaneHeight || 120; // sürüklenebilir ayırıcıyla değiştirilen RSI yüksekliği
     this._indLegendEl = null;
 
     this._build();
@@ -369,7 +371,7 @@ class ChartPane {
           this.chart.resize(width, height);
 
           // gorevler2.md Görev 14 — RSI alt-chart'ı ana chart'la aynı genişlikte kalsın
-          if (this._rsiChart) { try { this._rsiChart.resize(width, 120); } catch (_) {} }
+          if (this._rsiChart) { try { this._rsiChart.resize(width, this.rsiPaneHeight || 120); } catch (_) {} }
 
           // Fix Issue 1: Sync drawing canvas to dynamic price/time scale sizes
           this._syncDrawingCanvasClip();
@@ -652,13 +654,49 @@ class ChartPane {
   _ensureRsiPane() {
     if (this._rsiChart) return;
 
+    // TV'de tek chart'ın alt bölmesi olduğu için zaman ekseni SADECE en altta
+    // (RSI'da) görünür. Bizim iki ayrı createChart() örneğimiz olduğu için
+    // ikisi de kendi zaman eksenini çizerdi (2026-08-12, kullanıcı bulgusu) —
+    // ana chart'ın kendi ekseni burada gizleniyor, sadece RSI'ınki kalıyor.
+    this.chart.applyOptions({ timeScale: { visible: false } });
+
     this._rsiWrap = document.createElement('div');
     this._rsiWrap.className = 'pane-rsi-wrap';
-    this._rsiWrap.style.cssText = 'position:relative; height:120px; border-top:1px solid var(--border-primary); flex-shrink:0;';
+    const rsiH = this.rsiPaneHeight || 120;
+    this._rsiWrap.style.cssText = `position:relative; height:${rsiH}px; flex-shrink:0;`;
     this.wrap.appendChild(this._rsiWrap);
 
+    // ── Sürüklenebilir ayırıcı (chart ↔ RSI arası yükseklik) ────────
+    this._rsiSplitter = document.createElement('div');
+    this._rsiSplitter.className = 'pane-rsi-splitter';
+    this._rsiSplitter.style.cssText = 'height:5px; margin-top:-5px; cursor:row-resize; position:relative; z-index:4; border-top:1px solid var(--border-primary);';
+    this._rsiWrap.parentNode === this.wrap && this.wrap.insertBefore(this._rsiSplitter, this._rsiWrap);
+    let dragStartY = null, dragStartH = null;
+    const onSplitterMove = (e) => {
+      if (dragStartY == null) return;
+      const dy = e.clientY - dragStartY;
+      const wrapH = this.wrap.getBoundingClientRect().height || 1;
+      const newH = Math.max(60, Math.min(wrapH - 120, dragStartH - dy));
+      this.rsiPaneHeight = newH;
+      this._rsiWrap.style.height = newH + 'px';
+      const w = this._rsiWrap.getBoundingClientRect().width;
+      if (w > 0 && this._rsiChart) { try { this._rsiChart.resize(w, newH); } catch (_) {} }
+    };
+    const onSplitterUp = () => {
+      dragStartY = null;
+      document.removeEventListener('pointermove', onSplitterMove);
+      document.removeEventListener('pointerup', onSplitterUp);
+    };
+    this._rsiSplitter.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dragStartY = e.clientY;
+      dragStartH = this._rsiWrap.getBoundingClientRect().height;
+      document.addEventListener('pointermove', onSplitterMove);
+      document.addEventListener('pointerup', onSplitterUp);
+    });
+
     this._rsiChart = LightweightCharts.createChart(this._rsiWrap, {
-      width: 100, height: 120,
+      width: 100, height: rsiH,
       layout: {
         background: { type: 'solid', color: this.bgColor1 },
         textColor: this.scaleTextColor,
@@ -695,7 +733,7 @@ class ChartPane {
     // ── Zaman ekseni senkronu (ana chart ↔ RSI chart) ─────────────
     // ÖNEMLİ: LOGICAL range (bar-index) DEĞİL, gerçek ZAMAN (timestamp)
     // bazlı senkron kullanılıyor. Ana chart'ta ChartPhantom çizim
-    // araçlarının sağa serbestçe sürüklenebilmesi için 500 görünmez
+    // araçlarının sağa serbestçe sürüklenebilmesi için 1000 görünmez
     // "hayalet" bar ekliyor (bkz. js/chart/chart-phantom.js) — bu, ana
     // chart'ın toplam bar sayısını RSI chart'tan (phantom'suz) çok daha
     // büyük yapıyor. Aynı SAYISAL logical range iki chart'ta tamamen
@@ -703,7 +741,23 @@ class ChartPane {
     // bulgusu — RSI çizgisi ana chart'ın son mumundan saatlerce "geride"
     // görünüyordu). Zaman bazlı senkron phantom'un bar sayısından
     // etkilenmiyor — iki chart de aynı gerçek mum zamanlarını paylaşıyor.
+    //
+    // 2. bug (aynı gün, kullanıcı bulgusu): RSI→main yönü HER ZAMAN
+    // geri yazıyordu — RSI chart, phantom'suz olduğu için çok daha DAR
+    // bir bar kapasitesine sahip; main'in phantom'la GENİŞ bir aralığı
+    // RSI'a yazılınca RSI bunu kendi kapasitesine göre KIRPIYOR, kırpılan
+    // (dar) değer geri main'e yazılınca ana chart'ın kaydırma/zoom
+    // aralığı RSI'ın dar kapasitesine KİLİTLENİYORDU ("son mum sağa
+    // yapışmış, sola kaydırılamıyor"). Düzeltme: RSI→main senkronu
+    // SADECE kullanıcının farenin GERÇEKTEN RSI alanının üzerinde
+    // olduğu anlarda (`_rsiHoverActive`) uygulanıyor — programatik
+    // (main→RSI'dan kaynaklanan) RSI aralık değişiklikleri artık asla
+    // main'e geri yazılmıyor, geri besleme/kırpma döngüsü kırılıyor.
     let syncing = false;
+    this._rsiHoverActive = false;
+    this._rsiWrap.addEventListener('pointerenter', () => { this._rsiHoverActive = true; });
+    this._rsiWrap.addEventListener('pointerleave', () => { this._rsiHoverActive = false; });
+
     const mainTimeRange = this.chart.timeScale().getVisibleRange();
     if (mainTimeRange) { try { this._rsiChart.timeScale().setVisibleRange(mainTimeRange); } catch (_) {} }
 
@@ -714,7 +768,7 @@ class ChartPane {
       syncing = false;
     });
     const fromRsi = this._rsiChart.timeScale().subscribeVisibleTimeRangeChange(range => {
-      if (!range || syncing || !this.chart) return;
+      if (!range || syncing || !this.chart || !this._rsiHoverActive) return;
       syncing = true;
       try { this.chart.timeScale().setVisibleRange(range); } catch (_) {}
       syncing = false;
@@ -740,7 +794,7 @@ class ChartPane {
 
     // Genişlik ana chart'la aynı (yükseklik sabit 120px, RO ile güncellenir).
     const rect = this.cvs.getBoundingClientRect();
-    if (rect.width > 0) this._rsiChart.resize(rect.width, 120);
+    if (rect.width > 0) this._rsiChart.resize(rect.width, rsiH);
   }
 
   _destroyRsiPane() {
@@ -748,12 +802,18 @@ class ChartPane {
     if (this._rsiUnsync) this._rsiUnsync();
     try { this._rsiChart.remove(); } catch (_) {}
     if (this._rsiWrap?.parentNode) this._rsiWrap.parentNode.removeChild(this._rsiWrap);
+    if (this._rsiSplitter?.parentNode) this._rsiSplitter.parentNode.removeChild(this._rsiSplitter);
+    // Ana chart'ın kendi zaman eksenini geri aç — RSI kaldırıldı,
+    // artık tek zaman ekseni ana chart'ın kendisinde olmalı.
+    try { this.chart.applyOptions({ timeScale: { visible: true } }); } catch (_) {}
     this._rsiChart = null;
     this._rsiWrap = null;
+    this._rsiSplitter = null;
     this._rsiSeries = {};
     this._rsiBand70 = null;
     this._rsiBand30 = null;
     this._rsiRangeSynced = false;
+    this._rsiHoverActive = false;
   }
 
   /** `this.candlesData`'dan tüm aktif indikatörleri yeniden hesaplar.
@@ -1997,6 +2057,7 @@ class ChartPane {
       marginTop: this.marginTop, marginBottom: this.marginBottom,
       // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
       indicators: this.indicators.map(({ _lastValue, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
+      rsiPaneHeight: this.rsiPaneHeight,
     };
   }
 
