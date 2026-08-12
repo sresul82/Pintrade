@@ -112,17 +112,17 @@ class ChartPane {
     this.loaded     = false;
     this.syncing    = false;
 
-    // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri (EMA/DEMA/RSI)
+    // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri (EMA/DEMA/RSI).
+    // 2026-08-12: RSI, ayrı senkronize bir chart yerine AYNI chart'ın ikinci
+    // fiyat ekseninde (bkz. _mainScaleId/_rsiScaleId) çiziliyor — iki bağımsız
+    // chart motoru arasında senkron denemesi gerçek kullanımda tekrar tekrar
+    // hizasızlığa yol açtı (kullanıcı bulgusu), tek chart bu sorunu yapısal
+    // olarak ortadan kaldırıyor.
     this.indicators   = Array.isArray(s.indicators) ? s.indicators.map(i => ({ ...i })) : [];
-    this._indSeries   = {};   // id -> LWC line series (overlay: ema/dema)
-    this._rsiChart    = null; // ayrı senkronize chart (RSI için)
-    this._rsiWrap     = null;
-    this._rsiSeries   = {};   // id -> LWC line series (RSI chart içinde)
-    this._rsiBand70   = null;
-    this._rsiBand30   = null;
-    this._rsiRangeSynced = false; // bkz. _recomputeAllIndicators — bir kerelik ilk zaman senkronu
-    this._rsiHoverActive = false; // bkz. _ensureRsiPane — RSI→main senkronu sadece bu true iken uygulanır
-    this.rsiPaneHeight = s.rsiPaneHeight || 120; // sürüklenebilir ayırıcıyla değiştirilen RSI yüksekliği
+    this._indSeries   = {};    // id -> LWC line series (ema/dema: ana eksen, rsi: ikinci eksen)
+    this._rsiScaleActive = false; // RSI'nin ikinci fiyat ekseni şu an açık mı
+    this._rsiSplitter = null;  // sürüklenebilir yükseklik ayırıcı DOM elementi
+    this.rsiHeightFrac = s.rsiHeightFrac || 0.25; // RSI'ya ayrılan chart yüksekliği oranı (0-1)
     this._indLegendEl = null;
 
     this._build();
@@ -371,7 +371,7 @@ class ChartPane {
           this.chart.resize(width, height);
 
           // gorevler2.md Görev 14 — RSI alt-chart'ı ana chart'la aynı genişlikte kalsın
-          if (this._rsiChart) { try { this._rsiChart.resize(width, this.rsiPaneHeight || 120); } catch (_) {} }
+          this._positionRsiSplitter();
 
           // Fix Issue 1: Sync drawing canvas to dynamic price/time scale sizes
           this._syncDrawingCanvasClip();
@@ -461,26 +461,31 @@ class ChartPane {
   _syncDrawingCanvasClip() {
     if (!this.drawingCanvas || !this.chart) return;
     try {
-      const pScale     = this.chart.priceScale(this.priceSide === 'left' ? 'left' : 'right');
-      const scaleW     = pScale.width() || 65;   // fallback 65px if not yet rendered
+      const mainSide = this.priceSide === 'left' ? 'left' : 'right';
+      const rsiSide  = mainSide === 'left' ? 'right' : 'left';
+      const mainW    = this.chart.priceScale(mainSide).width() || 65;   // fallback 65px if not yet rendered
+      // gorevler2.md Görev 14 (2026-08-12) — RSI ikinci fiyat eksenini
+      // (mumlarınkinin tersi) kullanıyor; o eksen görünürken kendi
+      // genişliğini de kırpma hesabına katmak gerekiyor, yoksa çizim
+      // katmanı RSI'nin etiket sütununun ÜZERİNE taşar/altında kalır.
+      const rsiW     = this._rsiScaleActive ? (this.chart.priceScale(rsiSide).width() || 0) : 0;
       const timeScaleH = 22;                      // LW Charts time scale is always ~22px at default font
 
       const dpr  = window.devicePixelRatio || 1;
       const rect = this.cvs.getBoundingClientRect();
-      const canvasW = Math.max(1, Math.round((rect.width - scaleW) * dpr));
+      const totalScaleW = mainW + rsiW;
+      const canvasW = Math.max(1, Math.round((rect.width - totalScaleW) * dpr));
       const canvasH = Math.max(1, Math.round((rect.height - timeScaleH) * dpr));
 
       // Kırpma işlemi: Çizim alanı fiyat ve zaman cetvelinin üzerine taşmasın.
-      this.drawingCanvas.style.width  = `${rect.width - scaleW}px`;
+      this.drawingCanvas.style.width  = `${rect.width - totalScaleW}px`;
       this.drawingCanvas.style.height = `${rect.height - timeScaleH}px`;
       this.drawingCanvas.style.top = '0px';
-      
-      // Fiyat cetveli soldaysa çizim alanını sağa kaydır, sağdaysa sola yapıştır.
-      if (this.priceSide === 'left') {
-          this.drawingCanvas.style.left = `${scaleW}px`;
-      } else {
-          this.drawingCanvas.style.left = '0px';
-      }
+
+      // Sol tarafta bir eksen varsa (fiyat cetveli sol VEYA RSI ekseni sol),
+      // çizim alanı o genişlik kadar sağa kayar.
+      const leftOffset = mainSide === 'left' ? mainW : (rsiSide === 'left' ? rsiW : 0);
+      this.drawingCanvas.style.left = `${leftOffset}px`;
 
       // Update pixel buffer only if size actually changed (avoid unnecessary redraws)
       if (this.drawingCanvas.width !== canvasW || this.drawingCanvas.height !== canvasH) {
@@ -575,14 +580,27 @@ class ChartPane {
 
   // ══════════════════════════════════════════════════════════════
   // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
-  // EMA/DEMA: ana chart'a overlay line series.
-  // RSI: v4.1.3'te native "pane" desteği yok (v5'e ilk kez geldi) —
-  // bu yüzden ikinci, senkronize bir createChart() örneği kullanılıyor
-  // (zaman ekseni + crosshair elle senkronlanıyor, standart v4-dönemi
-  // çözümü). indicator-engine.js'deki calcEMAFull/calcDEMAFull/
-  // calcRSIFull TV'nin ta.ema()/RSI'ıyla birebir eşleşen SMA-seed
-  // matematiği kullanıyor.
+  // EMA/DEMA: ana chart'a overlay line series (mumlarla aynı priceScale).
+  // RSI: 2026-08-12 — İKİNCİ bir createChart() örneği (senkronize alt-
+  // chart) denendi ama gerçek kullanımda tekrar tekrar bozuldu: iki
+  // BAĞIMSIZ chart motoru arasında zaman/logical range senkronu, ne
+  // kadar dikkatli yapılırsa yapılsın, birinin diğerini kırpması/geri
+  // beslemesi yüzünden kayıyordu (kullanıcı üç ayrı ekran görüntüsüyle
+  // gösterdi — mumlar solda, RSI sağda, hizasız). KÖKTEN çözüm: RSI
+  // artık AYNI chart'ın İKİNCİ fiyat ekseninde (mumlar 'right'
+  // kullanıyorsa RSI 'left', tersi de geçerli) çiziliyor — TIPKI volume
+  // histogramının aynı chart'ta overlay olarak çizilmesi gibi, ama
+  // volume'ün aksine RSI'nin kendi görünür/etiketli (0-100) ekseni var.
+  // Tek chart/tek zaman ekseni olduğu için hizasızlık artık YAPISAL
+  // OLARAK imkansız — senkron kodu diye bir şey kalmadı.
+  // indicator-engine.js'deki calcEMAFull/calcDEMAFull/calcRSIFull
+  // TV'nin ta.ema()/RSI'ıyla birebir eşleşen SMA-seed matematiği kullanıyor.
   // ══════════════════════════════════════════════════════════════
+
+  /** Mumların kullandığı ('right' veya 'left') asıl fiyat ekseninin ID'si. */
+  _mainScaleId() { return this.priceSide === 'left' ? 'left' : 'right'; }
+  /** RSI'nin kullandığı, mumlarınkinin TERSİ olan ikinci fiyat ekseni. */
+  _rsiScaleId() { return this._mainScaleId() === 'left' ? 'right' : 'left'; }
 
   /** indicators: [{id, type:'ema'|'dema'|'rsi', period, color}] eklenir/kaldırılır. */
   addIndicator(type, opts = {}) {
@@ -620,10 +638,9 @@ class ChartPane {
 
   /** Aktif `this.indicators`e göre series/alt-chart'ları (yeniden) kurar. */
   _rebuildIndicatorOverlays() {
-    const pScaleId = this.priceSide === 'left' ? 'left' : 'right';
     const wanted = new Set(this.indicators.map(i => i.id));
 
-    // Artık listede olmayan overlay series'leri kaldır
+    // Artık listede olmayan series'leri kaldır
     Object.keys(this._indSeries).forEach(id => {
       if (!wanted.has(id)) {
         try { this.chart.removeSeries(this._indSeries[id]); } catch (_) {}
@@ -632,16 +649,28 @@ class ChartPane {
     });
 
     this.indicators.forEach(cfg => {
-      if (cfg.type === 'rsi') return; // ayrı alt-chart'ta, aşağıda ele alınıyor
       if (this._indSeries[cfg.id]) {
         this._indSeries[cfg.id].applyOptions({ color: cfg.color });
         return;
       }
-      this._indSeries[cfg.id] = this.chart.addLineSeries({
-        color: cfg.color, lineWidth: 2, priceScaleId: pScaleId,
-        priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
-        lastValueVisible: false, priceLineVisible: false,
-      });
+      if (cfg.type === 'rsi') {
+        this._indSeries[cfg.id] = this.chart.addLineSeries({
+          color: cfg.color, lineWidth: 2, priceScaleId: this._rsiScaleId(),
+          priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+          lastValueVisible: false, priceLineVisible: false,
+        });
+        // TV'nin 30/70 referans çizgileri — createPriceLine() sabit
+        // seviyelerde yatay çizgi çizer, veri gerektirmez (2-noktalı
+        // "band series" hack'ine göre çok daha basit/doğru yöntem).
+        this._indSeries[cfg.id].createPriceLine({ price: 70, color: 'rgba(120,130,150,0.35)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false });
+        this._indSeries[cfg.id].createPriceLine({ price: 30, color: 'rgba(120,130,150,0.35)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false });
+      } else {
+        this._indSeries[cfg.id] = this.chart.addLineSeries({
+          color: cfg.color, lineWidth: 2, priceScaleId: this._mainScaleId(),
+          priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
+          lastValueVisible: false, priceLineVisible: false,
+        });
+      }
     });
 
     const hasRsi = this.indicators.some(i => i.type === 'rsi');
@@ -650,170 +679,99 @@ class ChartPane {
     this._updateIndicatorLegend();
   }
 
-  /** İkinci, senkronize bir chart — RSI'ın 0-100 ölçeği ana fiyat ölçeğiyle uyuşmaz. */
+  /** RSI için ikinci fiyat eksenini (mumlarınkinin tersi) açar, ana eksenin
+   *  alt marjını RSI'ya yer açacak şekilde daraltır, sürüklenebilir ayırıcıyı kurar. */
   _ensureRsiPane() {
-    if (this._rsiChart) return;
-
-    // TV'de tek chart'ın alt bölmesi olduğu için zaman ekseni SADECE en altta
-    // (RSI'da) görünür. Bizim iki ayrı createChart() örneğimiz olduğu için
-    // ikisi de kendi zaman eksenini çizerdi (2026-08-12, kullanıcı bulgusu) —
-    // ana chart'ın kendi ekseni burada gizleniyor, sadece RSI'ınki kalıyor.
-    this.chart.applyOptions({ timeScale: { visible: false } });
-
-    this._rsiWrap = document.createElement('div');
-    this._rsiWrap.className = 'pane-rsi-wrap';
-    const rsiH = this.rsiPaneHeight || 120;
-    this._rsiWrap.style.cssText = `position:relative; height:${rsiH}px; flex-shrink:0;`;
-    this.wrap.appendChild(this._rsiWrap);
-
-    // ── Sürüklenebilir ayırıcı (chart ↔ RSI arası yükseklik) ────────
-    this._rsiSplitter = document.createElement('div');
-    this._rsiSplitter.className = 'pane-rsi-splitter';
-    this._rsiSplitter.style.cssText = 'height:5px; margin-top:-5px; cursor:row-resize; position:relative; z-index:4; border-top:1px solid var(--border-primary);';
-    this._rsiWrap.parentNode === this.wrap && this.wrap.insertBefore(this._rsiSplitter, this._rsiWrap);
-    let dragStartY = null, dragStartH = null;
-    const onSplitterMove = (e) => {
-      if (dragStartY == null) return;
-      const dy = e.clientY - dragStartY;
-      const wrapH = this.wrap.getBoundingClientRect().height || 1;
-      const newH = Math.max(60, Math.min(wrapH - 120, dragStartH - dy));
-      this.rsiPaneHeight = newH;
-      this._rsiWrap.style.height = newH + 'px';
-      const w = this._rsiWrap.getBoundingClientRect().width;
-      if (w > 0 && this._rsiChart) { try { this._rsiChart.resize(w, newH); } catch (_) {} }
-    };
-    const onSplitterUp = () => {
-      dragStartY = null;
-      document.removeEventListener('pointermove', onSplitterMove);
-      document.removeEventListener('pointerup', onSplitterUp);
-    };
-    this._rsiSplitter.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      dragStartY = e.clientY;
-      dragStartH = this._rsiWrap.getBoundingClientRect().height;
-      document.addEventListener('pointermove', onSplitterMove);
-      document.addEventListener('pointerup', onSplitterUp);
-    });
-
-    this._rsiChart = LightweightCharts.createChart(this._rsiWrap, {
-      width: 100, height: rsiH,
-      layout: {
-        background: { type: 'solid', color: this.bgColor1 },
-        textColor: this.scaleTextColor,
-        fontSize: parseInt(this.scaleFontSize, 10) || 11,
-        fontFamily: "'JetBrains Mono', monospace",
-      },
-      grid: { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
-      crosshair: {
-        mode: LightweightCharts.CrosshairMode.Normal,
-        vertLine: { color: this.crosshairColor, labelBackgroundColor: COLORS.crosshairLbl },
-        horzLine: { color: this.crosshairColor, labelBackgroundColor: COLORS.crosshairLbl },
-      },
-      rightPriceScale: {
-        borderColor: this.scaleLinesColor,
-        scaleMargins: { top: 0.15, bottom: 0.15 },
-        visible: this.priceSide === 'right',
-      },
-      leftPriceScale: {
-        borderColor: this.scaleLinesColor,
-        scaleMargins: { top: 0.15, bottom: 0.15 },
-        visible: this.priceSide === 'left',
-      },
-      timeScale: { borderColor: this.scaleLinesColor, timeVisible: true, secondsVisible: false, rightOffset: 12 },
-      handleScroll: { mouseWheel: true, pressedMouseMove: true },
-      handleScale:  { mouseWheel: true, pinch: true },
-    });
-
-    // 30/70 referans çizgileri — TV'nin RSI varsayılan bant çizgileri.
-    this._rsiSeries = {};
-    const bandOpts = { color: 'rgba(120,130,150,0.25)', lineWidth: 1, priceScaleId: this.priceSide === 'left' ? 'left' : 'right', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false };
-    this._rsiBand70 = this._rsiChart.addLineSeries(bandOpts);
-    this._rsiBand30 = this._rsiChart.addLineSeries(bandOpts);
-
-    // ── Zaman ekseni senkronu (ana chart ↔ RSI chart) ─────────────
-    // ÖNEMLİ: LOGICAL range (bar-index) DEĞİL, gerçek ZAMAN (timestamp)
-    // bazlı senkron kullanılıyor. Ana chart'ta ChartPhantom çizim
-    // araçlarının sağa serbestçe sürüklenebilmesi için 1000 görünmez
-    // "hayalet" bar ekliyor (bkz. js/chart/chart-phantom.js) — bu, ana
-    // chart'ın toplam bar sayısını RSI chart'tan (phantom'suz) çok daha
-    // büyük yapıyor. Aynı SAYISAL logical range iki chart'ta tamamen
-    // farklı zaman dilimlerine denk geliyordu (2026-08-12, kullanıcı
-    // bulgusu — RSI çizgisi ana chart'ın son mumundan saatlerce "geride"
-    // görünüyordu). Zaman bazlı senkron phantom'un bar sayısından
-    // etkilenmiyor — iki chart de aynı gerçek mum zamanlarını paylaşıyor.
-    //
-    // 2. bug (aynı gün, kullanıcı bulgusu): RSI→main yönü HER ZAMAN
-    // geri yazıyordu — RSI chart, phantom'suz olduğu için çok daha DAR
-    // bir bar kapasitesine sahip; main'in phantom'la GENİŞ bir aralığı
-    // RSI'a yazılınca RSI bunu kendi kapasitesine göre KIRPIYOR, kırpılan
-    // (dar) değer geri main'e yazılınca ana chart'ın kaydırma/zoom
-    // aralığı RSI'ın dar kapasitesine KİLİTLENİYORDU ("son mum sağa
-    // yapışmış, sola kaydırılamıyor"). Düzeltme: RSI→main senkronu
-    // SADECE kullanıcının farenin GERÇEKTEN RSI alanının üzerinde
-    // olduğu anlarda (`_rsiHoverActive`) uygulanıyor — programatik
-    // (main→RSI'dan kaynaklanan) RSI aralık değişiklikleri artık asla
-    // main'e geri yazılmıyor, geri besleme/kırpma döngüsü kırılıyor.
-    let syncing = false;
-    this._rsiHoverActive = false;
-    this._rsiWrap.addEventListener('pointerenter', () => { this._rsiHoverActive = true; });
-    this._rsiWrap.addEventListener('pointerleave', () => { this._rsiHoverActive = false; });
-
-    const mainTimeRange = this.chart.timeScale().getVisibleRange();
-    if (mainTimeRange) { try { this._rsiChart.timeScale().setVisibleRange(mainTimeRange); } catch (_) {} }
-
-    const fromMain = this.chart.timeScale().subscribeVisibleTimeRangeChange(range => {
-      if (!range || syncing || !this._rsiChart) return;
-      syncing = true;
-      try { this._rsiChart.timeScale().setVisibleRange(range); } catch (_) {}
-      syncing = false;
-    });
-    const fromRsi = this._rsiChart.timeScale().subscribeVisibleTimeRangeChange(range => {
-      if (!range || syncing || !this.chart || !this._rsiHoverActive) return;
-      syncing = true;
-      try { this.chart.timeScale().setVisibleRange(range); } catch (_) {}
-      syncing = false;
-    });
-
-    // ── Crosshair senkronu (dikey çizgi hizası) ────────────────────
-    const fromMainCross = this.chart.subscribeCrosshairMove(param => {
-      if (!this._rsiChart) return;
-      if (!param || !param.time) { this._rsiChart.clearCrosshairPosition(); return; }
-      const anySeries = Object.values(this._rsiSeries)[0] || this._rsiBand70;
-      if (anySeries) { try { this._rsiChart.setCrosshairPosition(50, param.time, anySeries); } catch (_) {} }
-    });
-    const fromRsiCross = this._rsiChart.subscribeCrosshairMove(param => {
-      if (!this.series) return;
-      if (!param || !param.time) { this.chart.clearCrosshairPosition(); return; }
-      try { this.chart.setCrosshairPosition(this._lastPrice ?? 0, param.time, this.series); } catch (_) {}
-    });
-
-    this._rsiUnsync = () => {
-      try { this.chart.timeScale().unsubscribeVisibleTimeRangeChange(fromMain); } catch (_) {}
-      try { this.chart.unsubscribeCrosshairMove(fromMainCross); } catch (_) {}
-    };
-
-    // Genişlik ana chart'la aynı (yükseklik sabit 120px, RO ile güncellenir).
-    const rect = this.cvs.getBoundingClientRect();
-    if (rect.width > 0) this._rsiChart.resize(rect.width, rsiH);
+    if (this._rsiScaleActive) return;
+    this._rsiScaleActive = true;
+    this._applyScaleMargins();
+    this._buildRsiSplitter();
   }
 
   _destroyRsiPane() {
-    if (!this._rsiChart) return;
-    if (this._rsiUnsync) this._rsiUnsync();
-    try { this._rsiChart.remove(); } catch (_) {}
-    if (this._rsiWrap?.parentNode) this._rsiWrap.parentNode.removeChild(this._rsiWrap);
+    if (!this._rsiScaleActive) return;
+    this._rsiScaleActive = false;
+    this._applyScaleMargins();
     if (this._rsiSplitter?.parentNode) this._rsiSplitter.parentNode.removeChild(this._rsiSplitter);
-    // Ana chart'ın kendi zaman eksenini geri aç — RSI kaldırıldı,
-    // artık tek zaman ekseni ana chart'ın kendisinde olmalı.
-    try { this.chart.applyOptions({ timeScale: { visible: true } }); } catch (_) {}
-    this._rsiChart = null;
-    this._rsiWrap = null;
     this._rsiSplitter = null;
-    this._rsiSeries = {};
-    this._rsiBand70 = null;
-    this._rsiBand30 = null;
-    this._rsiRangeSynced = false;
-    this._rsiHoverActive = false;
+  }
+
+  /** Ana fiyat eksenini (mumlar) ve RSI eksenini (ters taraf) mevcut
+   *  duruma göre uygular — RSI aktifse ana eksenin alt marjı `rsiHeightFrac`
+   *  kadar büyütülür (RSI'ya yer açılır), RSI eksen görünür/etiketli olur.
+   *  Kullanıcının kendi ayarladığı marginTop/marginBottom (Chart Settings)
+   *  KORUNUR — üzerine sadece RSI'nın payı eklenir. */
+  _applyScaleMargins() {
+    const mainId = this._mainScaleId();
+    const rsiId  = this._rsiScaleId();
+    const topPct = this.marginTop / 100;
+    const bottomPct = this.marginBottom / 100;
+    try {
+      if (this._rsiScaleActive) {
+        const frac = this.rsiHeightFrac || 0.25;
+        this.chart.priceScale(mainId).applyOptions({ scaleMargins: { top: topPct, bottom: bottomPct + frac } });
+        // RSI ekseni GÖRÜNMEZ bırakılıyor (visible:false) — veri/konumlama
+        // scaleMargins'e göre yine doğru çalışıyor (test edildi), ama
+        // LWC v4'te küçük bir üst-marjlı ikinci eksende sayı etiketleri
+        // ayrılan bandın DIŞINA "sızıyor" (0-100 yerine 0-300+ gibi
+        // anlamsız değerler, tüm chart yüksekliğine yayılıyor — 2026-08-12,
+        // kullanıcı ekran görüntüsüyle bulundu, kütüphane kısıtı olarak
+        // doğrulandı). Eksen gizlenince bu sorun tamamen ortadan kalkıyor;
+        // RSI değeri zaten legend'de ve 30/70 referans çizgileriyle görünür.
+        this.chart.priceScale(rsiId).applyOptions({
+          visible: false,
+          scaleMargins: { top: 1 - frac, bottom: 0.02 },
+        });
+      } else {
+        this.chart.priceScale(mainId).applyOptions({ scaleMargins: { top: topPct, bottom: bottomPct } });
+        this.chart.priceScale(rsiId).applyOptions({ visible: false });
+      }
+    } catch (_) {}
+    this._positionRsiSplitter();
+    this._syncDrawingCanvasClip();
+  }
+
+  /** Ana chart ile RSI bölgesi arasındaki sürüklenebilir yükseklik ayırıcısı.
+   *  `.cvs` üzerinde mutlak konumlanan ince bir şerit — RSI marjının tam
+   *  sınırında durur, sürükleyince `rsiHeightFrac`'ı (0-1) değiştirir. */
+  _buildRsiSplitter() {
+    if (this._rsiSplitter) return;
+    this._rsiSplitter = document.createElement('div');
+    this._rsiSplitter.className = 'pane-rsi-splitter';
+    this._rsiSplitter.style.cssText = 'position:absolute; left:0; right:0; height:6px; cursor:row-resize; z-index:4; border-top:1px solid var(--border-primary);';
+    this.cvs.appendChild(this._rsiSplitter);
+    this._positionRsiSplitter();
+
+    let dragStartY = null, dragStartFrac = null;
+    const onMove = (e) => {
+      if (dragStartY == null) return;
+      const dy = e.clientY - dragStartY;
+      const h = this.cvs.getBoundingClientRect().height || 1;
+      let newFrac = dragStartFrac - dy / h; // yukarı sürükle → RSI büyüsün
+      newFrac = Math.max(0.12, Math.min(0.6, newFrac));
+      this.rsiHeightFrac = newFrac;
+      this._applyScaleMargins();
+    };
+    const onUp = () => {
+      dragStartY = null;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+    this._rsiSplitter.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dragStartY = e.clientY;
+      dragStartFrac = this.rsiHeightFrac || 0.25;
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  _positionRsiSplitter() {
+    if (!this._rsiSplitter) return;
+    const h = this.cvs.getBoundingClientRect().height;
+    if (!h) return;
+    const frac = this._rsiScaleActive ? (this.rsiHeightFrac || 0.25) : 0;
+    this._rsiSplitter.style.top = (h * (1 - frac) - 3) + 'px';
   }
 
   /** `this.candlesData`'dan tüm aktif indikatörleri yeniden hesaplar.
@@ -841,67 +799,26 @@ class ChartPane {
     }
     const lastTime = times[times.length - 1];
 
-    const applyPoints = (series, points, lastPoint) => {
-      if (!series) return;
-      if (tickOnly && lastPoint) series.update(lastPoint);
-      else series.setData(points);
-    };
-
+    // RSI artık ayrı bir chart değil, aynı `this.chart`'ın ikinci fiyat
+    // ekseninde — bu yüzden EMA/DEMA ile TAMAMEN AYNI kod yolu (series
+    // zaten doğru priceScaleId ile `_rebuildIndicatorOverlays()`'ta
+    // kuruldu, burada sadece veri hesaplanıp yazılıyor).
     this.indicators.forEach(cfg => {
-      if (cfg.type === 'ema' || cfg.type === 'dema') {
-        const arr = cfg.type === 'ema'
-          ? IndicatorEngine.calcEMAFull(closes, cfg.period)
-          : IndicatorEngine.calcDEMAFull(closes, cfg.period);
-        const points = [];
-        for (let i = 0; i < arr.length; i++) {
-          if (arr[i] == null) continue;
-          points.push({ time: times[i], value: arr[i] });
-        }
-        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
-        applyPoints(this._indSeries[cfg.id], points, lastPoint);
-        cfg._lastValue = points.length ? points[points.length - 1].value : null;
-      } else if (cfg.type === 'rsi') {
-        if (!this._rsiChart) return;
-        if (!this._rsiSeries[cfg.id]) {
-          this._rsiSeries[cfg.id] = this._rsiChart.addLineSeries({
-            color: cfg.color, lineWidth: 2,
-            priceScaleId: this.priceSide === 'left' ? 'left' : 'right',
-            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
-            lastValueVisible: false, priceLineVisible: false,
-          });
-        } else {
-          this._rsiSeries[cfg.id].applyOptions({ color: cfg.color });
-        }
-        const arr = IndicatorEngine.calcRSIFull(closes, cfg.period);
-        const points = [];
-        for (let i = 0; i < arr.length; i++) {
-          if (arr[i] == null) continue;
-          points.push({ time: times[i], value: arr[i] });
-        }
-        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
-        applyPoints(this._rsiSeries[cfg.id], points, lastPoint);
-        cfg._lastValue = points.length ? points[points.length - 1].value : null;
-
-        if (this._rsiBand70 && this._rsiBand30 && points.length && !tickOnly) {
-          this._rsiBand70.setData([{ time: points[0].time, value: 70 }, { time: points[points.length - 1].time, value: 70 }]);
-          this._rsiBand30.setData([{ time: points[0].time, value: 30 }, { time: points[points.length - 1].time, value: 30 }]);
-        } else if (this._rsiBand70 && this._rsiBand30 && points.length && tickOnly) {
-          this._rsiBand70.update({ time: lastTime, value: 70 });
-          this._rsiBand30.update({ time: lastTime, value: 30 });
-        }
-
-        // İLK kez gerçek veriyle dolduruluyor — LWC, boş bir seriye setData()
-        // yapılınca zaman eksenini kendi (çok dar) varsayılan görünümüne
-        // sıfırlıyor, `_ensureRsiPane()`'deki senkron denemesini eziyordu.
-        // Bir kerelik: gerçek veri geldikten SONRA ana chart'ın görünen
-        // aralığını tekrar zorla — sonraki setData() çağrıları (lazy-load
-        // vb.) kullanıcının mevcut scroll/zoom'unu artık BOZMAZ.
-        if (!tickOnly && !this._rsiRangeSynced && points.length) {
-          this._rsiRangeSynced = true;
-          const mainTimeRange = this.chart.timeScale().getVisibleRange();
-          if (mainTimeRange) { try { this._rsiChart.timeScale().setVisibleRange(mainTimeRange); } catch (_) {} }
-        }
+      const arr = cfg.type === 'ema' ? IndicatorEngine.calcEMAFull(closes, cfg.period)
+                : cfg.type === 'dema' ? IndicatorEngine.calcDEMAFull(closes, cfg.period)
+                : IndicatorEngine.calcRSIFull(closes, cfg.period);
+      const points = [];
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] == null) continue;
+        points.push({ time: times[i], value: arr[i] });
       }
+      const series = this._indSeries[cfg.id];
+      if (series) {
+        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
+        if (tickOnly && lastPoint) series.update(lastPoint);
+        else series.setData(points);
+      }
+      cfg._lastValue = points.length ? points[points.length - 1].value : null;
     });
 
     this._updateIndicatorLegend(tickOnly);
@@ -1607,6 +1524,11 @@ class ChartPane {
       leftPriceScale:  { visible: side === 'left'  },
     });
     this._buildSeries();
+    // RSI ikinci (mumlarınkinin tersi) ekseni kullanıyor — taraf değişince
+    // hangi eksenin RSI'ya ait olduğu da değişir, `applyOptions` üstteki
+    // satırda az önce onu tekrar `visible:false` yapmış olabilir; burada
+    // doğru tarafta yeniden açılıyor.
+    if (this._rsiScaleActive) this._applyScaleMargins();
     this.loaded = false; this._loadData(); this.loaded = true;
   }
 
@@ -1816,10 +1738,11 @@ class ChartPane {
     if (topPct !== null || bottomPct !== null) {
       if (s.marginTop    != null) this.marginTop    = s.marginTop;
       if (s.marginBottom != null) this.marginBottom = s.marginBottom;
-      const scaleId = this.priceSide === 'left' ? 'left' : 'right';
-      this.chart.priceScale(scaleId).applyOptions({
-        scaleMargins: { top: topPct ?? this.marginTop / 100, bottom: bottomPct ?? this.marginBottom / 100 }
-      });
+      // gorevler2.md Görev 14 (2026-08-12) — RSI aktifken alt marja onun
+      // payını da eklemesi gereken _applyScaleMargins() üzerinden uygula,
+      // yoksa kullanıcı Settings'ten margin değiştirince RSI'nın ayrılmış
+      // alanı doğrudan ezilir.
+      this._applyScaleMargins();
     }
 
     // ── WATERMARK (Canvas tab) ────────────────────────────────
@@ -2057,7 +1980,7 @@ class ChartPane {
       marginTop: this.marginTop, marginBottom: this.marginBottom,
       // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
       indicators: this.indicators.map(({ _lastValue, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
-      rsiPaneHeight: this.rsiPaneHeight,
+      rsiHeightFrac: this.rsiHeightFrac,
     };
   }
 

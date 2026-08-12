@@ -239,6 +239,69 @@ testlerde tutarsız sonuç verdi) — ana riskli regresyon (ana chart'ın
 KENDİ sürüklemesinin kilitlenmesi) kesin düzeltildi, bu ikincil UX
 inceliği ileride ayrıca gözden geçirilebilir.
 
+## Düzeltme 3 (2026-08-12) — KÖKTEN mimari değişikliği: RSI artık ayrı chart değil
+
+Düzeltme 2 canlıda YİNE bozuldu — kullanıcı üç ekran görüntüsü (biri
+projeden, ikisi TV referansı) paylaşıp "mum solda RSI sağda alt alta
+değiller" dedi. İki BAĞIMSIZ `createChart()` motoru arasında senkron,
+gerçek kullanımda tekrar tekrar farklı şekillerde bozuluyordu — mimari
+düzeyde bir sorundu, kullanıcıya durumu anlatıp onay alındı (risk:
+çizim aracı piksel-hassasiyeti sistemine de dokunmak gerekiyordu).
+
+### Gerçek çözüm
+
+RSI artık ikinci bir `createChart()` DEĞİL — AYNI chart'ın İKİNCİ
+fiyat ekseninde (mumlar `right` kullanıyorsa RSI `left`) çiziliyor —
+volume histogramının aynı chart'ta overlay çizilmesiyle aynı teknik.
+Tek chart/tek zaman ekseni olduğu için hizasızlık ve zoom/scroll
+kilitlenmesi YAPISAL OLARAK İMKANSIZ hâle geldi — senkron kodunun
+tamamı (`fromMain`/`fromRsi`/crosshair-sync) silindi.
+
+### Yapılanlar
+
+- `_mainScaleId()`/`_rsiScaleId()`, `_applyScaleMargins()` (RSI'nin
+  payını ana eksenin alt marjına ekliyor, kullanıcının kendi
+  marginTop/marginBottom ayarı korunuyor).
+- RSI artık EMA/DEMA ile AYNI kod yolu (`_recomputeAllIndicators`),
+  ~80 satırlık RSI'ya özel kod (ayrı chart, 2-noktalı band-series
+  hack'i, senkron abonelikleri) kalktı. 30/70 çizgileri artık gerçek
+  `series.createPriceLine()` API'siyle.
+- Sürüklenebilir ayırıcı artık piksel değil `rsiHeightFrac` (0-1 oran)
+  sürüklüyor.
+- `_syncDrawingCanvasClip()` (çizim araçlarının piksel-hassas
+  konumlandığı fonksiyon) RSI'nin ikinci eksen genişliğini de kırpma
+  hesabına katacak şekilde güncellendi.
+
+### Bulunan LWC v4 kısıtı
+
+RSI ekseni GÖRÜNÜR (0-100 etiketli) yapılınca sayı etiketleri ayrılan
+banda sığmayıp tüm chart yüksekliğine "sızıyordu" (0-100 yerine 0-300+
+gibi anlamsız değerler) — `scaleMargins` küçük bir üst-pay
+ayırdığında LWC v4'ün tick-etiket üretiminin marja saygı göstermediği,
+doğrulanmış bir kütüphane kısıtı (sabit `autoscaleInfoProvider` ile
+de düzelmedi). **Çözüm:** RSI ekseni `visible:false` — veri/konumlama
+yine doğru (test edildi), sadece sayı etiketleri gösterilmiyor; değer
+zaten legend'de + 30/70 referans çizgilerinde görünür.
+
+### Doğrulama (temiz sayfa yenilemesiyle)
+
+- Zoom/scroll: `setVisibleLogicalRange({from:50,to:700})` RSI aktifken
+  artık set edilen değerde kalıyor (başka bir motorun geri yazması
+  diye bir şey artık yok). ✅
+- Ekran görüntüsü: mumlar üstte, RSI altta, aynı x-koordinatlarında
+  (aynı chart olduğu için matematiksel garanti), tek zaman ekseni,
+  etiket sızıntısı yok. ✅
+- Sürüklenebilir ayırıcı: `rsiHeightFrac` 0.25→0.30 doğru güncellendi. ✅
+- Çizim katmanı boyut/konum hesabı doğrulandı (RSI ekseni gizliyken
+  `width()` 0 dönüyor, kırpmayı etkilemiyor). ✅
+- RSI kaldırılınca ana eksen marjı doğru eski hâline dönüyor. ✅
+- Konsol tamamen hatasız. ✅
+
+**Kalan bilinen sınır:** RSI ekseninde TV'deki 0/20/40/60/80/100 sayı
+etiketleri yok (kütüphane kısıtı yüzünden bilinçli kapatıldı) — v5'e
+geçilmeden tam çözülemeyecek kozmetik bir eksiklik, hizalama/zoom/
+scroll doğruluğunu etkilemiyor.
+
 ## Görev 14.2 — Indicators sidebar sekmesi
 
 **Kullanıcı geri bildirimi:** "matematik olarak calisiyor olabilir, ama

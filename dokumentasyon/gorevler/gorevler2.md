@@ -920,6 +920,93 @@ Ana riskli regresyon (ana chart'ın KENDİ sürüklemesinin kilitlenmesi)
 kesin olarak düzeltildi — bu ikincil UX inceliği ileride ayrıca
 gözden geçirilebilir.
 
+### Düzeltme 3 (aynı gün, 2026-08-12) — KÖKTEN mimari değişikliği: RSI artık ayrı chart değil
+
+Düzeltme 2 canlıda YİNE bozuldu — kullanıcı üç ekran görüntüsü (biri
+projeden, ikisi TV referansı) paylaşıp "ne yapıyorsun anlamıyorum,
+mum solda RSI sağda alt alta değiller" dedi. İki BAĞIMSIZ
+`createChart()` motoru arasında senkron, ne kadar özenli yazılırsa
+yazılsın, gerçek kullanımda (sayfa yenileme, canlı tick akışı, gerçek
+fare sürüklemesi) tekrar tekrar farklı şekillerde bozuluyordu — bu,
+küçük yamalarla değil, MİMARİ düzeyde çözülmesi gereken bir sorundu.
+
+**Kullanıcıya durumu anlatıp onay alındı** (bkz. AskUserQuestion) —
+çünkü gerçek çözüm, projenin daha önce özenle ayarlanmış çizim aracı
+piksel-hassasiyeti sistemine de dokunmayı gerektiriyordu.
+
+**Gerçek çözüm:** RSI artık ikinci bir `createChart()` DEĞİL — AYNI
+chart'ın İKİNCİ fiyat ekseninde (mumlar `right` kullanıyorsa RSI
+`left`, tersi de geçerli) çiziliyor. Volume histogramının aynı chart'ta
+overlay olarak çizilmesiyle AYNI teknik, ama volume'ün aksine RSI'nin
+kendi (mumlarınkinden bağımsız) ölçeği var. Tek chart/tek zaman ekseni
+olduğu için hizasızlık ve zoom/scroll kilitlenmesi artık YAPISAL OLARAK
+İMKANSIZ — senkron kodu diye bir şey kalmadı (`_ensureRsiPane`/
+`_destroyRsiPane`/`fromMain`/`fromRsi`/crosshair-sync'in tamamı silindi).
+
+**Yapılanlar:**
+- `_mainScaleId()`/`_rsiScaleId()` — mumların kullandığı taraf ve
+  TERSİ (RSI için).
+- `_applyScaleMargins()` — RSI aktifken ana eksenin alt marjını
+  `rsiHeightFrac` kadar büyütüp RSI'ya yer açıyor, RSI ekseni o payı
+  alıyor. Kullanıcının Chart Settings'ten ayarladığı `marginTop`/
+  `marginBottom` KORUNUYOR, üzerine sadece RSI'nın payı ekleniyor.
+- `_rebuildIndicatorOverlays()`/`_recomputeAllIndicators()` — RSI artık
+  EMA/DEMA ile TAMAMEN AYNI kod yolu (tek fark: `priceScaleId`), ~80
+  satırlık RSI'ya özel kod (ayrı chart kurulumu, 2-noktalı "band
+  series" hack'i, senkron abonelikleri) tamamen kalktı. 30/70 referans
+  çizgileri artık `series.createPriceLine()` ile (veri gerektirmeyen,
+  gerçek LWC API'si — eski 2-noktalı çizgi hack'inden çok daha doğru).
+- **Sürüklenebilir ayırıcı** artık pixel-height DEĞİL, `rsiHeightFrac`
+  (0-1, chart yüksekliğinin oranı) sürüklüyor — `.cvs` üzerinde mutlak
+  konumlanan ince bir şerit, RSI marjının sınırında duruyor.
+- `_syncDrawingCanvasClip()` (çizim araçlarının piksel-hassas
+  konumlandığı, projede daha önce zorlukla düzeltilmiş fonksiyon)
+  GÜNCELLENDİ — artık RSI'nin (görünürse) ikinci eksen genişliğini de
+  kırpma hesabına katıyor, yoksa çizim katmanı yanlış genişlikte
+  kırpılırdı.
+- `setPriceSide()` — kullanıcı fiyat eksenini değiştirirse (Ayarlar'dan
+  sol/sağ), RSI'nin hangi tarafta olması gerektiği de yeniden hesaplanıp
+  uygulanıyor.
+
+**Bulunan ve atlatılan bir LWC v4 kısıtı:** RSI'nin ikinci ekseni
+GÖRÜNÜR (`visible:true`) yapılınca (0-100 etiketli bir eksen — TV'deki
+gibi) sayı etiketleri ayrılan banda SIĞMAYIP tüm chart yüksekliğine
+"sızıyordu" (0-100 yerine 0-300+ gibi anlamsız değerler) — bu,
+`scaleMargins` küçük bir üst-pay ayırdığında LWC v4'ün tick-etiket
+üretim algoritmasının marja saygı göstermemesinden kaynaklanan,
+doğrulanmış bir kütüphane kısıtı (sabit `autoscaleInfoProvider` ile
+0-100 aralığı zorlamak da düzeltmedi, tam tersine daha da kötüleşti).
+**Çözüm:** RSI ekseni `visible:false` bırakıldı — veri/konumlama
+(`scaleMargins`) yine doğru çalışıyor (test edildi), sadece sayı
+etiketleri gösterilmiyor. RSI değeri zaten sol-üst legend'de görünür,
+30/70 referans çizgileri de oscillator'ın sınırlarını gösteriyor.
+
+**Doğrulama (tarayıcıda, temiz sayfa yenilemesiyle — önceki manuel
+test denemelerinden kalan başıboş series'lerin karıştırmadığından
+emin olmak için):**
+- Zoom/scroll regresyonu: `setVisibleLogicalRange({from:50,to:700})`
+  RSI aktifken artık set edilen değerde KALIYOR (gecikmeli okumayla
+  doğrulandı — tek chart olduğu için başka bir motorun "geri yazması"
+  diye bir şey artık YOK). ✅
+- Ekran görüntüsü: mumlar ÜSTTE, RSI ALTTA, aynı x-koordinatlarında
+  (aynı chart/aynı zaman ekseni olduğu için matematiksel olarak
+  garanti), tek zaman ekseni, RSI ekseninde etiket sızıntısı yok. ✅
+- Sürüklenebilir ayırıcı: sentetik `pointerdown`→`pointermove`(-60px)→
+  `pointerup` sonrası `rsiHeightFrac` 0.25→0.30 doğru güncellendi, RSI
+  alanı ekranda gerçekten büyüdü. ✅
+- Çizim katmanı: `drawingCanvas` genişlik/konum hesabı doğrulandı —
+  RSI ekseni gizliyken `width()` 0 döndürüyor, kırpma hesabına hiç
+  girmiyor (`1248-68=1180`, sadece ana eksenin genişliği düşülüyor). ✅
+- RSI kaldırılınca ana eksenin marjı doğru eski hâline (`bottom:0.15`)
+  dönüyor (gecikmeli okumayla doğrulandı). ✅
+- Konsol tamamen hatasız. ✅
+
+**Kalan bilinen sınır:** RSI ekseninde TV'deki gibi 0/20/40/60/80/100
+sayı etiketleri YOK (kütüphane kısıtı yüzünden bilinçli olarak
+kapatıldı) — RSI değeri legend'den ve 30/70 referans çizgilerinden
+okunuyor. Bu, v5'e geçilmeden (native pane desteği) tam çözülemeyecek
+kozmetik bir eksiklik; hizalama/zoom/scroll'un doğruluğunu ETKİLEMİYOR.
+
 ### Kullanıcı geri bildirimi (14.1 sonrası)
 
 "matematik olarak calisiyor olabilir, ama fonksiyon olarak daha tam
