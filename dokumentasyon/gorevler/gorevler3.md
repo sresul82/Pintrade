@@ -146,7 +146,7 @@ Görev 3 bittikten sonra **DURACAKSIN**. Görev 4, sinyali gerçekten Watchlist'
 
 ---
 
-## [ ] Görev 5 — Canlı gözlem + ince ayar
+## [x] Görev 5 — Canlı gözlem + ince ayar (2026-08-12, 9/10 sinyalle kullanıcı onayıyla kapatıldı)
 
 **Bağımlılık:** Görev 4'ten sonra, kullanıcı onayıyla.
 
@@ -225,22 +225,28 @@ standardı, diğer tüm Mongo-bağımlı endpoint'lerle aynı davranış). Gerç
 ağ/DB testi ancak production'da yapılabilir (sandbox'ın bilinen DNS
 kısıtı) — deploy sonrası orada doğrulanacak.
 
-### Yapılacak (devam)
+### [x] Tamamlandı (2026-08-12) — 9/10 sinyalle, kullanıcı onayıyla
 
-- İlk 10 kesinleşen sinyali (`Kom1Scanner.getConfirmedSignals()`, alarm
-  sekmesi, veya artık `GET /api/kom1/signals` üzerinden) topla, her birini
-  manuel değerlendir.
-- Bu süre boyunca ban/hata sıklığını izle (konsol/production logları +
-  `/api/kom1/status`).
-- 10 sinyal toplanınca veya kritik bir sorun çıkarsa kullanıcıya rapor et,
-  Görev 6'dan önceki DUR kapısına gelindiğinde onay bekle.
+Günlük 11:00 zamanlanmış kontrol (`kom1-daily-signal-check`) 2026-08-12
+11:09'da (yerel) çalıştı, yeni sinyal bulamadı — toplam 9 kesinleşen
+sinyalde kaldı (10. sinyal beklemede). Kullanıcıya durum bildirildi,
+kullanıcı 10.yu beklemeden devam edilmesini onayladı: "1 sinyal eksikse
+sorun değil, gelen sinyallerle devam edelim."
 
-### Doğrulama
+**Manuel değerlendirme:** Ban/çökme yaşanmadı (teknik sağlık ✅). 9
+sinyalin 6'sı TUSDT'ye ait ve ~1 saatlik dar bir fiyat bandında
+kümelenmiş — WaveTrend'in tek bir uzun süreli aşırı-satım durumunda
+eşiği defalarca aşağı-yukarı geçmesinden kaynaklanan bir örüntü (hata
+değil, gözlemlenmesi gereken bir davranış — ileride "aynı sembol kısa
+sürede tekrar tetiklenmesin" filtresi ihtiyacı doğabilir, bu turda
+**hiçbir parametre değiştirilmedi**). Detaylı sinyal listesi ve analiz:
+`dokumentasyon/raporlar/2026-08-12-gorev5-canli-gozlem.md`.
 
-- 10 sinyal toplandı mı, hepsi manuel değerlendirildi mi?
-- Gözlem süresince ban/çökme yaşandı mı (yaşandıysa kaç kez, nasıl ele alındı)?
+**Kullanıcı açıkça belirtti:** Görev 5 burada kapansın, Görev 6 (tüm
+piyasaya genişletme, en riskli adım) için AYRICA açık onay istenecek —
+bu rapor Görev 6'ya geçiş onayı DEĞİLDİR, sadece Görev 5'in kapanışıdır.
 
-**Rapor:** `2026-XX-XX-gorev5-canli-gozlem.md`
+**Rapor:** `2026-08-12-gorev5-canli-gozlem.md`
 
 ---
 
