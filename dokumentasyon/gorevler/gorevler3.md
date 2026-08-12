@@ -375,10 +375,25 @@ detaylandırma gerekiyor.** Muhtemel parçalar:
 sonucunda "güvenilir" sayılmasına bağlı — önkoşul olarak işaretlendi,
 Görev 5 tamamlanıp kullanıcı memnun kalmadan bunlara başlanmaz.
 
-- **Chart üzerinde indikatör görselleştirmesi** (RSI/DEMA9/HA/WT/RC) —
-  `indicator-engine.js` hazır (gorevler3.md Görev 1) ama chart'a hiç
-  çizilmiyor, sadece scanner'ların iç hesaplaması olarak kullanılıyor.
-  (`gorevler2.md` izleme listesinden taşındı.)
+- ~~Chart üzerinde indikatör görselleştirmesi~~ — **KISMEN tamamlandı
+  (2026-08-12)**, bkz. `gorevler2.md` Görev 14.1/14.2: EMA/DEMA artık
+  gerçek overlay olarak chart'a çiziliyor (ana fiyat ekseniyle aynı
+  ölçek, `js/chart/chart-pane.js`), + Indicators sidebar sekmesi.
+  **RSI (ve WT/RC gibi diğerleri) kaldırıldı/eklenmedi** — subpane
+  (alt-pencere) gerektiriyorlar, `lightweight-charts v4.1.3`'te native
+  pane desteği yok. İki farklı yaklaşım denendi (ayrı senkronize chart;
+  aynı chart'ın ikinci fiyat ekseni), ikisi de gerçek kullanımda ya
+  hizasızlık/kilitlenmeye ya da LWC'nin etiket-sızdırma kısıtına takıldı
+  (bkz. `gorevler2.md` Görev 14.1'in "Düzeltme 1/2/3" bölümleri, rapor:
+  `2026-08-11-gorev14-chart-indikatorleri-ema-dema-rsi.md`).
+  **Karar (kullanıcı, 2026-08-12):** RSI/MACD/Stochastic gibi subpane
+  gerektiren indikatörlerin ihtiyacı biriktiğinde **lightweight-charts
+  v5 migrasyonu** (native pane desteği) ayrı, tek seferlik bir görev
+  olarak toplu ele alınacak — tek bir indikatör için yapılmayacak. Kom1
+  canlı gözlem süreci (Görev 5) aktif olduğu için şu an chart tarafında
+  büyük refactor riski alınmıyor. v5'e geçildiğinde `chart-pane.js`'in
+  `addLineSeries`/`addCandlestickSeries`/... çağrılarının tamamının
+  v5'in birleşik `addSeries()` API'sine taşınması gerekecek.
 - **Manuel strateji kararları için botların gerçek zamanlı çalışır
   durumda tutulması** — izleme/health-check mekanizması (bot çöktü mü,
   abonelik sızıntısı var mı, backfill takıldı mı gibi durumları tespit

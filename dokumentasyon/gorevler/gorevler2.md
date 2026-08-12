@@ -1007,6 +1007,61 @@ kapatıldı) — RSI değeri legend'den ve 30/70 referans çizgilerinden
 okunuyor. Bu, v5'e geçilmeden (native pane desteği) tam çözülemeyecek
 kozmetik bir eksiklik; hizalama/zoom/scroll'un doğruluğunu ETKİLEMİYOR.
 
+### Düzeltme 4 (aynı gün, 2026-08-12) — RSI subpane TAMAMEN KALDIRILDI
+
+Kullanıcı Düzeltme 3'ün sonucunu (görünmez eksen, sadece legend+30/70
+çizgisi) reddetti: "sen fiyatın üzerine level çiziyorsun. TVde bu
+şekilde mi? ... ne farkı var EMA/DEMA'dan" — haklı olarak, etiketsiz
+bir eksenli RSI'nin TV'nin gerçek subpane'inden görsel/işlevsel olarak
+ayırt edilemez olduğunu, bunun kabul edilebilir bir sonuç olmadığını
+belirtti.
+
+**Dürüstlük kontrolü:** Üç farklı yaklaşım (ayrı chart senkronu, ikinci
+fiyat ekseni görünür, ikinci fiyat ekseni gizli) hepsi ya hizalama ya
+da görsel kalite açısından başarısız oldu — bu, küçük bir kod hatası
+değil, `lightweight-charts v4.1.3`'ün native subpane (alt-pencere)
+desteği OLMAMASINDAN kaynaklanan gerçek bir kütüphane kısıtı. Kullanıcıya
+doğrudan söylendi: "bu sürümle RSI'yi TV'deki gibi yapamıyorum, tek
+gerçek çözüm v5 migrasyonu."
+
+**Kullanıcı kararı:** RSI subpane özelliği şimdilik TAMAMEN kaldırıldı
+(EMA/DEMA overlay'leri kalıyor, etkilenmedi). v5 migrasyonu ayrı,
+gelecekteki bir görev olarak `gorevler3.md`'nin izleme listesine
+eklendi — RSI/MACD/Stochastic gibi subpane gerektiren indikatörlerin
+ihtiyacı biriktiğinde TOPLU ele alınacak, tek bir indikatör için
+yapılmayacak. Gerekçe: Kom1 canlı gözlem süreci (gorevler3.md Görev 5)
+aktif olduğu için chart tarafında büyük refactor riski şimdi alınmıyor.
+
+**Yapılanlar (`js/chart/chart-pane.js`):**
+- `_ensureRsiPane`/`_destroyRsiPane`/`_applyScaleMargins`/
+  `_buildRsiSplitter`/`_positionRsiSplitter`/`_rsiScaleId` tamamen
+  silindi (~150 satır).
+- `_rebuildIndicatorOverlays`/`_recomputeAllIndicators` sadeleştirildi
+  — artık sadece EMA/DEMA (mumlarla aynı ölçek).
+  `_syncDrawingCanvasClip` RSI'nin ikinci eksen genişliği hesabından
+  arındırılıp orijinal (tek eksenli) haline döndürüldü.
+  `applySettings`'in margin bloğu ve `setPriceSide` RSI'ya özel
+  eklemelerden temizlendi.
+- Constructor: kayıtlı state'te kalmış eski `type:'rsi'` indikatör
+  kayıtları restore sırasında SESSİZCE FİLTRELENİYOR (aksi halde artık
+  var olmayan bir davranışla mumların ölçeğine yanlışlıkla çizilmeye
+  çalışılırdı).
+- `js/core/app.js` — "Indicators" arama kataloğundan `rsi` girdisi
+  kaldırıldı, artık sadece EMA/DEMA eklenebiliyor.
+- `css/chart.css` — kullanılmayan `.pane-rsi-splitter` kuralı silindi.
+
+**Doğrulama (tarayıcıda, temiz sayfa yenilemesiyle):**
+- `pane._ensureRsiPane`/`pane._rsiScaleId` artık `undefined` — kod
+  tamamen kalktı. ✅
+- EMA(9)+DEMA(9) eklenip chart'ta doğru overlay olarak render oldu
+  (tam boy, alt-pencere yok). ✅
+- "Indicators" arama modalı artık sadece `["ema","dema"]` listeliyor. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
+**Rapor:** `2026-08-11-gorev14-chart-indikatorleri-ema-dema-rsi.md`
+(aynı dosyaya eklendi) — `gorevler3.md`'deki v5 migrasyon notu için
+bkz. "İleri seviye — Kom1 gözlem sonrası ele alınacak" bölümü.
+
 ### Kullanıcı geri bildirimi (14.1 sonrası)
 
 "matematik olarak calisiyor olabilir, ama fonksiyon olarak daha tam

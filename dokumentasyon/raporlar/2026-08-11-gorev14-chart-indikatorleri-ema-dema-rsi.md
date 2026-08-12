@@ -302,6 +302,47 @@ etiketleri yok (kütüphane kısıtı yüzünden bilinçli kapatıldı) — v5'e
 geçilmeden tam çözülemeyecek kozmetik bir eksiklik, hizalama/zoom/
 scroll doğruluğunu etkilemiyor.
 
+## Düzeltme 4 (2026-08-12) — RSI subpane TAMAMEN KALDIRILDI
+
+Kullanıcı Düzeltme 3'ün sonucunu reddetti: "sen fiyatın üzerine level
+çiziyorsun. TVde bu şekilde mi? ... ne farkı var EMA/DEMA'dan" —
+etiketsiz eksenli RSI'nin TV'nin gerçek subpane'inden ayırt edilemez
+olduğunu, kabul edilebilir olmadığını belirtti.
+
+**Dürüstlük:** Üç farklı yaklaşım (ayrı chart senkronu, ikinci fiyat
+ekseni görünür, ikinci fiyat ekseni gizli) hepsi başarısız oldu — bu,
+`lightweight-charts v4.1.3`'ün native subpane desteği OLMAMASINDAN
+kaynaklanan gerçek bir kütüphane kısıtı. Kullanıcıya doğrudan söylendi.
+
+**Kullanıcı kararı:** RSI subpane özelliği TAMAMEN kaldırıldı (EMA/DEMA
+etkilenmedi). v5 migrasyonu ayrı, gelecekteki bir görev olarak
+`gorevler3.md` izleme listesine eklendi — subpane gerektiren
+indikatörlerin (RSI/MACD/Stochastic) ihtiyacı biriktiğinde TOPLU ele
+alınacak. Kom1 canlı gözlem süreci aktif olduğu için şu an chart
+tarafında büyük refactor riski alınmıyor.
+
+### Yapılanlar
+
+- `chart-pane.js`: `_ensureRsiPane`/`_destroyRsiPane`/
+  `_applyScaleMargins`/`_buildRsiSplitter`/`_positionRsiSplitter`/
+  `_rsiScaleId` tamamen silindi (~150 satır). `_rebuildIndicatorOverlays`/
+  `_recomputeAllIndicators` sadeleştirildi (sadece EMA/DEMA).
+  `_syncDrawingCanvasClip` orijinal (tek eksenli) hâline döndürüldü.
+  Kayıtlı state'teki eski `type:'rsi'` girdileri restore sırasında
+  sessizce filtreleniyor.
+- `app.js`: "Indicators" arama kataloğundan `rsi` kaldırıldı.
+- `chart.css`: kullanılmayan `.pane-rsi-splitter` kuralı silindi.
+
+### Doğrulama
+
+- `pane._ensureRsiPane`/`pane._rsiScaleId` artık `undefined`. ✅
+- EMA(9)+DEMA(9) chart'ta doğru overlay olarak render oldu. ✅
+- "Indicators" modalı artık sadece `["ema","dema"]` listeliyor. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
+**Bkz.** `gorevler3.md` → "İleri seviye — Kom1 gözlem sonrası ele
+alınacak" bölümündeki v5 migrasyon notu.
+
 ## Görev 14.2 — Indicators sidebar sekmesi
 
 **Kullanıcı geri bildirimi:** "matematik olarak calisiyor olabilir, ama

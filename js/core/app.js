@@ -1275,10 +1275,13 @@ const App = {
   // ══════════════════════════════════════════════════════════════
   _bindIndicatorsModal() {
     const TV_BLUE = '#2962ff';
+    // RSI (ve MACD/Stochastic gibi subpane gerektiren diğer indikatörler)
+    // 2026-08-12'de kataloğa alınmadı — bkz. gorevler3.md izleme listesi:
+    // lightweight-charts v5 migrasyonu bekleniyor (native pane desteği
+    // olmadan bu tür indikatörler TV kalitesinde gösterilemiyor).
     const CATALOG = [
       { type: 'ema',  name: 'Moving Average Exponential', short: 'EMA',  desc: 'Overlay — ana chart üzerinde' },
       { type: 'dema', name: 'Double EMA',                 short: 'DEMA', desc: 'Overlay — ana chart üzerinde' },
-      { type: 'rsi',  name: 'Relative Strength Index',    short: 'RSI',  desc: 'Alt-pencere — ayrı, senkronize chart' },
     ];
 
     const btn = document.getElementById('btn-indicators');
