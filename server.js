@@ -675,12 +675,14 @@ mongoose.connection.once('open', () => {
   // Sıralama, en hafiften en ağıra: binanceData (~50 weight) → bybitData
   // (ayrı borsa, Binance bütçesini etkilemez) → Binance L/S (8 sembol ×
   // 4 endpoint, ~32 weight) → Bybit L/S (ayrı borsa, kendi bütçesi, 8
-  // sembol × 1 endpoint) → mumlar (526 sembol, ~530 weight — en ağır, en sona).
+  // sembol × 1 endpoint) → mumlar (526 sembol, ~530 weight — en ağır) →
+  // Kom1 (gorevler3.md Görev 6, 2026-08-12'den beri artık ~527 sembol,
+  // eskisi gibi 11 değil — mumlar bitmeden başlarsa iki ağır iş çakışır).
   _staggeredStart(collectBinanceData,    0,      1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
   _staggeredStart(collectBybitData,      5000,   1 * 60 * 1000);  // 1 dakika
   _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // Binance L/S — sabit 8 coinlik liste
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
-  _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
+  _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır (~527 sembol × 10'luk batch × 300ms ≈ ~16sn sürer, ~31sn'de biter)
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
 
   // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11 → Görev 6,
@@ -690,6 +692,14 @@ mongoose.connection.once('open', () => {
   // Kalıcı rotasyon durumu: açılışta Kom1ScanState'ten yüklenir, her
   // tick sonrası geri yazılır — sunucu yeniden başlasa bile kaldığı
   // yerden devam eder.
+  //
+  // Gecikme 25000ms DEĞİL 40000ms: collectBinanceCandles (15000ms'de
+  // başlar, ~527 sembol × 10'luk batch × 300ms ≈ ~16sn sürer, ~31sn'de
+  // biter) ile Kom1'in taraması (artık Görev 6 sonrası o da yüzlerce
+  // sembolü kapsayabiliyor) 25000ms'de çakışıyordu — kullanıcının
+  // "sitede coin analiz ederken ban riski var mı" sorusu üzerine
+  // 2026-08-12'de fark edildi ve düzeltildi (bkz. 2026-08-08'deki
+  // 11 saatlik ban olayı — aynı sınıf risk).
   Kom1ScanState.find({}, { _id: 0, __v: 0 }).lean()
     .then(records => Kom1ServerWatcher.loadScanState(records))
     .catch(err => console.warn('[Kom1ServerWatcher] Kayıtlı tarama durumu yüklenemedi (ilk çalıştırma olabilir):', err.message));
@@ -715,7 +725,7 @@ mongoose.connection.once('open', () => {
         );
       } catch (err) { console.warn('[Kom1ServerWatcher] Tarama durumu kaydedilemedi:', err.message); }
     }).catch(err => console.error('[Kom1ServerWatcher] tick hatası:', err.message));
-  }, 25000, 5 * 60 * 1000);
+  }, 40000, 5 * 60 * 1000);
 });
 
 // ==========================================
