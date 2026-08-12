@@ -8,19 +8,37 @@
  * gerçek/asıl Kom1 motoru) YERİNİ TUTMAZ, onu DEĞİŞTİRMEZ:
  *   - kom1-scanner.js: canlı WS bar akışıyla, bar-sayacı bazlı TOLERANCE_BARS
  *     penceresiyle, olay-güdümlü (event-driven) çalışır — Watchlist/alarm
- *     entegrasyonunun kaynağı budur, asıl/yetkili motor budur.
+ *     entegrasyonunun kaynağı budur, asıl/yetkili motor budur. Sabit 11
+ *     coin listesinde kaldı, DEĞİŞMEDİ (bkz. modülün kendi başlığı).
  *   - Bu modül: periyodik REST anlık görüntüleriyle (her 5 dakikada bir),
  *     AYNI kuralı (RC+WT büyük TF, HA+DEMA9 küçük TF onayı) yaklaşık olarak
- *     tekrar hesaplar — SADECE tarayıcı kapalıyken de bir kayıt/gözlem
- *     bırakmak için. TOLERANCE_BARS burada bar-sayısı değil, eşdeğer
+ *     tekrar hesaplar. TOLERANCE_BARS burada bar-sayısı değil, eşdeğer
  *     duvar-saati süresine çevrilerek (1h→3saat, 4h→12saat) uygulanıyor —
  *     bu yüzden iki motorun ürettiği sinyaller birebir aynı ANDA gelmeyebilir,
  *     küçük bir gecikme/sapma normaldir. Aynı matematiği (IndicatorEngine)
- *     kullanır — iki farklı hesaplama yolu YOK (FR'nin "3 kaynaktan
- *     tutarsız veri" hatasına düşülmesin diye).
+ *     kullanır — iki farklı hesaplama yolu YOK.
+ *
+ * gorevler3.md Görev 6 (2026-08-12, kullanıcı onayıyla): sabit 11 coin
+ * yerine TÜM Binance USDT perpetual evrenini (o an ~526 sembol) hacme göre
+ * 3 katmana bölüp rotasyonlu tarıyor. REST-ONLY olduğu için (WebSocket
+ * kullanmıyor) MarketDataStore'un ~200 stream sınırına HİÇ dokunmuyor —
+ * bu yüzden "tüm piyasa taraması" bilinçli olarak burada, kom1-scanner.js'te
+ * DEĞİL burada yapılıyor (bkz. gorevler3.md Görev 6, "Tarama tasarımı").
+ *   - Katman 1 (en yüksek hacimli ~100 sembol): en geç 15dk'da bir taranır.
+ *   - Katman 2 (sonraki ~200): en geç 35dk'da bir.
+ *   - Katman 3 (kalan ~200, en düşük hacimli): en geç 3 saatte bir.
+ *   Katman ataması 24 saatlik USDT hacmine göre, saatte bir yenilenir.
+ *   Rotasyon durumu (`lastScannedAt` her sembol için) Mongo'da kalıcı
+ *   tutulur (`Kom1ScanState`, server.js) — sunucu yeniden başlasa bile
+ *   kaldığı yerden devam eder, hangi bilgisayardan bağlanılırsa bağlanılsın
+ *   durum kaybolmaz.
+ *   Bu modül kendisi Mongo'ya DOKUNMAZ (DB-agnostic kalması için) — kalıcılık
+ *   `getScanStateForPersist()`/`loadScanState()` ile server.js'e devrediliyor,
+ *   tıpkı sinyallerin `onConfirmed` callback'iyle devredilmesi gibi.
  *
  * Parametreler kom1-scanner.js ile BİREBİR aynı (gorevler3.md'nin başındaki
- * "sabit kodda, sabit değer" kararına sadık kalındı, burada da değiştirilmedi).
+ * "sabit kodda, sabit değer" kararına sadık kalındı — WT eşiği, RC uzunluğu,
+ * TOLERANCE_BARS bu turda da DEĞİŞMEDİ, sadece sembol evreni genişledi).
  *
  * Bulunan sinyaller `Kom1SignalLog` koleksiyonuna (30 gün TTL) yazılır,
  * `GET /api/kom1/signals` ve `GET /api/kom1/status` ile okunabilir.
@@ -35,19 +53,25 @@ const SMALL_TF        = '5m';
 const DEMA_PERIOD     = 9;
 const SMALL_TF_BARS   = 40;
 const BIG_TFS = ['1h', '4h'];
-const SYMBOLS = [
-  'ONDOUSDT', 'STRKUSDT', 'ENAUSDT', 'BIOUSDT', 'JUPUSDT',
-  'TUSDT', 'AEVOUSDT', 'MOVEUSDT', 'VANRYUSDT', 'BERAUSDT', 'HYPEUSDT',
-];
 const BARS = RC_LENGTH + 30;
+
+// ── gorevler3.md Görev 6 — hacme göre 3 katman + rotasyon aralıkları ────
+const TIER_SIZES = { 1: 100, 2: 200 }; // 3. katman: kalan her şey
+const TIER_INTERVAL_MS = {
+  1: 15 * 60 * 1000,       // ~15 dk
+  2: 35 * 60 * 1000,       // ~35 dk
+  3: 3 * 60 * 60 * 1000,   // ~3 saat
+};
+const UNIVERSE_REFRESH_MS = 60 * 60 * 1000; // hacim/katman ataması saatte bir yenilenir
+const SCAN_PACE_MS = 120; // ardışık kline isteği arasında bekleme (ağırlık patlamasını önler)
 
 // 1H bar × TOLERANCE_BARS(3) = 3 saat, 4H bar × 3 = 12 saat — bkz. modül başlığı notu.
 const TF_MS = { '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000 };
 function toleranceMs(tf) { return TF_MS[tf] * TOLERANCE_BARS; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function fetchKlines(symbol, interval, limit) {
+function fetchJson(path) {
   return new Promise((resolve, reject) => {
-    const path = `/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const req = https.request({ hostname: 'fapi.binance.com', path, method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let body = '';
       res.on('data', d => body += d);
@@ -61,8 +85,130 @@ function fetchKlines(symbol, interval, limit) {
   });
 }
 
+function fetchKlines(symbol, interval, limit) {
+  return fetchJson(`/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+}
+
 function hlc3(highs, lows, closes) {
   return closes.map((c, i) => (highs[i] + lows[i] + c) / 3);
+}
+
+// ── Sembol evreni + katman ataması (in-memory, server.js Mongo ile besler/kalıcı tutar) ──
+// symbol -> { tier, quoteVolume24h, lastScannedAt }
+const _universe = new Map();
+let _lastUniverseRefresh = 0;
+// Her tick'te 500 kaydın TAMAMINI değil, sadece o turda gerçekten
+// değişenleri (tier/hacim yenilendi VEYA tarandı) Mongo'ya yazmak için —
+// 500 sembolü her 5dk'da bir tekrar upsert etmek gereksiz DB yükü olurdu.
+const _dirty = new Set();
+
+/**
+ * exchangeInfo (TRADING+PERPETUAL+USDT filtresi) + toplu 24hr ticker (hacim)
+ * ile tüm sembol evrenini çeker, hacme göre sıralayıp 3 katmana böler.
+ * Var olan `lastScannedAt` değerleri (rotasyon durumu) KORUNUR — sadece
+ * tier/hacim güncellenir, sembol ilk kez görülüyorsa lastScannedAt=0 (hemen taransın).
+ */
+async function _refreshUniverse() {
+  const [info, tickers] = await Promise.all([
+    fetchJson('/fapi/v1/exchangeInfo'),
+    fetchJson('/fapi/v1/ticker/24hr'),
+  ]);
+  if (!info || !Array.isArray(info.symbols) || !Array.isArray(tickers)) {
+    throw new Error('exchangeInfo/24hr ticker beklenmeyen yanıt');
+  }
+
+  const tradingUsdtPerp = new Set(
+    info.symbols
+      .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT'))
+      .map(s => s.symbol)
+  );
+
+  const volumeBySymbol = new Map();
+  for (const t of tickers) {
+    if (!tradingUsdtPerp.has(t.symbol)) continue;
+    volumeBySymbol.set(t.symbol, parseFloat(t.quoteVolume) || 0);
+  }
+
+  // Hacme göre azalan sırala → katman sınırlarını uygula
+  const ranked = [...tradingUsdtPerp]
+    .map(symbol => ({ symbol, quoteVolume24h: volumeBySymbol.get(symbol) || 0 }))
+    .sort((a, b) => b.quoteVolume24h - a.quoteVolume24h);
+
+  const seen = new Set();
+  ranked.forEach((entry, idx) => {
+    const tier = idx < TIER_SIZES[1] ? 1 : idx < TIER_SIZES[1] + TIER_SIZES[2] ? 2 : 3;
+    const prev = _universe.get(entry.symbol);
+    _universe.set(entry.symbol, {
+      tier,
+      quoteVolume24h: entry.quoteVolume24h,
+      lastScannedAt: prev ? prev.lastScannedAt : 0,
+    });
+    seen.add(entry.symbol);
+    _dirty.add(entry.symbol);
+  });
+
+  // Artık evrende olmayan (delisted/perpetual olmaktan çıkmış) sembolleri temizle
+  for (const symbol of [..._universe.keys()]) {
+    if (!seen.has(symbol)) _universe.delete(symbol);
+  }
+
+  _lastUniverseRefresh = Date.now();
+  const s = getUniverseSummary();
+  console.log(`[Kom1ServerWatcher] Evren yenilendi: ${s.total} USDT perpetual, Katman1=${s.tier1}, Katman2=${s.tier2}, Katman3=${s.tier3}.`);
+}
+
+async function _maybeRefreshUniverse() {
+  if (_universe.size > 0 && Date.now() - _lastUniverseRefresh < UNIVERSE_REFRESH_MS) return;
+  try {
+    await _refreshUniverse();
+  } catch (err) {
+    console.warn('[Kom1ServerWatcher] Evren yenileme başarısız, önceki liste kullanılmaya devam:', err.message);
+  }
+}
+
+/** Bu turda taranması gereken sembolleri (katman aralığı dolmuş olanları) döner. */
+function _dueSymbols() {
+  const now = Date.now();
+  const due = [];
+  for (const [symbol, state] of _universe) {
+    const interval = TIER_INTERVAL_MS[state.tier];
+    if (now - state.lastScannedAt >= interval) due.push(symbol);
+  }
+  return due;
+}
+
+// server.js başlangıçta Kom1ScanState'ten (Mongo) yükler — sunucu yeniden
+// başlasa bile rotasyon sıfırdan başlamaz.
+function loadScanState(records) {
+  if (!Array.isArray(records)) return;
+  for (const r of records) {
+    if (!r || !r.symbol) continue;
+    _universe.set(r.symbol, {
+      tier: r.tier || 3,
+      quoteVolume24h: r.quoteVolume24h || 0,
+      lastScannedAt: r.lastScannedAt ? new Date(r.lastScannedAt).getTime() : 0,
+    });
+  }
+  console.log(`[Kom1ServerWatcher] Kayıtlı tarama durumu yüklendi: ${_universe.size} sembol.`);
+}
+
+/** server.js her tick sonrası bunu Mongo'ya (bulkWrite upsert) yazar —
+ *  sadece bu tick'te DEĞİŞEN kayıtları döner (bkz. `_dirty`), sonra temizler. */
+function getScanStateForPersist() {
+  const out = [];
+  for (const symbol of _dirty) {
+    const s = _universe.get(symbol);
+    if (!s) continue;
+    out.push({ symbol, tier: s.tier, quoteVolume24h: s.quoteVolume24h, lastScannedAt: new Date(s.lastScannedAt) });
+  }
+  _dirty.clear();
+  return out;
+}
+
+function getUniverseSummary() {
+  const counts = { 1: 0, 2: 0, 3: 0 };
+  for (const s of _universe.values()) counts[s.tier] = (counts[s.tier] || 0) + 1;
+  return { total: _universe.size, tier1: counts[1], tier2: counts[2], tier3: counts[3], lastRefreshedAt: _lastUniverseRefresh || null };
 }
 
 // "SYM_tf" -> { symbol, bigTf, rcMid, wtVal, wtPrev, price, firedAt, expiresAt }
@@ -134,25 +280,71 @@ function _sweepExpired() {
 
 function getPending() { return [..._pending.values()]; }
 
+// gorevler3.md Görev 6 — ilk çalıştırmada TÜM evren (lastScannedAt=0)
+// aynı anda "sırası gelmiş" sayılır, ilk tur 500 sembol × 2 TF'i taramaya
+// çalışabilir (~2dk sürebilir). server.js'teki 5dk'lık _staggeredStart
+// bir önceki tick() bitmeden yenisini başlatabilir (setInterval await
+// etmez) — bu, tur üst üste binip aynı sembollerin aynı anda iki kez
+// taranmasına (ve ağırlık israfına) yol açardı. Basit bir reentrancy
+// kilidi bunu engelliyor.
+let _ticking = false;
+
 /** @param {(confirmed: object) => Promise<void>|void} onConfirmed */
 async function tick(onConfirmed) {
+  if (_ticking) { console.warn('[Kom1ServerWatcher] Önceki tur hâlâ sürüyor, bu tur atlandı.'); return; }
+  _ticking = true;
+  try {
+    await _tick(onConfirmed);
+  } finally {
+    _ticking = false;
+  }
+}
+
+async function _tick(onConfirmed) {
   _sweepExpired();
-  for (const symbol of SYMBOLS) {
+  await _maybeRefreshUniverse();
+
+  // ── Büyük TF taraması: SADECE bu turda "sırası gelen" (katman aralığı
+  // dolmuş) semboller. Evren boşsa (ilk yenileme başarısız olduysa) sessizce
+  // hiçbir şey yapmadan geç — bir sonraki tick'te tekrar dener. ──────────
+  const due = _dueSymbols();
+  for (const symbol of due) {
+    let banned = false;
     for (const tf of BIG_TFS) {
-      try { await _checkBigTF(symbol, tf); }
-      catch (err) {
-        if (String(err.message).startsWith('BAN_SIGNAL')) { console.warn(`[Kom1ServerWatcher] ⛔ Ban sinyali (${symbol} ${tf}) — bu tur atlandı.`); return; }
+      try {
+        await _checkBigTF(symbol, tf);
+        await sleep(SCAN_PACE_MS);
+      } catch (err) {
+        if (String(err.message).startsWith('BAN_SIGNAL')) {
+          console.warn(`[Kom1ServerWatcher] ⛔ Ban sinyali (${symbol} ${tf}) — bu tur atlandı.`);
+          banned = true;
+          break;
+        }
         console.warn(`[Kom1ServerWatcher] Büyük TF kontrol hatası (${symbol} ${tf}):`, err.message);
       }
     }
+    if (banned) return; // BotEngine'deki "shared budget" mantığıyla tutarlı — tüm turu durdur
+    const state = _universe.get(symbol);
+    if (state) { state.lastScannedAt = Date.now(); _dirty.add(symbol); }
   }
-  for (const symbol of SYMBOLS) {
-    try { await _checkSmallTFConfirmation(symbol, onConfirmed); }
-    catch (err) {
+
+  // ── Küçük TF onayı: sadece GERÇEKTEN bekleyen sinyali olan semboller —
+  // 500 sembolün tamamını her turda 5m onay için taramak (çoğunda pending
+  // yokken) gereksiz ağırlık harcardı (Görev 6 öncesi 11 sembolde sorun
+  // değildi, 500'de olurdu). ──────────────────────────────────────────
+  const pendingSymbols = [...new Set([..._pending.values()].map(v => v.symbol))];
+  for (const symbol of pendingSymbols) {
+    try {
+      await _checkSmallTFConfirmation(symbol, onConfirmed);
+      await sleep(SCAN_PACE_MS);
+    } catch (err) {
       if (String(err.message).startsWith('BAN_SIGNAL')) { console.warn(`[Kom1ServerWatcher] ⛔ Ban sinyali (${symbol} 5m onay) — bu tur atlandı.`); return; }
       console.warn(`[Kom1ServerWatcher] Küçük TF onay hatası (${symbol}):`, err.message);
     }
   }
 }
 
-module.exports = { tick, getPending, SYMBOLS, BIG_TFS };
+module.exports = {
+  tick, getPending,
+  loadScanState, getScanStateForPersist, getUniverseSummary,
+};

@@ -250,13 +250,11 @@ bu rapor Görev 6'ya geçiş onayı DEĞİLDİR, sadece Görev 5'in kapanışıd
 
 ---
 
-## [ ] ⏸ DUR — kullanıcı onayı bekle (Görev 6'dan önce)
-
-Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlama.
+## [x] ⏸ DUR — kullanıcı onayı bekle (Görev 6'dan önce) — 2026-08-12, "Görev 6'ya geç" onayı alındı
 
 ---
 
-## [ ] Görev 6 — Tüm piyasaya genişletme (dinamik ATR taraması)
+## [~] Görev 6 — Tüm piyasaya genişletme (dinamik ATR taraması) — implementasyon tamamlandı (2026-08-12), gözlem sürüyor
 
 **Bağımlılık:** Görev 5'ten sonra, ban riskinin 11 coinlik kümede sorunsuz olduğu doğrulanmadan başlanmaz.
 
@@ -290,12 +288,86 @@ kaybolmayacak.
 **Kullanıcı onayı:** 100/200/200 katman boyutları ve 3. katmanın
 "tamamen dışarıda bırakmak yerine seyrek taransın" seçeneği onaylandı.
 
-### Doğrulama
+### Mimari kararı — WS yerine REST-only sunucu gözlemcisi (2026-08-12)
 
-- Ban sinyali yok mu (uzun süreli gözlem)?
-- Stream sayısı 200 sınırının altında mı, üstündeyse nasıl yönetiliyor?
+İnceleme sırasında bulundu: Kom1'in ZATEN iki motoru var — tarayıcı
+motoru (`kom1-scanner.js`, gerçek WebSocket abonelikleriyle, 200-stream
+sınırına tabi) ve sunucu gölge gözlemcisi (`kom1-server-watcher.js`,
+SADECE REST, WebSocket kullanmıyor). **Kullanıcı onayıyla:** tüm piyasa
+taraması `kom1-scanner.js`'e DEĞİL, `kom1-server-watcher.js`'e eklendi
+— REST'in "stream" kavramı olmadığı için 200-stream sınırı riski
+TAMAMEN ortadan kalktı. `kom1-scanner.js` (tarayıcı, sabit 11 coin)
+DEĞİŞMEDİ. Bunun bedeli: sunucu gözlemcisi zaten "yaklaşık" (5dk'lık
+REST anlık görüntüleri) — bu artık daha da doğru bir seçim, çünkü 500
+sembollik bir ön-tarama için hassasiyetten çok kapsam önemli.
 
-**Rapor:** `2026-XX-XX-gorev6-tum-piyasa-genisletme.md`
+### ⚠️ Kapsam notu — ATR14 filtresi UYGULANMADI, sadece hacim-bazlı rotasyon
+
+Orijinal tasarımın "ATR14/fiyat oranı %3-12 → sakin grup" filtresi
+(sembolleri VOLATİLİTEye göre eleyen bir ön-filtre) **bu turda
+uygulanmadı**. Bunun yerine sadece HACME göre 3 katmanlı bir tarama
+SIKLIĞI rotasyonu kuruldu — evrendeki TÜM ~500 USDT perpetual (ATR'si
+ne olursa olsun) er ya da geç taranıyor, sadece ne kadar sık
+taranacakları hacme göre değişiyor. Büyük TF kuralının kendisi (RC+WT,
+"fiyat RC_mid altında VE WT aşırı-satımdan çıkıyor") zaten doğası
+gereği aşırı volatil/trendli coinlerde nadiren tetiklenir, bu yüzden
+ATR ön-filtresi olmadan da mantıksız sinyal üretmesi beklenmez — ama
+bu, orijinal tasarımdan BİLİNÇLİ bir sadeleştirme, gözden kaçmış bir
+eksiklik değil. İleride istenirse ATR14 filtresi ayrı bir ince ayar
+olarak eklenebilir.
+
+### Yapılanlar
+
+- `js/screener/kom1-server-watcher.js`: hacme göre 3 katmanlı sembol
+  evreni yönetimi eklendi — `_refreshUniverse()` (exchangeInfo +
+  toplu 24hr ticker, saatte bir yenilenir), `_dueSymbols()` (katman
+  aralığı dolmuş sembolleri seçer), `tick()` artık sabit `SYMBOLS`
+  yerine dinamik evreni tarıyor. Küçük TF onay taraması SADECE
+  gerçekten bekleyen sinyali olan sembollere daraltıldı (500 sembolü
+  her turda boşuna 5m onay için taramak israf olurdu). Basit bir
+  reentrancy kilidi eklendi (ilk turun ~500 sembolü aynı anda "sırası
+  gelmiş" sayması yüzünden uzun sürebileceği, üst üste binmesin diye).
+- `server.js`: yeni `Kom1ScanState` şeması (sembol→katman/hacim/son-tarandı,
+  TTL yok, canlı durum tablosu) — açılışta yüklenir
+  (`loadScanState`), her tick sonrası SADECE DEĞİŞEN kayıtlar
+  `bulkWrite` ile geri yazılır (`getScanStateForPersist`, dirty-tracking).
+  `/api/kom1/status` artık `universe: {total, tier1, tier2, tier3, lastRefreshedAt}`
+  döndürüyor (eski `symbols`/`bigTfs` alanları kaldırıldı, artık anlamsız
+  çünkü liste dinamik).
+- `kom1-daily-signal-check` zamanlanmış görevi güncellendi — eski
+  "10 sinyale ulaşınca Görev 5'i tamamla" mantığı kaldırıldı (zaten
+  yapıldı), artık günlük olarak `universe` durumunu da raporluyor.
+
+### Doğrulama (sandbox'ta ağ erişimi olmadığı için sentetik/mock verilerle)
+
+- Katman ataması ve hacme göre sıralama mantığı, taklit edilmiş
+  exchangeInfo/24hr ticker yanıtlarıyla doğrulandı (geçersiz semboller
+  — TRADING olmayan, USDT olmayan — doğru elendi, hacme göre azalan
+  sıralama doğru). ✅
+- Ağ erişilemezken (`_refreshUniverse` hata verince) önceki listeye
+  düşme davranışı doğrulandı, `tick()` çökmedi. ✅
+- "Sırası gelmemiş" semboller için REST çağrısı YAPILMADIĞI doğrulandı
+  (boş `due` listesi → sıfır ağ çağrısı). ✅
+- Reentrancy kilidi: eşzamanlı iki `tick()` çağrısından biri anında
+  atlandı, çökme olmadı. ✅
+- `getScanStateForPersist()`'in sadece DEĞİŞEN kayıtları döndürdüğü
+  (dirty-tracking) doğrulandı — `loadScanState`'ten gelen kayıtlar
+  "dirty" değil, ilk `getScanStateForPersist()` çağrısı boş döndü. ✅
+- `node -c` ile hem `kom1-server-watcher.js` hem `server.js` sözdizimi
+  doğrulandı.
+- **Gerçek Binance verisiyle canlı test bu sandbox'ta yapılamadı** (ağ
+  kısıtı) — deploy sonrası production'da doğrulanacak: `universe.total`
+  ~500 civarında mı, katman dağılımı mantıklı mı (tier1=100, tier2=200,
+  tier3=kalan), ban sinyali var mı.
+
+### Doğrulama (canlı, production'da — devam ediyor)
+
+- Ban sinyali yok mu (uzun süreli gözlem)? — **izleniyor**, günlük
+  zamanlanmış kontrol + kullanıcı gözlemiyle.
+- Stream sayısı 200 sınırının altında mı? — **N/A**, REST-only mimari
+  seçildi, stream kavramı yok.
+
+**Rapor:** `2026-08-12-gorev6-tum-piyasa-genisletme.md`
 
 ---
 

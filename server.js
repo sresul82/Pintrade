@@ -207,6 +207,20 @@ kom1SignalSchema.index({ confirmedAt: -1 });
 kom1SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 const Kom1SignalLog = mongoose.model('Kom1SignalLog', kom1SignalSchema);
 
+// ── Kom1 Tarama Durumu (gorevler3.md Görev 6, 2026-08-12) ────────────
+// Hacme göre katman (1/2/3) ve her sembolün son tarandığı zaman —
+// kom1-server-watcher.js'in rotasyonunun sunucu yeniden başlasa da
+// kaldığı yerden devam edebilmesi için (DB-agnostic modül tasarımı
+// gereği watcher kendi Mongo'ya dokunmaz, bu kalıcılığı server.js yapar).
+// TTL yok — bu "canlı durum" tablosu, geçmiş kayıt değil (upsert edilir).
+const kom1ScanStateSchema = new mongoose.Schema({
+  symbol: { type: String, required: true, unique: true },
+  tier: Number,
+  quoteVolume24h: Number,
+  lastScannedAt: Date,
+});
+const Kom1ScanState = mongoose.model('Kom1ScanState', kom1ScanStateSchema);
+
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
 // ==========================================
@@ -669,9 +683,17 @@ mongoose.connection.once('open', () => {
   _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
 
-  // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11) — 22 büyük TF
-  // isteği + birkaç küçük TF onay isteği, ~5 dakikada bir (mum toplayıcıyla
-  // aynı sıklık, ağırlığı ondan çok daha hafif).
+  // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11 → Görev 6,
+  // 2026-08-12): ~5 dakikada bir, o turda "sırası gelen" (katman aralığı
+  // dolmuş) sembolleri tarar — artık sabit 11 değil, hacme göre 3 katmana
+  // bölünmüş tüm USDT perpetual evreni (bkz. kom1-server-watcher.js başlığı).
+  // Kalıcı rotasyon durumu: açılışta Kom1ScanState'ten yüklenir, her
+  // tick sonrası geri yazılır — sunucu yeniden başlasa bile kaldığı
+  // yerden devam eder.
+  Kom1ScanState.find({}, { _id: 0, __v: 0 }).lean()
+    .then(records => Kom1ServerWatcher.loadScanState(records))
+    .catch(err => console.warn('[Kom1ServerWatcher] Kayıtlı tarama durumu yüklenemedi (ilk çalıştırma olabilir):', err.message));
+
   _staggeredStart(() => {
     // tick() bir Promise döner — yakalanmadan bırakılırsa (unhandled rejection)
     // Node bu sürümde process'i çökertebilir; _staggeredStart'ın diğer
@@ -679,6 +701,19 @@ mongoose.connection.once('open', () => {
     Kom1ServerWatcher.tick(async (confirmed) => {
       try { await Kom1SignalLog.create(confirmed); }
       catch (err) { console.warn('[Kom1ServerWatcher] Sinyal kaydedilemedi:', err.message); }
+    }).then(async () => {
+      // Tarama durumunu (katman/hacim/son-tarandı) kalıcı hale getir —
+      // watcher kendi Mongo'ya dokunmaz (DB-agnostic), bu yüzden server.js yapıyor.
+      const records = Kom1ServerWatcher.getScanStateForPersist();
+      if (!records.length) return;
+      try {
+        await Kom1ScanState.bulkWrite(
+          records.map(r => ({
+            updateOne: { filter: { symbol: r.symbol }, update: { $set: r }, upsert: true }
+          })),
+          { ordered: false }
+        );
+      } catch (err) { console.warn('[Kom1ServerWatcher] Tarama durumu kaydedilemedi:', err.message); }
     }).catch(err => console.error('[Kom1ServerWatcher] tick hatası:', err.message));
   }, 25000, 5 * 60 * 1000);
 });
@@ -884,10 +919,11 @@ app.get('/api/kom1/signals', async (req, res) => {
   }
 });
 
-// GET /api/kom1/status — o an bekleyen (henüz kesinleşmemiş) büyük TF sinyalleri,
-// izleyicinin gerçekten çalıştığını görmek için (tarayıcı hiç açılmasa bile).
+// GET /api/kom1/status — o an bekleyen (henüz kesinleşmemiş) büyük TF sinyalleri
+// + evren/katman özeti (gorevler3.md Görev 6), izleyicinin gerçekten
+// çalıştığını görmek için (tarayıcı hiç açılmasa bile).
 app.get('/api/kom1/status', (req, res) => {
-  res.json({ pending: Kom1ServerWatcher.getPending(), symbols: Kom1ServerWatcher.SYMBOLS, bigTfs: Kom1ServerWatcher.BIG_TFS });
+  res.json({ pending: Kom1ServerWatcher.getPending(), universe: Kom1ServerWatcher.getUniverseSummary() });
 });
 
 // ── Sağlık Kontrolü ─────────────────────────────────────────────────
