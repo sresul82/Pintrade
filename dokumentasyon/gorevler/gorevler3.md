@@ -268,6 +268,28 @@ Bu, en riskli adım — kullanıcı açıkça onaylamadan **kesinlikle** başlam
 - Bu grup için Görev 2-3'teki büyük TF + 5dk onay mantığını uygula — ama artık ~500 sembolün tamamına değil, sadece o an "sakin" kategorisine düşen alt kümeye (muhtemelen 50-150 arası, piyasaya göre değişir).
 - **Stream limiti riski:** MarketDataStore'un tek kline WS bağlantısı ~200 stream sınırlı. "Sakin" grup + TOLERANCE_BARS'taki 5dk onay bekleyenler toplamı bu sınırı aşarsa, MarketDataStore'a çoklu-bağlantı desteği eklemek gerekebilir — bu, ayrı bir alt görev olarak ele alınmalı, hafife alınmamalı.
 
+### Tarama tasarımı — hacme göre katmanlı, rotasyonlu (2026-08-12, kullanıcıyla netleşti)
+
+500 sembolü HER turda taramak yerine, 24 saatlik USDT hacmine göre 3
+katmana bölünüp farklı sıklıklarda taranacak — hem ağırlık yükünü
+zamana yayar hem de düşük likiditeli/riskli coinlere gereksiz kaynak
+harcanmasını önler. Hacim verisi zaten `exchangeInfo`/ticker'dan
+geliyor, ekstra API maliyeti yok.
+
+| Katman | Kapsam | Tarama sıklığı | Gerekçe |
+|---|---|---|---|
+| 1 — Yüksek hacim | İlk ~100 coin (24s USDT hacmine göre sıralı) | Her turda (~15-20dk) | En likit, en öncelikli |
+| 2 — Orta hacim | Sonraki ~200 coin | 2 turda bir (~30-40dk) | Makul, acele gerektirmiyor |
+| 3 — Düşük hacim | Kalan ~200 coin (en düşük hacimli) | Seyrek (~2-4 saatte bir) | Düşük likidite → slipaj riski yüksek, dahil ama düşük öncelikli |
+
+Her sembol için "son tarandığı zaman" MongoDB'de tutulacak (Kom1SignalLog'daki
+desene benzer) — sunucu yeniden başlasa bile rotasyon kaldığı yerden
+devam edebilecek, hangi bilgisayardan bağlanılırsa bağlanılsın durum
+kaybolmayacak.
+
+**Kullanıcı onayı:** 100/200/200 katman boyutları ve 3. katmanın
+"tamamen dışarıda bırakmak yerine seyrek taransın" seçeneği onaylandı.
+
 ### Doğrulama
 
 - Ban sinyali yok mu (uzun süreli gözlem)?
