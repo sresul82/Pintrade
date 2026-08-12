@@ -525,6 +525,13 @@ Görev 5 tamamlanıp kullanıcı memnun kalmadan bunlara başlanmaz.
   büyük refactor riski alınmıyor. v5'e geçildiğinde `chart-pane.js`'in
   `addLineSeries`/`addCandlestickSeries`/... çağrılarının tamamının
   v5'in birleşik `addSeries()` API'sine taşınması gerekecek.
+  **⭐ Kabul kriteri (v5 işine başlarken UNUTULMAMALI, bkz.
+  `gorevler2.md` Görev 14.1 başındaki "STANDART" notu):** kullanıcı
+  "maksimum şekilde TVdeki gibi olmalı" diyor — "artık bir subpane var"
+  yetmez, etiketli 0-100 ekseni, doğru gridline/referans çizgileri,
+  TV'nin kendi görsel dilini birebir taklit eden bir sonuç şart. v4'te
+  denenip kullanıcı tarafından REDDEDİLEN "yaklaşık/etiketsiz RSI"
+  sonucunu v5'te TEKRARLAMA.
 - **Manuel strateji kararları için botların gerçek zamanlı çalışır
   durumda tutulması** — izleme/health-check mekanizması (bot çöktü mü,
   abonelik sızıntısı var mı, backfill takıldı mı gibi durumları tespit

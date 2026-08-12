@@ -742,12 +742,27 @@ bağlanmamış (bkz. gorevler2.md izleme listesi, eski not).
 (2), (1) olmadan anlamsız — listelecek gerçek bir veri yok. Bu yüzden
 kapsam netleşip kullanıcı onayı geldiğinde önce (1)'e başlanmalı.
 
-**Kullanıcı onayı:** "RSI EMA ve DEMA indikatorlerinden başlayalım" —
-overlay (EMA/DEMA) ve alt-pencere (RSI) ayrımını bildiğini teyit
-istedi, ayrıca "TV ile aynı sonucu verir mi?" diye sordu. Cevap:
-matematik TV'nin `ta.ema()`'sıyla (SMA-seed) birebir eşleştirilirse ve
-tüm geçmiş üzerinden (sadece görünen barlar değil) hesaplanırsa evet —
-bu ikisi de uygulandı (aşağıda).
+**Kullanıcı onayı (tam metin):** "RSI EMA ve DEMA indikatorlerinden
+başlayalım, indikatorler TVde oldugu gibi, bazilari chart uzerinde yer
+alcak, bazilari ise altta ayri pencere olarak acilcak sekilde." —
+overlay (EMA/DEMA, chart üzerinde) ve alt-pencere (RSI, ayrı pencere)
+ayrımını AÇIKÇA istedi. Ayrıca "TV ile aynı sonucu verir mi?" diye
+sordu. Cevap: matematik TV'nin `ta.ema()`'sıyla (SMA-seed) birebir
+eşleştirilirse ve tüm geçmiş üzerinden (sadece görünen barlar değil)
+hesaplanırsa evet — bu ikisi de uygulandı (aşağıda).
+
+**⭐ STANDART (tüm bu görev boyunca kullanıcının tekrarladığı, sonraki
+turlarda daha da netleşen kabul kriteri):** "maksimum şekilde TVdeki
+gibi olmalı" — yaklaşık/kısmi bir benzerlik YETERLİ DEĞİL. Bu yüzden
+14.1'in ilk (RSI'yı kısmen/etiketsiz gösteren) sonucu kullanıcı
+tarafından REDDEDİLDİ (bkz. aşağıdaki "Düzeltme 4") — "yaklaşık TV"
+kabul edilebilir bir sonuç değil, ya birebir TV gibi ya da (mümkün
+değilse) dürüstçe ertelenmiş olmalı. Bu standart, ileride v5
+migrasyonuyla RSI'ya (ve MACD/Stochastic gibi diğer subpane
+indikatörlerine) dönüldüğünde de GEÇERLİ — "artık bir subpane var"
+yeterli değil, TV'nin görsel/işlevsel olarak ayırt edilemez bir
+kopyası olmalı (etiketli 0-100 ekseni, doğru gridline'lar, TV'nin
+kendi ayar panelleri vb.).
 
 ### Teknik yaklaşım
 
