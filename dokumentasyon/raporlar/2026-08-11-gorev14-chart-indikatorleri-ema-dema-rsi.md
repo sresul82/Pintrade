@@ -140,6 +140,53 @@ boyut kullanıldığından fark birkaç piksel, gözle ayırt edilmiyor.
 Gerçek Binance/Bybit canlı veriyle (bu sandbox'ta erişilemedi) bir kez
 daha görsel kontrol önerilir.
 
+## Düzeltme (2026-08-12) — RSI çizgisi ana chart'ın gerisinde kalıyordu
+
+Kullanıcı ekran görüntüsüyle bildirdi: RSI çizgisi ana chart'ın son
+mumuyla aynı x-koordinatında bitmiyordu, çok daha "geride" (saatler
+önceki bir zamanda) bitiyordu; crosshair'in RSI panelindeki zaman
+etiketi de bambaşka bir değer gösteriyordu. Kullanıcı ayrıca "bu acaba
+Phantom kullandığımızdan mı" diye doğru teşhisi baştan işaret etti.
+
+### Kök neden 1 — logical range senkronu phantom'dan etkileniyordu
+
+Senkron `subscribeVisibleLogicalRangeChange`/`setVisibleLogicalRange`
+(bar-INDEX bazlı) kullanıyordu. Ama ana chart'ta `ChartPhantom` (çizim
+araçlarının sağa serbestçe sürüklenebilmesi için — TV'de mumlar
+bittikten sonra da istediğin kadar sağa kaydırabiliyorsun, phantom
+olmadan bu imkansız) görünmez 500 "hayalet" bar ekliyor. Bu, ana
+chart'ın toplam bar sayısını RSI chart'tan (phantom'suz) çok daha
+büyük yapıyor — aynı SAYISAL logical range iki chart'ta tamamen farklı
+zaman dilimlerine denk geliyordu.
+
+**Düzeltme:** senkron gerçek ZAMAN (timestamp) bazlı —
+`subscribeVisibleTimeRangeChange`/`setVisibleRange` — phantom'un bar
+sayısından etkilenmiyor.
+
+### Kök neden 2 — ilk setData() senkronu eziyordu
+
+Zaman bazlı senkrona geçtikten sonra bile ilk testte hâlâ eşleşmiyordu.
+Sebep: RSI serisine İLK kez gerçek veri `setData()` ile yazılınca LWC
+zaman eksenini kendi (çok dar) varsayılan görünümüne sıfırlıyor —
+`_ensureRsiPane()`'deki İLK senkron denemesi bu veri henüz gelmeden
+yapıldığı için, sonradan gelen `setData()` onu eziyordu.
+
+**Düzeltme:** `_recomputeAllIndicators()`'a bir kerelik
+(`_rsiRangeSynced` bayraklı) bir yeniden-senkron eklendi — RSI ilk
+gerçek veriyle dolduktan HEMEN SONRA ana chart'ın o anki görünen
+aralığı tekrar zorlanıyor. Sonraki `setData()` çağrıları (lazy-load
+vb.) artık kullanıcının scroll/zoom'unu bozmuyor (tek seferlik).
+
+### Doğrulama (tarayıcıda, gerçek modüllerle)
+
+- Senkron sonrası `mainRange`/`rsiRange` (timestamp) birebir eşit. ✅
+- Son mumun zamanı RSI'ın görünen aralığı içinde. ✅
+- Ekran görüntüsü: RSI çizgisi artık ana chart'ın sağ kenarına kadar
+  uzanıyor (önceki hatadaki gibi ortada kesilmiyor). ✅
+- Manuel scroll/zoom simülasyonu sonrası RSI aralığı anında aynı
+  değerlere güncellendi. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
 ## Görev 14.2 — Indicators sidebar sekmesi
 
 **Kullanıcı geri bildirimi:** "matematik olarak calisiyor olabilir, ama

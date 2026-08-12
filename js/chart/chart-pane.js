@@ -120,6 +120,7 @@ class ChartPane {
     this._rsiSeries   = {};   // id -> LWC line series (RSI chart içinde)
     this._rsiBand70   = null;
     this._rsiBand30   = null;
+    this._rsiRangeSynced = false; // bkz. _recomputeAllIndicators — bir kerelik ilk zaman senkronu
     this._indLegendEl = null;
 
     this._build();
@@ -692,21 +693,30 @@ class ChartPane {
     this._rsiBand30 = this._rsiChart.addLineSeries(bandOpts);
 
     // ── Zaman ekseni senkronu (ana chart ↔ RSI chart) ─────────────
+    // ÖNEMLİ: LOGICAL range (bar-index) DEĞİL, gerçek ZAMAN (timestamp)
+    // bazlı senkron kullanılıyor. Ana chart'ta ChartPhantom çizim
+    // araçlarının sağa serbestçe sürüklenebilmesi için 500 görünmez
+    // "hayalet" bar ekliyor (bkz. js/chart/chart-phantom.js) — bu, ana
+    // chart'ın toplam bar sayısını RSI chart'tan (phantom'suz) çok daha
+    // büyük yapıyor. Aynı SAYISAL logical range iki chart'ta tamamen
+    // farklı zaman dilimlerine denk geliyordu (2026-08-12, kullanıcı
+    // bulgusu — RSI çizgisi ana chart'ın son mumundan saatlerce "geride"
+    // görünüyordu). Zaman bazlı senkron phantom'un bar sayısından
+    // etkilenmiyor — iki chart de aynı gerçek mum zamanlarını paylaşıyor.
     let syncing = false;
-    this._rsiUnsyncMain = () => {};
-    const mainRange = this.chart.timeScale().getVisibleLogicalRange();
-    if (mainRange) { try { this._rsiChart.timeScale().setVisibleLogicalRange(mainRange); } catch (_) {} }
+    const mainTimeRange = this.chart.timeScale().getVisibleRange();
+    if (mainTimeRange) { try { this._rsiChart.timeScale().setVisibleRange(mainTimeRange); } catch (_) {} }
 
-    const fromMain = this.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    const fromMain = this.chart.timeScale().subscribeVisibleTimeRangeChange(range => {
       if (!range || syncing || !this._rsiChart) return;
       syncing = true;
-      try { this._rsiChart.timeScale().setVisibleLogicalRange(range); } catch (_) {}
+      try { this._rsiChart.timeScale().setVisibleRange(range); } catch (_) {}
       syncing = false;
     });
-    const fromRsi = this._rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    const fromRsi = this._rsiChart.timeScale().subscribeVisibleTimeRangeChange(range => {
       if (!range || syncing || !this.chart) return;
       syncing = true;
-      try { this.chart.timeScale().setVisibleLogicalRange(range); } catch (_) {}
+      try { this.chart.timeScale().setVisibleRange(range); } catch (_) {}
       syncing = false;
     });
 
@@ -724,7 +734,7 @@ class ChartPane {
     });
 
     this._rsiUnsync = () => {
-      try { this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(fromMain); } catch (_) {}
+      try { this.chart.timeScale().unsubscribeVisibleTimeRangeChange(fromMain); } catch (_) {}
       try { this.chart.unsubscribeCrosshairMove(fromMainCross); } catch (_) {}
     };
 
@@ -743,6 +753,7 @@ class ChartPane {
     this._rsiSeries = {};
     this._rsiBand70 = null;
     this._rsiBand30 = null;
+    this._rsiRangeSynced = false;
   }
 
   /** `this.candlesData`'dan tüm aktif indikatörleri yeniden hesaplar.
@@ -817,6 +828,18 @@ class ChartPane {
         } else if (this._rsiBand70 && this._rsiBand30 && points.length && tickOnly) {
           this._rsiBand70.update({ time: lastTime, value: 70 });
           this._rsiBand30.update({ time: lastTime, value: 30 });
+        }
+
+        // İLK kez gerçek veriyle dolduruluyor — LWC, boş bir seriye setData()
+        // yapılınca zaman eksenini kendi (çok dar) varsayılan görünümüne
+        // sıfırlıyor, `_ensureRsiPane()`'deki senkron denemesini eziyordu.
+        // Bir kerelik: gerçek veri geldikten SONRA ana chart'ın görünen
+        // aralığını tekrar zorla — sonraki setData() çağrıları (lazy-load
+        // vb.) kullanıcının mevcut scroll/zoom'unu artık BOZMAZ.
+        if (!tickOnly && !this._rsiRangeSynced && points.length) {
+          this._rsiRangeSynced = true;
+          const mainTimeRange = this.chart.timeScale().getVisibleRange();
+          if (mainTimeRange) { try { this._rsiChart.timeScale().setVisibleRange(mainTimeRange); } catch (_) {} }
         }
       }
     });

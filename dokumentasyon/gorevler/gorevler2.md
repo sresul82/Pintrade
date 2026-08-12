@@ -818,6 +818,46 @@ birkaç piksel, gözle fark edilmiyor. Gerçek Binance/Bybit canlı
 veriyle (bu sandbox'ta erişilemedi) ayrıca bir kez daha görsel kontrol
 önerilir.
 
+### Düzeltme (2026-08-12) — RSI çizgisi ana chart'ın gerisinde kalıyordu
+
+Kullanıcı ekran görüntüsüyle bildirdi: RSI çizgisinin bittiği nokta,
+ana chart'ta son mumun olduğu x-koordinatıyla eşleşmiyordu (RSI çok
+daha "geride", saatler önceki bir zamanda bitiyor gibi görünüyordu) —
+üstelik crosshair kesikli çizgisi RSI panelinde bambaşka bir zaman
+etiketi gösteriyordu.
+
+**Kök neden:** senkron `subscribeVisibleLogicalRangeChange` /
+`setVisibleLogicalRange` — yani bar-INDEX bazlı — yapılıyordu. Ama ana
+chart'ta `ChartPhantom` (çizim araçlarının sağa serbestçe
+sürüklenebilmesi için, kullanıcının kendi deyimiyle: "TVde saga
+istedigin kadar mumlar bittikten sonrada hareket ettirilebilirdi")
+görünmez 500 "hayalet" bar ekliyor — bu, ana chart'ın toplam bar
+sayısını RSI chart'tan (phantom'suz) çok daha büyük yapıyor. Aynı
+SAYISAL logical range iki chart'ta tamamen farklı zaman dilimlerine
+denk geliyordu.
+
+**Düzeltme:** senkron artık gerçek ZAMAN (timestamp) bazlı —
+`subscribeVisibleTimeRangeChange`/`setVisibleRange` — phantom'un bar
+sayısından etkilenmiyor, iki chart de aynı gerçek mum zamanlarını
+paylaşıyor. Ayrıca ikinci bir bug bulundu: RSI serisine İLK kez gerçek
+veri `setData()` ile yazılınca LWC zaman eksenini kendi (çok dar)
+varsayılan görünümüne sıfırlıyor, ilk senkron denemesini eziyordu —
+`_recomputeAllIndicators()`'a bir kerelik (`_rsiRangeSynced` bayraklı)
+bir yeniden-senkron eklendi: RSI ilk gerçek veriyle dolduktan HEMEN
+SONRA ana chart'ın o anki görünen aralığı tekrar zorlanıyor. Sonraki
+setData() çağrıları (lazy-load vb.) artık kullanıcının scroll/zoom'unu
+bozmuyor (tek seferlik).
+
+**Doğrulama (tarayıcıda, gerçek modüllerle):**
+- Senkron veri sonrası: `mainRange`/`rsiRange` (timestamp) birebir
+  eşit. ✅
+- Son mumun zamanı RSI'ın görünen aralığı İÇİNDE (`lastCandleWithinRsiRange:true`). ✅
+- Ekran görüntüsü: RSI çizgisi artık ana chart'ın sağ kenarına (son
+  muma) kadar uzanıyor, önceki hatadaki gibi ortada kesilmiyor. ✅
+- Manuel scroll/zoom simülasyonu (`setVisibleRange` ile ana chart'ı
+  kaydır) sonrası RSI aralığı ANINDA aynı değerlere güncellendi. ✅
+- Konsol hatasız (bilinen sandbox 502 hariç). ✅
+
 ### Kullanıcı geri bildirimi (14.1 sonrası)
 
 "matematik olarak calisiyor olabilir, ama fonksiyon olarak daha tam
