@@ -255,20 +255,78 @@ const DetailPanel = (() => {
 
   function _applyLsMetrics(metrics) {
     const lsRatio = metrics?.global?.ratio;
-    if (lsRatio == null || !isFinite(lsRatio)) return;
-    const lsPct = (lsRatio / (1 + lsRatio)) * 100;
-    const lsBuyEl  = document.getElementById('dp-ls-buy');
-    const lsSellEl = document.getElementById('dp-ls-sell');
-    if (lsBuyEl && lsSellEl) {
-      lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
-      lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
-      document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
-      document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
+    if (lsRatio != null && isFinite(lsRatio)) {
+      const lsPct = (lsRatio / (1 + lsRatio)) * 100;
+      const lsBuyEl  = document.getElementById('dp-ls-buy');
+      const lsSellEl = document.getElementById('dp-ls-sell');
+      if (lsBuyEl && lsSellEl) {
+        lsBuyEl.style.width  = lsPct.toFixed(1) + '%';
+        lsSellEl.style.width = (100 - lsPct).toFixed(1) + '%';
+        document.getElementById('dp-ls-buy-pct').textContent  = lsPct.toFixed(1) + '%';
+        document.getElementById('dp-ls-sell-pct').textContent = (100 - lsPct).toFixed(1) + '%';
+      }
+      const lsRatioEl = document.getElementById('dp-ls-ratio');
+      if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
+      const lsDomEl = document.getElementById('dp-ls-dom');
+      if (lsDomEl) lsDomEl.textContent = lsPct > 50 ? 'Uzun hakimiyeti' : 'Kısa hakimiyeti';
     }
-    const lsRatioEl = document.getElementById('dp-ls-ratio');
-    if (lsRatioEl) lsRatioEl.textContent = lsRatio.toFixed(2);
-    const lsDomEl = document.getElementById('dp-ls-dom');
-    if (lsDomEl) lsDomEl.textContent = lsPct > 50 ? 'Uzun hakimiyeti' : 'Kısa hakimiyeti';
+
+    // "Tahta" — gerçek emir defteri (LSDataStore zaten WS'ten çekiyor,
+    // subscribe() otomatik abone ediyor). Önceden burası L/S yüzdesini
+    // rastgele bir sinüs dalgasıyla titreştiren sahte bir animasyondu
+    // (_startObSim) — gerçek veriye bağlandı.
+    const ob = metrics?.orderBook;
+    if (ob && ob.bidVol != null && ob.askVol != null) {
+      const total = ob.bidVol + ob.askVol;
+      const bidPct = total > 0 ? (ob.bidVol / total) * 100 : 50;
+      const obBuyEl  = document.getElementById('dp-ob-buy');
+      const obSellEl = document.getElementById('dp-ob-sell');
+      if (obBuyEl && obSellEl) {
+        obBuyEl.style.width  = bidPct.toFixed(1) + '%';
+        obSellEl.style.width = (100 - bidPct).toFixed(1) + '%';
+        obBuyEl.textContent  = bidPct.toFixed(1) + '%';
+        obSellEl.textContent = (100 - bidPct).toFixed(1) + '%';
+      }
+    }
+
+    _renderLsPopupContent(metrics);
+  }
+
+  /** L/S popup'unun (MiniFloatingWindow 'ls') içeriği — Visivero'nun 4
+   *  göstergesinden ana kartta yer bulmayan ikisi (Trader Positioning,
+   *  Market Exposure) + bonus bir üçüncüsü (Top Accounts). Veri zaten
+   *  LSDataStore'da hazır (bkz. js/data/ls-data-store.js başlığı), sadece
+   *  arayüze bağlanıyor. Popup kapalıyken de (ucuz DOM güncellemesi)
+   *  taze tutuluyor ki açıldığı an güncel görünsün. */
+  function _ratioRow(label, m) {
+    if (!m || m.ratio == null || !isFinite(m.ratio)) return '';
+    const pct = (m.ratio / (1 + m.ratio)) * 100;
+    return `<div class="dp-split-row">
+      <span class="dp-split-title" style="width:auto;min-width:60px;">${label}</span>
+      <div class="dp-split-bar" style="width:100%;">
+        <div class="dp-split-buy" style="width:${pct.toFixed(1)}%">${pct.toFixed(1)}%</div>
+        <div class="dp-split-sell" style="width:${(100 - pct).toFixed(1)}%">${(100 - pct).toFixed(1)}%</div>
+      </div>
+    </div>`;
+  }
+
+  function _renderLsPopupContent(metrics) {
+    if (typeof MiniFloatingWindow === 'undefined') return;
+    const rows = [
+      _ratioRow('Trader Pos.', metrics?.topPosition),
+      _ratioRow('Exposure', _takerAsRatio(metrics?.taker)),
+      _ratioRow('Top Accts', metrics?.topAccount),
+    ].filter(Boolean).join('');
+    const html = rows
+      ? `<div class="dp-bars-block" style="gap:12px; text-align:left;">${rows}</div>`
+      : `<div style="text-align:center;">Veri yükleniyor...</div>`;
+    MiniFloatingWindow.setContent('ls', html, 'LONG / SHORT');
+  }
+
+  /** taker.buyVol/sellVol (hacim) → _ratioRow'un beklediği {ratio} şekline çevirir. */
+  function _takerAsRatio(taker) {
+    if (!taker || taker.buyVol == null || taker.sellVol == null || !(taker.sellVol > 0)) return null;
+    return { ratio: taker.buyVol / taker.sellVol };
   }
 
   function _lsUnsubscribe() {
@@ -390,22 +448,6 @@ const DetailPanel = (() => {
     _frInterval = setInterval(updateTimer, 1000);
   }
 
-  // ── Orderbook blink animation ─────────────────────
-  let _obInterval = null;
-  function _startObSim(buyPct) {
-    if (_obInterval) clearInterval(_obInterval);
-    let tick = 0;
-    _obInterval = setInterval(() => {
-      tick++;
-      const buy = Math.min(85, Math.max(15, buyPct + Math.round(Math.sin(tick * 0.4) * 8)));
-      const sell = 100 - buy;
-      const buyEl  = document.getElementById('dp-ob-buy');
-      const sellEl = document.getElementById('dp-ob-sell');
-      if (buyEl)  { buyEl.style.width  = buy  + '%'; buyEl.textContent  = buy.toFixed(1)  + '%'; }
-      if (sellEl) { sellEl.style.width = sell + '%'; sellEl.textContent = sell.toFixed(1) + '%'; }
-    }, 1500);
-  }
-
   // ── Populate panel with data ──────────────────────
   function update(data) {
     // data: { sym, price, changePct, spotPrice, fr, frPct, rsi, lsRatio, oi, vol24h, liqVol }
@@ -507,7 +549,6 @@ const DetailPanel = (() => {
 
     // Start animations
     _startFrTimer(data.nextFundingTime);
-    _startObSim(Math.round(lsPct));
 
     // Fundamental Spot Info
     if (data.cgData && data.cgData.market_data) {
@@ -1087,8 +1128,8 @@ const DetailPanel = (() => {
       if (window.FloatingPanel) FloatingPanel.toggle();
     });
 
-    // L/S ve OI Değişimi kartlarındaki popout ikonları — boş floating window
-    // açıyor, içerik düzenlemesi sonraki bir işte yapılacak.
+    // L/S popup'u — Trader Positioning/Exposure/Top Accounts (bkz. yukarıdaki
+    // _renderLsPopupContent). OI Değişimi popup'u hâlâ boş, ayrı bir iş.
     document.getElementById('dp-ls-popout')?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (window.MiniFloatingWindow) MiniFloatingWindow.toggle('ls', 'LONG / SHORT');

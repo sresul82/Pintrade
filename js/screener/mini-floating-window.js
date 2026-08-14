@@ -93,7 +93,18 @@ const MiniFloatingWindow = (() => {
     if (isOpen) hide(id); else show(id, title);
   }
 
-  return { show, hide, toggle };
+  /** Panel içeriğini (HTML) doldurur — henüz açılmamışsa (show() hiç
+   *  çağrılmamışsa) paneli önce oluşturur, ama görünür yapmaz. */
+  function setContent(id, html, title) {
+    if (!_panels[id]) _panels[id] = _createEl(id, title || id);
+    _panels[id].contentEl.innerHTML = html;
+  }
+
+  function isVisible(id) {
+    return !!(_panels[id] && _panels[id].el.style.display !== 'none');
+  }
+
+  return { show, hide, toggle, setContent, isVisible };
 })();
 
 window.MiniFloatingWindow = MiniFloatingWindow;
