@@ -450,16 +450,20 @@
 }
 .wl-row:hover { background: var(--bg-hover); }
 /* En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers, screener-core.js)
-   — soldan (sembol) sağa doğru saydamlaşan ince bir yeşil gradyan, tüm satırı
-   kaplar. Önceki tur sadece Chg% hücresine opak bir dolgu uyguluyordu, bu da
-   Price'a taşıyordu (2026-08-15'te kullanıcı isteğiyle satır geneline taşındı) —
-   gradyan yönü sayesinde artık hangi sütunda olursa olsun bir değerin üstüne
-   binmiyor, sağa doğru zaten saydamlaşıyor. */
+   — hem soldan (sembol) hem sağdan (Vol) merkeze doğru saydamlaşan yeşil bir
+   gradyan, tüm satırı kaplar (2026-08-15, kullanıcı isteği — tek yönlü
+   soldan-sağa gradyan çok soluk/belirsiz kalıyordu). İki uçta da renk olduğu
+   için tek yönlüye göre daha belirgin, ama orta sütunlardaki değerlerin
+   üstüne binmeyecek kadar da düşük opaklıkta tutuldu. */
 .wl-row.wl-row-top-gainer {
-  background: linear-gradient(90deg, rgba(34,197,94,0.16), rgba(34,197,94,0) 70%);
+  background: linear-gradient(90deg,
+    rgba(34,197,94,0.20) 0%, rgba(34,197,94,0) 35%,
+    rgba(34,197,94,0) 65%, rgba(34,197,94,0.20) 100%);
 }
 .wl-row.wl-row-top-gainer:hover {
-  background: linear-gradient(90deg, rgba(34,197,94,0.22), rgba(34,197,94,0) 70%), var(--bg-hover);
+  background: linear-gradient(90deg,
+    rgba(34,197,94,0.26) 0%, rgba(34,197,94,0) 35%,
+    rgba(34,197,94,0) 65%, rgba(34,197,94,0.26) 100%), var(--bg-hover);
 }
 .wl-row.selected {
   background: rgba(88,166,255,0.08);
