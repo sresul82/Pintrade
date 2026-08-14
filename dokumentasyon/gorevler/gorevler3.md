@@ -491,6 +491,53 @@ detaylandırma gerekiyor.** Muhtemel parçalar:
 
 ---
 
+## [ ] Görev 8 — Git düzensizliğini temizle (main/master ayrışması + commit'lenmemiş iş)
+
+**Bulundu (2026-08-14), Görev 7'nin keep-alive workflow'unu push ederken.**
+
+### Sorun
+
+- **`main` ve `master` birbirinden ayrışmış.** GitHub'ın varsayılan/gerçekte
+  deploy edilen dalı `main` (son commit `fb9056c`, gorevler3.md Görev 6'nın
+  toplayıcı çakışması düzeltmesiyle eşleşiyor — yani Render buradan deploy
+  ediyor). `master` ise iki farklı makineden/oturumdan gelen ayrı "sync"
+  commit'leriyle (`962e340`, `bda5b79`, `e150874` / local'in kendi
+  `929dfa9`'u) ilerlemiş, `main`'deki Kom1 sistemini (scanner,
+  server-watcher, indicator-engine, güvenlik düzeltmeleri, Görev 6-14 arası
+  her şey) hiç içermiyor.
+- **Bu makinedeki (F:\_Egitim ve Gelistirme\_Pintrade) local diskte,
+  hiçbir dala commit'lenmemiş çok sayıda dosya var** — Kom1 dahil
+  production'da zaten çalışan kod, sadece diskte duruyor, git geçmişinde
+  yok. Bir sürücü arızası/kayıp olursa bu iş tamamen geri alınamaz.
+- Görev 7'nin keep-alive dosyaları (`.github/workflows/keep-alive.yml`,
+  `scripts/keep_alive.py`) bu yüzden geçici bir `git worktree` ile
+  doğrudan `origin/main`'e eklendi — mevcut `master`/local karışıklığına
+  hiç dokunulmadı, riskli bir merge'e girilmedi.
+
+### Yapılacak (kapsam kullanıcıyla netleşecek)
+
+- `main`'in gerçekten "doğru/güncel" dal olduğunu kullanıcıyla teyit et
+  (Render'ın hangi daldan deploy ettiği kontrol edilerek).
+- Bu makinedeki commit'lenmemiş çalışma kopyasının `main` ile ilişkisini
+  çıkar — muhtemelen `main` zaten güncel ve local'deki "uncommitted" görünen
+  dosyalar aslında `main`'in içeriğiyle aynı/üstünde (henüz karşılaştırılmadı).
+- `master` dalının ne yapılacağına karar ver: silinsin mi (GitHub'da varsayılan
+  dal değilse zararsız, ama içinde `main`'de olmayan hiçbir gerçek iş yok
+  gibi görünüyor), yoksa arşiv olarak mı kalsın.
+- Bundan sonraki tüm oturumlarda hangi dalın kullanılacağı netleşsin
+  (muhtemelen sadece `main`) ve düzenli commit alışkanlığı kurulsun.
+
+### ⚠️ Dikkat
+
+Bu, kod/özellik değişikliği DEĞİL — git geçmişi/hijyeni işi. Yanlış
+adımda (force-push, yanlış dal silme) gerçek iş kaybı riski var, dikkatli
+ilerlenmeli, kullanıcı onayı olmadan destructive komut (force push, branch
+silme) çalıştırılmamalı.
+
+**Rapor:** `2026-XX-XX-gorev8-git-duzensizligi-temizligi.md`
+
+---
+
 ## Kuyrukta olmayan, kullanıcı ayrıca planlayacak
 
 - **Kom2** — zayıf/doğrulanmamış (Varyant B'nin look-ahead bias'ı netleşmeden), ayrı bir tur.

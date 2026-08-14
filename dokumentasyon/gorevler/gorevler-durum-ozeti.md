@@ -70,7 +70,9 @@
 | — | ⏸ DUR (Görev 5'ten önce) | ✅ Geçildi (2026-08-10, kullanıcı onayı) |
 | 5 | Canlı gözlem + ince ayar | Kapsamı netleşti (ilk 10 sinyal, manuel değerlendirme + ban/hata sıklığı, parametreler sabit) — **fiili gözlem, Binance IP banı geçene kadar (~2026-08-11 07:13 UTC) başlayamıyor**, bkz. aşağıdaki kritik bulgu |
 | — | ⏸ DUR (Görev 6'dan önce) | Geçilmedi |
-| 6 | Tüm piyasaya genişletme (dinamik ATR taraması) | En riskli adım, henüz başlanmadı |
+| 6 | Tüm piyasaya genişletme (dinamik ATR taraması) | ⏳ İmplementasyon tamamlandı (2026-08-12), gözlem sürüyor |
+| 7 | Sunucu taraflı izleme + Telegram bildirimi | ⏳ Başladı (2026-08-14) — keep-alive (GitHub Actions) kuruldu, gerisi bekliyor |
+| 8 | Git düzensizliğini temizle (main/master ayrışması) | 🆕 Yeni açıldı (2026-08-14), henüz başlanmadı |
 
 **Push edildi ve doğrulandı (2026-08-10).** İki ayrı push yapıldı:
 1. Görev 4'ün kendi kodu (Kom1Scanner canlıya alma, Watchlist/alarm entegrasyonu).
