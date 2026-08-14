@@ -16,7 +16,7 @@ const ICONS = {
     l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
     a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
 
-  arrowRight: `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+  arrowRight: `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
     <path d="M2 6h8M6 2l4 4-4 4"/></svg>`,
 
   arrowChevron: `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

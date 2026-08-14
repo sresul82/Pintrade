@@ -565,25 +565,32 @@
 }
 .pane-cvs:hover .pane-gear { opacity: 1; }
 
-/* Realtime git butonu */
+/* Realtime git butonu — TradingView'daki gibi chart altında, ortada,
+   yuvarlak ikon butonu (eskiden sağ-orta, ikon SVG'sinde width/height
+   olmadığı için 16×6px'e çöküp ince bir "neon çizgi" gibi görünüyordu). */
 .pane-rt-btn {
   position: absolute;
-  right: 72px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: var(--accent-blue, #2962ff);
-  border: none;
-  color: #fff;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  left: 50%;
+  bottom: 34px;   /* Time scale'in üzerinde, ona binmeyecek kadar yukarıda */
+  transform: translateX(-50%);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--bg-tertiary, #1e222d);
+  border: 1px solid var(--border-primary, #2a2e39);
+  border-radius: 50%;
+  color: var(--text-secondary, #787b86);
   cursor: pointer;
   display: none;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
   z-index: 5;
+  transition: color 0.15s, border-color 0.15s;
 }
 .pane-rt-btn.visible { display: flex; }
+.pane-rt-btn:hover { color: var(--text-primary, #d1d4dc); border-color: var(--accent-blue, #2962ff); }
+.pane-rt-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 
 /* Geri sayım */
 .pane-countdown {
