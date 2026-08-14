@@ -410,48 +410,6 @@ async function collectBybitData() {
   }
 }
 
-// ── Binance Mumlar: USDT perpetual 5m (her 5dk) ─────────────────────
-async function collectBinanceCandles() {
-  if (mongoose.connection.readyState !== 1) return;
-  try {
-    const frResp = await fetchJson('fapi.binance.com', '/fapi/v1/premiumIndex');
-    if (!Array.isArray(frResp)) return;
-    const symbols = frResp.filter(f => f.symbol.endsWith('USDT')).map(f => f.symbol);
-
-    const BATCH = 10;
-    for (let i = 0; i < symbols.length; i += BATCH) {
-      const batch = symbols.slice(i, i + BATCH);
-      await Promise.allSettled(batch.map(async (sym) => {
-        try {
-          const candles = await fetchJson('fapi.binance.com', `/fapi/v1/klines?symbol=${sym}&interval=5m&limit=3`);
-          if (!Array.isArray(candles)) return;
-          const docs = candles.map(c => ({
-            exchange: 'binance', symbol: sym, interval: '5m',
-            openTime: new Date(c[0]),
-            open: parseFloat(c[1]), high: parseFloat(c[2]),
-            low:  parseFloat(c[3]), close: parseFloat(c[4]),
-            volume: parseFloat(c[5])
-          }));
-          await Candle.bulkWrite(
-            docs.map(d => ({
-              updateOne: {
-                filter: { exchange: d.exchange, symbol: d.symbol, interval: d.interval, openTime: d.openTime },
-                update: { $set: d },
-                upsert: true
-              }
-            })),
-            { ordered: false }
-          );
-        } catch {}
-      }));
-      await sleep(300); // Rate limit koruması
-    }
-    console.log(`[Collector] Binance mumları güncellendi`);
-  } catch (e) {
-    console.error('[Collector] Binance mum hatası:', e.message);
-  }
-}
-
 // ── Binance: L/S Metrikleri (her 5dk, sabit coin listesi) ────────────
 // Kom1/Kom2/Kom3 motorları henüz bu veriyi okumuyor ve şu an kimse tüm
 // 526 USDT perpetual'i tarama ihtiyacı doğurmuyor — bu yüzden tam market
@@ -675,14 +633,14 @@ mongoose.connection.once('open', () => {
   // Sıralama, en hafiften en ağıra: binanceData (~50 weight) → bybitData
   // (ayrı borsa, Binance bütçesini etkilemez) → Binance L/S (8 sembol ×
   // 4 endpoint, ~32 weight) → Bybit L/S (ayrı borsa, kendi bütçesi, 8
-  // sembol × 1 endpoint) → mumlar (526 sembol, ~530 weight — en ağır) →
-  // Kom1 (gorevler3.md Görev 6, 2026-08-12'den beri artık ~527 sembol,
-  // eskisi gibi 11 değil — mumlar bitmeden başlarsa iki ağır iş çakışır).
+  // sembol × 1 endpoint) → Kom1 (gorevler3.md Görev 6, ~527 sembol —
+  // artık en ağır iş, eskiden burada olan collectBinanceCandles Görev 12'de
+  // kaldırıldı: hiçbir frontend kodu Candle koleksiyonunu okumuyordu,
+  // sadece Binance ağırlık bütçesi ve depolama harcıyordu).
   _staggeredStart(collectBinanceData,    0,      1 * 60 * 1000);  // 1 dakika — bot sinyalleri için
   _staggeredStart(collectBybitData,      5000,   1 * 60 * 1000);  // 1 dakika
   _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // Binance L/S — sabit 8 coinlik liste
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
-  _staggeredStart(collectBinanceCandles, 15000,  5 * 60 * 1000);  // Mumlar 5dk yeterli, en ağır (~527 sembol × 10'luk batch × 300ms ≈ ~16sn sürer, ~31sn'de biter)
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
 
   // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11 → Görev 6,
@@ -693,13 +651,9 @@ mongoose.connection.once('open', () => {
   // tick sonrası geri yazılır — sunucu yeniden başlasa bile kaldığı
   // yerden devam eder.
   //
-  // Gecikme 25000ms DEĞİL 40000ms: collectBinanceCandles (15000ms'de
-  // başlar, ~527 sembol × 10'luk batch × 300ms ≈ ~16sn sürer, ~31sn'de
-  // biter) ile Kom1'in taraması (artık Görev 6 sonrası o da yüzlerce
-  // sembolü kapsayabiliyor) 25000ms'de çakışıyordu — kullanıcının
-  // "sitede coin analiz ederken ban riski var mı" sorusu üzerine
-  // 2026-08-12'de fark edildi ve düzeltildi (bkz. 2026-08-08'deki
-  // 11 saatlik ban olayı — aynı sınıf risk).
+  // Gecikme hâlâ 40000ms: collectBinanceCandles kaldırıldı (Görev 12) ama
+  // diğer toplayıcılarla çakışmayı önlemek için pay bırakan bu gecikme
+  // korunuyor — değiştirmeye gerek yok, sadece artık daha rahat bir pencere.
   Kom1ScanState.find({}, { _id: 0, __v: 0 }).lean()
     .then(records => Kom1ServerWatcher.loadScanState(records))
     .catch(err => console.warn('[Kom1ServerWatcher] Kayıtlı tarama durumu yüklenemedi (ilk çalıştırma olabilir):', err.message));
