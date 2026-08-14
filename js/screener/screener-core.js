@@ -246,12 +246,17 @@ const ScreenerCore = (() => {
       price: () => `<span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>`,
       pct:   () => {
         // En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers) —
-        // Chg% hücresi opak yeşil gradient ile doldurulur, metin okunabilirlik
-        // için beyaza döner (kullanıcı isteği, 2026-08-08).
-        const topStyle = _topGainers.has(d.sym)
-          ? ' style="background:linear-gradient(90deg,#15803d,#22c55e); color:#fff; border-radius:3px; padding:1px 5px;"'
-          : '';
-        return `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}"${topStyle}>${_fmtPct(d.pct)}</span>`;
+        // Chg% değeri saydam yeşil bir "pill" ile vurgulanır (kullanıcı isteği,
+        // 2026-08-08, genişlik/opaklık 2026-08-15'te düzeltildi). Dolgu İÇ
+        // span'e uygulanıyor — dış span (wl-pct wl-col-right) tüm sütun
+        // genişliğini kaplayan flex hücresi olduğu için dolgu ORAYA
+        // uygulansaydı sütun kadar (Price'a taşacak kadar) genişlerdi; iç
+        // span sadece metin kadar sarıp içeriğe göre boyutlanıyor.
+        const text = _fmtPct(d.pct);
+        const inner = _topGainers.has(d.sym)
+          ? `<span style="background:rgba(34,197,94,0.35); color:#fff; border-radius:3px; padding:1px 5px;">${text}</span>`
+          : text;
+        return `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${inner}</span>`;
       },
       fr:    () => `<span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>`,
       frh:   () => `<span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>`,
