@@ -377,6 +377,22 @@ class ChartPane {
     });
     this.ro.observe(this.cvs);
 
+    // [DENEYSEL — kullanıcı isteği 2026-08-15, kullanışsız bulunursa bu blok +
+    // dblclick handler'ındaki autoScale:true satırı silinerek eski davranışa
+    // dönülebilir, başka hiçbir şeye bağımlı değil.] Fare tekerleğiyle zoom
+    // yapılırken fiyat ekseni "auto-scale" olduğu için görünen mum sayısı
+    // değişince dikey eksen de kendiliğinden yeniden ölçekleniyordu (ayrı bir
+    // "dikey zoom" değil, autoScale'in yan etkisi). capture:true ile native
+    // handleScale.mouseWheel işlemeden ÖNCE autoScale'i kapatıp dikey ekseni
+    // sabitliyoruz — TV'nin manuel fiyat ölçeği moduyla aynı davranış, geri
+    // dönüşü de aynı şekilde çift tıklama.
+    this.cvs.addEventListener('wheel', () => {
+      try {
+        const ps = this.series?.priceScale();
+        if (ps && ps.options().autoScale) ps.applyOptions({ autoScale: false });
+      } catch(_) {}
+    }, { capture: true, passive: true });
+
     // [FIX] Zaman cetveline çift tıklandığında fitContent() phantom'ın 500 barını
     // da ekrana sığdırır — mumlar sola kayar. Çift tıklamayı yakalayıp gerçek
     // mum aralığına geri döneriz.
@@ -384,6 +400,10 @@ class ChartPane {
       // Çift tıklama anında gerçek mumların logical range'ini hesapla
       const candles = this.candlesData;
       if (!candles || candles.length === 0) return;
+
+      // Dikey eksen tekerlek-zoom'la kilitlenmiş olabilir (yukarıdaki deneysel
+      // blok) — çift tıklama aynı zamanda fiyat ölçeğini de sıfırlasın.
+      try { this.series?.priceScale().applyOptions({ autoScale: true }); } catch(_) {}
 
       // fitContent() çalışıp bittikten sonra geri yükle
       setTimeout(() => {
