@@ -99,6 +99,31 @@ const Kom1Scanner = (() => {
     return _confirmed.slice();
   }
 
+  // gorevler3.md Görev 7 (2026-08-14) — bu kesinleşmiş sinyal artık sadece
+  // bellekte tutulmuyor (sayfa kapanınca kaybolurdu), sunucudaki kalıcı
+  // kayıta (Kom1SignalLog, server.js POST /api/kom1/signals) da yazılıyor.
+  // Ateşle-unut: network hatası scanner'ı durdurmaz, sadece loglanır — bu
+  // kayıt kaybolsa bile kom1-server-watcher.js zaten bu 11 coin DIŞINDAKİ
+  // evreni tarıyor, bu 11 coin için tek yedek kaynak bu POST'tur ama arıza
+  // toleranslı tasarlandı (tekrar deneme yok, basit tutuldu).
+  async function _persistConfirmed(confirmed) {
+    try {
+      const res = await fetch('/api/kom1/signals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: confirmed.symbol, bigTf: confirmed.bigTf,
+          rcMid: confirmed.rcMid, wtVal: confirmed.wtVal, wtPrev: confirmed.wtPrev, price: confirmed.price,
+          haOpen: confirmed.haOpen, haClose: confirmed.haClose, dema9: confirmed.dema9,
+          firedAt: confirmed.firedAt, confirmedAt: confirmed.confirmedAt,
+        }),
+      });
+      if (!res.ok) console.warn(`[Kom1Scanner] Sinyal sunucuya kaydedilemedi (HTTP ${res.status}):`, confirmed.symbol);
+    } catch (err) {
+      console.warn('[Kom1Scanner] Sinyal sunucuya kaydedilemedi:', err.message);
+    }
+  }
+
   // ── Binance kline REST — SADECE tek seferlik backfill, BotEngine kuyruğu
   //    üzerinden (M1HammerScanner ile aynı örüntü/proxy). ──────────────
   async function fetchKlines(symbol, interval, limit) {
@@ -275,6 +300,7 @@ const Kom1Scanner = (() => {
       if (_confirmed.length > CONFIRMED_CAP) _confirmed.length = CONFIRMED_CAP;
       confirmedAny = true;
       console.log(`[Kom1Scanner] ✅ LONG SİNYALİ KESİNLEŞTİ: ${sym} (büyük TF: ${entry.bigTf}, RC_mid=${entry.rcMid.toFixed(4)}, HA close=${ha.haClose.toFixed(4)} > DEMA9=${dema.toFixed(4)})`);
+      _persistConfirmed(confirmed);
       if (typeof EventBus !== 'undefined') {
         EventBus.emit('kom1:signalConfirmed', { symbol: sym, bigTf: entry.bigTf, confirmedAt: confirmed.confirmedAt });
       }

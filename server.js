@@ -929,6 +929,54 @@ app.get('/api/kom1/signals', async (req, res) => {
   }
 });
 
+// ── Kom1 Tarayıcı Motoru Yazımı (gorevler3.md Görev 7, 2026-08-14) ──────
+// POST /api/kom1/signals — js/screener/kom1-scanner.js (tarayıcı, sabit 11
+// coin, gerçek WS ile ANLIK tespit eden asıl/yetkili motor) bir sinyali
+// kesinleştirdiğinde bunu doğrudan buraya yazar. Önceden bu kayıt sadece
+// tarayıcı belleğinde tutuluyordu (sayfa kapanınca kaybolurdu) — artık
+// kom1-server-watcher.js'in (REST, ~5dk'lık yaklaşık tarama) yakalamasını
+// beklemeden ANINDA kalıcı hale geliyor. `kom1-server-watcher.js` bu 11
+// coin'i kendi taramasından hariç tutuyor (bkz. CLIENT_SYMBOLS orada) —
+// aynı sinyal iki kez (biri hızlı/burada, biri gecikmeli/orada) yazılmasın
+// diye. Sembol + bigTf beyaz listeyle sınırlı (rastgele veri yazılmasın).
+const KOM1_CLIENT_SYMBOLS = new Set([
+  'ONDOUSDT', 'STRKUSDT', 'ENAUSDT', 'BIOUSDT', 'JUPUSDT',
+  'TUSDT', 'AEVOUSDT', 'MOVEUSDT', 'VANRYUSDT', 'BERAUSDT', 'HYPEUSDT',
+]);
+const kom1SignalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla istek, lütfen bir dakika sonra tekrar deneyin' },
+});
+app.use('/api/kom1/signals', kom1SignalLimiter);
+
+app.post('/api/kom1/signals', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!KOM1_CLIENT_SYMBOLS.has(b.symbol)) return res.status(400).json({ error: 'Bilinmeyen sembol' });
+    if (b.bigTf !== '1h' && b.bigTf !== '4h') return res.status(400).json({ error: 'Geçersiz bigTf' });
+    const numFields = ['rcMid', 'wtVal', 'wtPrev', 'price', 'haOpen', 'haClose', 'dema9'];
+    if (numFields.some(f => typeof b[f] !== 'number' || !Number.isFinite(b[f]))) {
+      return res.status(400).json({ error: 'Eksik/geçersiz sayısal alan' });
+    }
+    if (!b.confirmedAt || isNaN(new Date(b.confirmedAt).getTime())) {
+      return res.status(400).json({ error: 'Geçersiz confirmedAt' });
+    }
+    const doc = await Kom1SignalLog.create({
+      symbol: b.symbol, bigTf: b.bigTf,
+      rcMid: b.rcMid, wtVal: b.wtVal, wtPrev: b.wtPrev, price: b.price,
+      haOpen: b.haOpen, haClose: b.haClose, dema9: b.dema9,
+      firedAt: b.firedAt ? new Date(b.firedAt) : undefined,
+      confirmedAt: new Date(b.confirmedAt),
+    });
+    res.status(201).json({ ok: true, id: doc._id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/kom1/status — o an bekleyen (henüz kesinleşmemiş) büyük TF sinyalleri
 // + evren/katman özeti (gorevler3.md Görev 6), izleyicinin gerçekten
 // çalıştığını görmek için (tarayıcı hiç açılmasa bile).

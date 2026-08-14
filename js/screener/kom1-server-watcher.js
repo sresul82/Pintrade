@@ -65,6 +65,21 @@ const TIER_INTERVAL_MS = {
 const UNIVERSE_REFRESH_MS = 60 * 60 * 1000; // hacim/katman ataması saatte bir yenilenir
 const SCAN_PACE_MS = 120; // ardışık kline isteği arasında bekleme (ağırlık patlamasını önler)
 
+// gorevler3.md Görev 7 (2026-08-14) — bu 11 coin `kom1-scanner.js`'in (tarayıcı,
+// WS ile ANLIK tespit eden asıl/yetkili motor) sabit listesiyle BİREBİR AYNI.
+// Buradaki (server) taramadan bilinçli olarak HARİÇ TUTULUYOR: tarayıcı bu
+// coinleri kesinleştirdiği anda doğrudan Kom1SignalLog'a yazıyor (POST
+// /api/kom1/signals) — burada da taranırsa aynı sinyal ~15dk gecikmeyle
+// İKİNCİ KEZ (yaklaşık/REST versiyonuyla) kaydedilir. Sorumluluk ayrımı:
+// tarayıcı bu 11'i hızlı/WS ile, sunucu kalan ~516'yı REST ile tarar —
+// ikisi birlikte tüm evreni, duplikasyonsuz kapsar. Liste değişirse HER
+// İKİ dosyada da güncellenmeli (aynı anda tutulan iki sabit kod kopyası,
+// paylaşılan bir modüle taşımak bu turun kapsamı dışında bırakıldı).
+const CLIENT_SYMBOLS = new Set([
+  'ONDOUSDT', 'STRKUSDT', 'ENAUSDT', 'BIOUSDT', 'JUPUSDT',
+  'TUSDT', 'AEVOUSDT', 'MOVEUSDT', 'VANRYUSDT', 'BERAUSDT', 'HYPEUSDT',
+]);
+
 // 1H bar × TOLERANCE_BARS(3) = 3 saat, 4H bar × 3 = 12 saat — bkz. modül başlığı notu.
 const TF_MS = { '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000 };
 function toleranceMs(tf) { return TF_MS[tf] * TOLERANCE_BARS; }
@@ -121,6 +136,7 @@ async function _refreshUniverse() {
     info.symbols
       .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT'))
       .map(s => s.symbol)
+      .filter(symbol => !CLIENT_SYMBOLS.has(symbol)) // bkz. CLIENT_SYMBOLS notu — tarayıcı zaten kapsıyor
   );
 
   const volumeBySymbol = new Map();
