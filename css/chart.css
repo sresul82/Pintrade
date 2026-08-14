@@ -353,11 +353,22 @@
   stroke-width: 0.5px;
 }
 .rsb-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); opacity: 1; }
+/* [2026-08-15, kullanıcı geri bildirimi] Önceden aktif sekme dolu/tintli bir
+   arka fon + neon ikon + glow'un HEPSİNİ birden taşıyordu — küçük buton
+   alanında bu üçü birleşince teknik olarak %10 opaklık olsa bile gözle
+   "dolu neon blok" gibi görünüyordu. Kural: arka fon dolgusu YOK, ikon
+   nötr kalır, sadece etiket (.rsb-label) neon renk + glow taşır, aktiflik
+   sağdaki ince kenarlıkla belli olur. Projede başka "aktif" butonlar
+   eklenirken de bu kalıp izlenmeli (bkz. oi-volume-panel.js TF butonları,
+   aynı gün aynı sebeple düzeltildi). */
 .rsb-btn.active {
-  background: var(--accent-blue-bg);
-  color: var(--accent-blue);
+  background: transparent;
+  color: var(--text-primary);
   border-right: 2px solid var(--accent-blue);
   border-radius: 0;
+}
+.rsb-btn.active .rsb-label {
+  color: var(--accent-blue);
   text-shadow: var(--accent-blue-glow);
 }
 .rsb-label {

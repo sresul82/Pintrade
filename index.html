@@ -43,7 +43,12 @@
       transition: background 0.1s, color 0.1s;
     }
     .rsb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .rsb-btn.active { color: var(--accent-blue); background: var(--accent-blue-bg); }
+    /* [2026-08-15] css/chart.css'teki .rsb-btn.active ile AYNI kuralın
+       (muhtemelen eski) bir kopyası burada duruyordu — chart.css'i geçersiz
+       kılıp dolu neon arka fonun geri gelmesine sebep oluyordu. Aynı "dolgu
+       yok, sadece etiket neon" kararına göre güncellendi. */
+    .rsb-btn.active { color: var(--text-primary); background: transparent; }
+    .rsb-btn.active .rsb-label { color: var(--accent-blue); text-shadow: var(--accent-blue-glow); }
     .rsb-label { font-size: 9px; }
     /* Navbar'dan taşınan snapshot/theme/settings — .rsb-btn'nin aksine
        ikon+etiket çifti değiller, o yüzden min-height:80px'i miras almamalılar. */

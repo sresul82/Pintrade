@@ -32,6 +32,15 @@ const OiVolumePanel = (() => {
   let _currentSymbol = null, _currentExchange = null;
   let _rawOiRecords = []; // ham (~1dk) OI geçmişi — TF değişince yeniden çekilmez
 
+  /** "#00f3ff" gibi bir hex rengi verilen alpha ile "rgba(0,243,255,a)"'ya çevirir. */
+  function _withAlpha(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
   const CHART_OPTS = {
     layout: { background: { type: 'solid', color: 'transparent' }, textColor: 'var(--text-secondary)', fontSize: 10 },
     grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
@@ -61,17 +70,23 @@ const OiVolumePanel = (() => {
     _oiEl  = container.querySelector('#mfw-oi-chart');
     _volEl = container.querySelector('#mfw-vol-chart');
 
+    // [2026-08-15, kullanıcı geri bildirimi] Önceden OI mavi (#2962ff), Volume
+    // sarı (#f0b90b) — "çok keskin" bulundu. İkisi de aynı chart'ta üst üste
+    // değil, ayrı ayrı mini grafiklerde olduğu için aynı rengi kullanmak
+    // karışıklık yaratmıyor — sidebar'ın neon vurgu rengiyle (--accent-blue,
+    // #00f3ff) tutarlı hale getirildi.
+    const ACCENT = getComputedStyle(document.documentElement).getPropertyValue('--accent-blue').trim() || '#00f3ff';
     _oiChart = LightweightCharts.createChart(_oiEl, CHART_OPTS);
     _oiSeries = _oiChart.addAreaSeries({
-      lineColor: '#2962ff', lineWidth: 1.5,
-      topColor: 'rgba(41,98,255,0.28)', bottomColor: 'rgba(41,98,255,0)',
+      lineColor: ACCENT, lineWidth: 1.5,
+      topColor: _withAlpha(ACCENT, 0.28), bottomColor: _withAlpha(ACCENT, 0),
       priceLineVisible: false,
     });
 
     _volChart = LightweightCharts.createChart(_volEl, CHART_OPTS);
     _volSeries = _volChart.addAreaSeries({
-      lineColor: '#f0b90b', lineWidth: 1.5,
-      topColor: 'rgba(240,185,11,0.28)', bottomColor: 'rgba(240,185,11,0)',
+      lineColor: ACCENT, lineWidth: 1.5,
+      topColor: _withAlpha(ACCENT, 0.28), bottomColor: _withAlpha(ACCENT, 0),
       priceLineVisible: false,
     });
 
@@ -87,11 +102,15 @@ const OiVolumePanel = (() => {
 
   function _renderTfButtons(el) {
     if (!el) return;
+    // [2026-08-15, kullanıcı geri bildirimi] Aktif TF butonu önceden dolu
+    // mavi arka fonla vurgulanıyordu — proje kuralı: butonlarda dolu neon
+    // arka fon yok, sadece metin neon renkte + ince kenarlık.
     el.innerHTML = TF_OPTIONS.map(tf => `
       <button type="button" data-tf="${tf}" style="
         padding:2px 8px; font-size:10px; font-weight:600; border-radius:4px; cursor:pointer;
-        border:1px solid var(--border-primary); background:${tf === _tf ? 'var(--accent-blue,#2962ff)' : 'transparent'};
-        color:${tf === _tf ? '#fff' : 'var(--text-secondary)'};
+        background:transparent;
+        border:1px solid ${tf === _tf ? 'var(--accent-blue)' : 'var(--border-primary)'};
+        color:${tf === _tf ? 'var(--accent-blue)' : 'var(--text-secondary)'};
       ">${tf}</button>`).join('');
     el.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', () => {
