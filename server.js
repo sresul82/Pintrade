@@ -916,17 +916,6 @@ app.get('/api/history/candles/:exchange/:symbol', async (req, res) => {
   }
 });
 
-// GEÇİCİ — POST /api/kom1/signals'ı production'da doğrularken yazılan test
-// kaydını temizlemek için, bir sonraki commit'te kaldırılacak.
-app.delete('/api/kom1/signals/:id', async (req, res) => {
-  try {
-    const r = await Kom1SignalLog.deleteOne({ _id: req.params.id });
-    res.json({ deletedCount: r.deletedCount });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // ── Kom1 Sunucu Gözlemi (gorevler3.md Görev 5) ────────────────────────
 // GET /api/kom1/signals — kesinleşmiş sinyaller (en yeni önce)
 app.get('/api/kom1/signals', async (req, res) => {
