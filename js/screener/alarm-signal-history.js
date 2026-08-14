@@ -124,15 +124,38 @@ const AlarmSignalHistory = (() => {
     ];
   }
 
-  // Kom1 artık gerçek Kom1Scanner çıktısıyla besleniyor (gorevler3.md Görev 4).
+  // Kom1 artık sunucudaki kalıcı kayıttan (Kom1SignalLog, /api/kom1/signals)
+  // besleniyor (gorevler2.md Görev 6, 2026-08-14) — eskiden Kom1Scanner'ın
+  // tarayıcı-içi, geçici (`_confirmed`, sayfa yenilenince sıfırlanan) listesi
+  // kullanılıyordu ve sadece sabit 11 coin'i kapsıyordu. Sunucu kaydı hem
+  // kalıcı hem de gorevler3.md Görev 6 sonrası tüm ~527 coin'lik evreni
+  // kapsıyor. Kom1Scanner (tarayıcı) hâlâ çalışıyor — asıl/yetkili tespit
+  // motoru odur, sadece bu listenin kaynağı değişti; toast bildirimi hâlâ
+  // ondan geliyor (bkz. aşağıdaki EventBus.on('kom1:signalConfirmed', ...)).
   // Kom2/Kom3 hâlâ _demoSignals()'taki placeholder kartlar — dokunulmadı.
   // Aktiflik süresi: kullanıcı kararı (2026-08-10) — mevcut 24h "Old" eşiğiyle
-  // aynı kural kullanılıyor. TODO: hedef/stop fiyatı bazlı bir "aktiflik" kuralı
-  // tasarlanınca (bkz. gorevler2.md Görev 6, sinyal önerisi+geri ölçüm) bu geçici
-  // 24h kuralın yerini alması gerekecek.
+  // aynı kural kullanılıyor.
+  let _serverKom1Records = [];
+
+  async function _fetchServerKom1Signals() {
+    try {
+      const res = await fetch('/api/kom1/signals?limit=50');
+      if (!res.ok) return;
+      const records = await res.json();
+      if (!Array.isArray(records)) return;
+      _serverKom1Records = records;
+      if (document.getElementById('dp-alarm-tab')?.offsetParent) render();
+    } catch (err) {
+      console.warn('[AlarmSignalHistory] /api/kom1/signals çekilemedi:', err.message);
+    }
+  }
+
+  /** Önerilen giriş fiyatı (sinyalin oluştuğu barın kapanışı, sunucuda
+   *  saklanan `price`) ile şu anki fiyat arasındaki ham fark — "geri ölçüm"
+   *  (gorevler2.md Görev 6, başlangıç modeli: ham fark yeterli, gelişmiş
+   *  backtest istatistikleri kapsam dışı). */
   function _kom1LiveSignals() {
-    if (typeof Kom1Scanner === 'undefined') return [];
-    return Kom1Scanner.getConfirmedSignals().map(entry => {
+    return _serverKom1Records.map(entry => {
       const ticker = (typeof MarketDataStore !== 'undefined' && MarketDataStore.getTicker)
         ? MarketDataStore.getTicker(entry.symbol) : null;
       const currentPrice = ticker?.price;
@@ -142,15 +165,16 @@ const AlarmSignalHistory = (() => {
       return {
         symbol: entry.symbol,
         kom: 1,
-        exchange: 'binance', // Kom1Scanner sadece Binance FUTURES tarıyor (gorevler3.md kararı)
-        timestamp: entry.confirmedAt,
+        exchange: 'binance', // Kom1 sadece Binance FUTURES tarıyor (gorevler3.md kararı)
+        timestamp: new Date(entry.confirmedAt).getTime(),
         priceChangePct,
         chips: [
-          { label: 'Büyük TF',  value: entry.bigTf.toUpperCase(),        color: 'var(--text-primary)' },
-          { label: 'RC_mid',    value: entry.rcMid.toFixed(4),           color: 'var(--text-primary)' },
-          { label: 'WT1',       value: `${entry.wtPrev.toFixed(1)}→${entry.wtVal.toFixed(1)}`, color: '#16a34a' },
-          { label: 'HA Close',  value: entry.haClose.toFixed(4),         color: '#16a34a' },
-          { label: 'DEMA9',     value: entry.dema9.toFixed(4),           color: 'var(--text-primary)' },
+          { label: 'Giriş Fiyatı', value: formatPrice(entry.price),      color: 'var(--text-primary)' },
+          { label: 'Büyük TF',     value: entry.bigTf.toUpperCase(),     color: 'var(--text-primary)' },
+          { label: 'RC_mid',       value: formatPrice(entry.rcMid),      color: 'var(--text-primary)' },
+          { label: 'WT1',          value: `${entry.wtPrev.toFixed(1)}→${entry.wtVal.toFixed(1)}`, color: '#16a34a' },
+          { label: 'HA Close',     value: formatPrice(entry.haClose),    color: '#16a34a' },
+          { label: 'DEMA9',        value: formatPrice(entry.dema9),      color: 'var(--text-primary)' },
         ],
         rule: `Büyük TF (${entry.bigTf.toUpperCase()}): RC_mid altı + WT cross-up (önceki bar oversold) + 5dk onay: HA yeşil + DEMA9 üstü`,
       };
@@ -428,19 +452,27 @@ const AlarmSignalHistory = (() => {
     if (!container) return;
     if (!_inited) {
       _attachDelegation(container);
+      _fetchServerKom1Signals();
+      setInterval(_fetchServerKom1Signals, 60 * 1000); // sunucu kaydı 5dk'da bir yenilendiği için 60sn yeterli
       _inited = true;
     }
     render();
   }
 
-  // Kom1Scanner yeni bir sinyali kesinleştirdiğinde: alarm sekmesinde bildirim
-  // ("Kom1 listesine XUSDT eklendi") + açıksa alarm listesi + Watchlist Sinyaller
-  // grubu tazelensin. Modül yüklenirken bir kere kaydediliyor (init()'in
-  // tekrar tekrar çağrılmasından bağımsız — tab kapalıyken de sinyal gelebilir).
+  // Kom1Scanner (tarayıcı, asıl/yetkili tespit motoru) yeni bir sinyali
+  // kesinleştirdiğinde: alarm sekmesinde bildirim ("Kom1 listesine XUSDT
+  // eklendi") + Watchlist Sinyaller grubu tazelensin. Kart listesinin kendisi
+  // artık sunucu kaydından geliyor (yukarıdaki not) — tarayıcının kendi
+  // tespiti sunucununkinden birkaç dakika önce/sonra olabilir (bkz.
+  // kom1-server-watcher.js başlığındaki "yaklaşık/shadow" notu), bu yüzden
+  // burada da bir yenileme tetikleniyor (server henüz yazmamışsa bir sonraki
+  // periyodik yenilemede görünür). Modül yüklenirken bir kere kaydediliyor
+  // (init()'in tekrar tekrar çağrılmasından bağımsız — tab kapalıyken de
+  // sinyal gelebilir).
   if (typeof EventBus !== 'undefined') {
     EventBus.on('kom1:signalConfirmed', ({ symbol }) => {
-      if (typeof Toast !== 'undefined') Toast.show(`Kom1 listesine ${symbol} eklendi`, 'success');
-      if (document.getElementById('dp-alarm-tab')?.offsetParent) render();
+      if (typeof Toast !== 'undefined') Toast.show(`Kom1 sinyali: ${symbol}`, 'success');
+      _fetchServerKom1Signals();
       EventBus.emit('watchlist:listsChanged');
     });
   }
