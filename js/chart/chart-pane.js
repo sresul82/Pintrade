@@ -899,7 +899,21 @@ class ChartPane {
 
     if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
       this._initialDataLoaded = true;
-      this.chart.timeScale().fitContent();
+      // [FIX] fitContent() phantom'ın (ChartPhantom.update, yukarıda) sağa
+      // uzattığı 1000 barlık görünmez seriyi de ekrana sığdırmaya çalışır —
+      // gerçek mumlar görünmeyecek kadar sola sıkışır, sadece zaman/fiyat
+      // cetveline çift tıklayınca (aşağıdaki dblclick handler'ı) düzeliyordu.
+      // Aynı mantığı ilk yüklemede de doğrudan uygula — çift tıklamayı bekleme.
+      try {
+        const ts         = this.chart.timeScale();
+        const totalBars  = this.candlesData.length;
+        const visibleBars = 150;
+        const toBar      = totalBars - 1;
+        const fromBar    = Math.max(0, toBar - visibleBars);
+        ts.setVisibleLogicalRange({ from: fromBar, to: toBar + 12 }); // +12 rightOffset
+      } catch(_) {
+        this.chart.timeScale().fitContent(); // beklenmedik hata olursa eski davranışa düş
+      }
     }
 
   }
