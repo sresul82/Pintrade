@@ -1136,7 +1136,13 @@ const DetailPanel = (() => {
     });
     document.getElementById('dp-oi-popout')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (window.MiniFloatingWindow) MiniFloatingWindow.toggle('oi', 'OI DEĞİŞİMİ');
+      if (!window.MiniFloatingWindow) return;
+      MiniFloatingWindow.toggle('oi', 'OI CHANGE');
+      // OI + Volume grafikleri (bkz. js/screener/oi-volume-panel.js) — sadece
+      // panel şimdi AÇILDIYSA kur/taze tut (kapatma tıklamasında gereksiz).
+      if (MiniFloatingWindow.isVisible('oi')) {
+        OiVolumePanel.open(MiniFloatingWindow.getContentEl('oi', 'OI CHANGE'));
+      }
     });
 
     // Listen for symbol change

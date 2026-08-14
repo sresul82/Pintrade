@@ -16,7 +16,7 @@ const MiniFloatingWindow = (() => {
       top: 90px;
       right: 480px;
       width: 320px;
-      max-height: 360px;
+      max-height: 80vh;
       display: flex;
       flex-direction: column;
       background: var(--bg-primary);
@@ -42,7 +42,14 @@ const MiniFloatingWindow = (() => {
 
     const content = document.createElement('div');
     content.className = 'mfw-content';
-    content.style.cssText = 'flex:1; overflow:auto; padding:16px; font-size:11px; color:var(--text-secondary); text-align:center;';
+    // resize:vertical — kullanıcı panelin alt kenarından tutup dikey
+    // büyütebilsin/küçültebilsin diye (2026-08-15, OI/Volume grafikleri için
+    // istendi, ama tüm panellere genel bir iyileştirme olarak uygulandı).
+    // NOT: flex:1 KULLANILMIYOR — flex-basis:0 (flex:1'in şort-hand'i) elle
+    // ayarlanan/resize ile sürüklenen height'ı geçersiz kılıyordu (flex ana
+    // eksende flex-basis, height'tan öncelikli). Bunun yerine sabit bir
+    // başlangıç height'ı + resize:vertical kullanılıyor.
+    content.style.cssText = 'flex:0 0 auto; height:260px; min-height:120px; max-height:70vh; overflow:auto; resize:vertical; padding:16px; font-size:11px; color:var(--text-secondary); text-align:center;';
     content.textContent = 'İçerik yakında eklenecek...';
 
     div.appendChild(tb);
@@ -104,7 +111,15 @@ const MiniFloatingWindow = (() => {
     return !!(_panels[id] && _panels[id].el.style.display !== 'none');
   }
 
-  return { show, hide, toggle, setContent, isVisible };
+  /** Ham içerik div'ini döner (henüz yoksa oluşturur) — setContent()'in HTML
+   *  string'i yerine grafik gibi DOM/canvas kuran çağıranlar için (bkz.
+   *  js/screener/oi-volume-panel.js). */
+  function getContentEl(id, title) {
+    if (!_panels[id]) _panels[id] = _createEl(id, title || id);
+    return _panels[id].contentEl;
+  }
+
+  return { show, hide, toggle, setContent, isVisible, getContentEl };
 })();
 
 window.MiniFloatingWindow = MiniFloatingWindow;
