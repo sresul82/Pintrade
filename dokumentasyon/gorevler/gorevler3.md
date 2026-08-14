@@ -415,6 +415,24 @@ istek atıyor (repo public, ücretsiz), `main`'e push edildi, aktif.
 **Telegram bildirimi ve alarmların MongoDB'ye taşınması kullanıcı
 isteğiyle bu turda ATLANDI** — aşağıdaki kapsam hâlâ geçerli, bekliyor.
 
+**Kom1 tespit birleştirmesi (2026-08-14, tamamlandı):** `kom1-scanner.js`
+(tarayıcı, WS, sabit 11 coin) ve `kom1-server-watcher.js` (sunucu, REST,
+kalan evren) artık **tek, duplikasyonsuz kalıcı kayıt** üzerinde
+birleşiyor — kod birleştirilmedi, sorumluluk ayrıldı:
+- Yeni `POST /api/kom1/signals` (`server.js`, whitelist + rate-limit'li)
+  — tarayıcı bir sinyali kesinleştirdiği anda doğrudan `Kom1SignalLog`'a
+  yazıyor, artık sadece bellekte tutup sayfa kapanınca kaybetmiyor.
+- `kom1-server-watcher.js` bu 11 coin'i kendi taramasından hariç tutuyor
+  (`CLIENT_SYMBOLS`) — aynı sinyal iki kez (biri hızlı, biri ~15dk
+  gecikmeli/yaklaşık) kaydedilmiyor. Production'da doğrulandı: evren
+  527 → 517'ye düştü.
+- Uçtan uca test edildi (POST → Mongo → GET), test kaydı temizlendi.
+- Alarm sekmesi/Watchlist zaten `/api/kom1/signals`'tan okuduğu için
+  (bkz. yukarıdaki Görev 6 notu) ek değişiklik gerekmedi.
+
+**Kalan kapsam:** Telegram bildirimi + alarmların (`AlertStore`) DB'ye
+taşınması — aşağıdaki orijinal tanım hâlâ geçerli.
+
 **Not (2026-08-11):** Görev 5'in gözlem ihtiyacı için DAR kapsamlı bir
 sunucu-taraflı Kom1 gözlemcisi zaten eklendi (`js/screener/kom1-server-watcher.js`,
 detay Görev 5'te) — ama bu Görev 7'yi TAMAMLAMIYOR. Eksik kalanlar: fiyat
