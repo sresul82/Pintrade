@@ -448,7 +448,20 @@
 .wl-row {
   border-bottom: 1px solid var(--border-primary);
 }
-.wl-row:hover { background: var(--bg-hover); }.wl-row.selected {
+.wl-row:hover { background: var(--bg-hover); }
+/* En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers, screener-core.js)
+   — soldan (sembol) sağa doğru saydamlaşan ince bir yeşil gradyan, tüm satırı
+   kaplar. Önceki tur sadece Chg% hücresine opak bir dolgu uyguluyordu, bu da
+   Price'a taşıyordu (2026-08-15'te kullanıcı isteğiyle satır geneline taşındı) —
+   gradyan yönü sayesinde artık hangi sütunda olursa olsun bir değerin üstüne
+   binmiyor, sağa doğru zaten saydamlaşıyor. */
+.wl-row.wl-row-top-gainer {
+  background: linear-gradient(90deg, rgba(34,197,94,0.16), rgba(34,197,94,0) 70%);
+}
+.wl-row.wl-row-top-gainer:hover {
+  background: linear-gradient(90deg, rgba(34,197,94,0.22), rgba(34,197,94,0) 70%), var(--bg-hover);
+}
+.wl-row.selected {
   background: rgba(88,166,255,0.08);
   border-left: 2px solid var(--accent-blue, #58a6ff);
   padding-left: 6px;

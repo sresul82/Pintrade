@@ -218,6 +218,11 @@ const ScreenerCore = (() => {
     row.className = 'wl-row';
     row.dataset.sym = d.sym;
     if (d.sym === _selected) row.classList.add('selected');
+    // En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers) — tüm
+    // satır, soldan (sembol) sağa doğru saydamlaşan ince bir yeşil gradyanla
+    // vurgulanır (kullanıcı isteği, 2026-08-15 — önceki turda sadece Chg%
+    // hücresine uygulanan opak dolgu Price'a taşıyordu, bkz. .wl-row-top-gainer).
+    if (_topGainers.has(d.sym)) row.classList.add('wl-row-top-gainer');
 
     const frCls = d.fr !== null ? (d.fr < 0 ? 'neg' : 'pos') : '';
     const trendCls = _frTracker ? _frTracker.getFRTrendType(d.sym + 'USDT') : 'neutral';
@@ -244,20 +249,7 @@ const ScreenerCore = (() => {
     const CELL = {
       sym:   () => `<span class="wl-sym">${d.sym}USDT${signalBadge}${_market === 'futures' ? _komBadgeHtml(d.sym) : ''}${_alertBadgeHtml(d.sym)}</span>`,
       price: () => `<span class="wl-price wl-col-right ${_pctCls(d.pct)}">${_fmtPrice(d.price)}</span>`,
-      pct:   () => {
-        // En yüksek değişime sahip ilk 5 coin (bkz. _computeTopGainers) —
-        // Chg% değeri saydam yeşil bir "pill" ile vurgulanır (kullanıcı isteği,
-        // 2026-08-08, genişlik/opaklık 2026-08-15'te düzeltildi). Dolgu İÇ
-        // span'e uygulanıyor — dış span (wl-pct wl-col-right) tüm sütun
-        // genişliğini kaplayan flex hücresi olduğu için dolgu ORAYA
-        // uygulansaydı sütun kadar (Price'a taşacak kadar) genişlerdi; iç
-        // span sadece metin kadar sarıp içeriğe göre boyutlanıyor.
-        const text = _fmtPct(d.pct);
-        const inner = _topGainers.has(d.sym)
-          ? `<span style="background:rgba(34,197,94,0.35); color:#fff; border-radius:3px; padding:1px 5px;">${text}</span>`
-          : text;
-        return `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${inner}</span>`;
-      },
+      pct:   () => `<span class="wl-pct wl-col-right ${_pctCls(d.pct)}">${_fmtPct(d.pct)}</span>`,
       fr:    () => `<span class="wl-fr wl-col-right ${frCls} fr-trend-${trendCls}">${_fmtFR(d.fr)}</span>`,
       frh:   () => `<span class="wl-frh wl-col-right ${frhCls}">${window.fundingIntervalManager?.get(d.sym + 'USDT', exc) ?? '—'}</span>`,
       vol:   () => `<span class="wl-vol wl-col-right">${_fmtVol(d)}</span>`,
