@@ -402,7 +402,18 @@ vermedi). Tam detay ve "sonraki oturum için" checklist'i:
 
 ---
 
-## [ ] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — henüz başlanmadı)
+## [~] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — kısmen başladı)
+
+**Kısmi ilerleme (2026-08-14):** Geriye dönük tarama, Render'ın ücretsiz
+katmanının inaktiflikte uykuya dalıp `Kom1ServerWatcher.tick()`'i
+tamamen durdurduğunu, ~44 saatte ~112 sinyalin muhtemelen kaçırıldığını
+gösterdi (`2026-08-14-kom1-uyku-kaybi-ve-sinyal-analizi.md`). Bunun
+üzerine Görev 7'nin **hosting-sürekliliği** parçası (kullanıcı onayıyla,
+ücretli plana geçmeden) çözüldü: `.github/workflows/keep-alive.yml` +
+`scripts/keep_alive.py` — GitHub Actions her 10 dakikada bir `/health`'e
+istek atıyor (repo public, ücretsiz), `main`'e push edildi, aktif.
+**Telegram bildirimi ve alarmların MongoDB'ye taşınması kullanıcı
+isteğiyle bu turda ATLANDI** — aşağıdaki kapsam hâlâ geçerli, bekliyor.
 
 **Not (2026-08-11):** Görev 5'in gözlem ihtiyacı için DAR kapsamlı bir
 sunucu-taraflı Kom1 gözlemcisi zaten eklendi (`js/screener/kom1-server-watcher.js`,
@@ -491,7 +502,39 @@ detaylandırma gerekiyor.** Muhtemel parçalar:
 
 ---
 
-## [ ] Görev 8 — Git düzensizliğini temizle (main/master ayrışması + commit'lenmemiş iş)
+## [x] Görev 8 — Git düzensizliğini temizle (main/master ayrışması + commit'lenmemiş iş)
+
+**Tamamlandı (2026-08-14).**
+
+**Sonuç:** Beklenen "kaybolmuş iş" riski gerçek çıkmadı — bu makinedeki
+çalışma kopyası satır sonu (CRLF/LF) farkı dışında `main` ile **birebir
+aynıydı** (`diff -rq --strip-trailing-cr` ile doğrulandı, sadece bu
+oturumda düzenlenen 2 dosya gerçekten farklıydı). Demek ki bu makinede
+git dal işaretçisi yanlışlıkla `master`'da kalmıştı, çalışma kopyası
+zaten bir şekilde `main`'in içeriğine getirilmişti (muhtemelen elle
+kopyalama/senkron, gerçek `git checkout main` hiç yapılmamış).
+
+**Yapılanlar:**
+- `git stash push -u` ile tüm çalışma kopyası güvenceye alındı.
+- `git checkout main` ile local dal işaretçisi doğru yere taşındı.
+- Stash geri uygulandı — 2 gerçek farklı dosya (bu oturumda düzenlenen
+  görev dosyaları) `stash@{0}^3` (untracked-dosyalar alt-commit'i)
+  üzerinden manuel kurtarıldı (stash pop bunları "already exists"
+  diyerek atlamıştı, ana stash commit'inde değil untracked alt-ağacında
+  oldukları için).
+- Commit + push, `main`'e (`6956a25`).
+- **`master` dalı GitHub'dan ve local'den silindi** (kullanıcı onayıyla)
+  — içinde `main`'de olmayan hiçbir gerçek iş yoktu, sadece iki farklı
+  makineden gelen artık gereksiz "sync" commit'leriydi.
+
+**Artık tek dal var: `main`.** Hem GitHub'da hem bu makinede.
+
+**Rapor:** Bu bölümün kendisi + oturum geçmişi (ayrı bir .md dosyası
+gerekmedi, bulgu zaten küçük ve buraya sığdı).
+
+---
+
+## [ARŞİV — orijinal görev tanımı, referans için]
 
 **Bulundu (2026-08-14), Görev 7'nin keep-alive workflow'unu push ederken.**
 
