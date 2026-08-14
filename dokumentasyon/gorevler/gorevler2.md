@@ -464,7 +464,18 @@ görsel doğrulama yapıldı.
 
 ---
 
-## [ ] Görev 12 — `Candle` koleksiyonuna TTL eklenmesi (2026-08-10, MongoDB Atlas uyarısı üzerine bulundu)
+## [x] Görev 12 — `Candle` koleksiyonuna TTL eklenmesi (2026-08-10, MongoDB Atlas uyarısı üzerine bulundu)
+
+**Tamamlandı (2026-08-14) — TTL yerine kalıcı çözüm: toplayıcı tamamen durduruldu.**
+Kullanıcı onayıyla: `dokumentasyon/BACKTEST-SISTEMI.md`'nin planladığı
+backtest sistemi zaten aylarca geçmişe giden, toplu indirilen veri
+kullanacak — bu canlı 5dk toplayıcısına hiç ihtiyaç duymuyor. `server.js`'den
+`collectBinanceCandles()` ve çağrısı tamamen kaldırıldı, `Candle` modeli
+ve (zaten hiç kullanılmayan) `GET /api/history/candles` endpoint'i
+dokunulmadan bırakıldı. Production'da doğrulandı: deploy sonrası hiç yeni
+mum yazılmadı (`17:30`'daki son kayıt donuk kaldı, `17:39`'da hâlâ aynı),
+endpoint eski veriyi hatasız döndürmeye devam ediyor. Detay/gerekçe:
+`server.js` commit `67dbef0`.
 
 **Bağlam:** MongoDB Atlas'tan "Logical Size 440MB'ı geçti" uyarısı geldi
 (free tier M0 limiti 512MB, ölçüm anında 477MB/512MB — ~%93 dolu).

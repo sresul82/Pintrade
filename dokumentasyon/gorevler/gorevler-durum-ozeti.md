@@ -1,6 +1,6 @@
 # Görev Kuyrukları — Birleşik Durum Özeti
 
-**Tarih:** 2026-08-10. Üç ayrı kuyruk dosyası var (`siradaki-gorevler.md`,
+**Son güncelleme:** 2026-08-14. Üç ayrı kuyruk dosyası var (`siradaki-gorevler.md`,
 `gorevler2.md`, `gorevler3.md`) — bu dosya onları **değiştirmiyor**, sadece
 "neredeyiz, ne bitti, ne bekliyor" sorusuna tek bakışta cevap vermek için bir
 özet/dizin. Görev detayları/raporları hâlâ kendi orijinal dosyalarında.
@@ -27,7 +27,7 @@
 
 ## 2. `gorevler2.md` — İkinci kuyruk (2026-08-08)
 
-**Durum: Görev 1-4, 7, 8, 9, 10 tamamlandı. Görev 5, 6 ertelendi. Görev 11 sadece belgelendi (henüz başlanmadı).**
+**Durum: Görev 1-4, 6, 7, 8, 9, 10, 11, 12 tamamlandı. Görev 5 ertelendi.**
 
 | # | Görev | Durum |
 |---|---|---|
@@ -36,78 +36,68 @@
 | 3 | Bybit L/S (faz 2) | ✅ |
 | 4 | fr-tracker.js yanlış backend düzeltmesi | ✅ |
 | 5 | Alarm kartı → chart zaman yolculuğu | ⏸ **Ertelendi** (kullanıcı: "zor iş olabilir, şimdilik atlayalım") |
-| 6 | Alarm'a "önerilen giriş fiyatı" + geri ölçüm kaydı | ⏸ **Yapılmadı, bekliyor** — Kom1 artık canlı sinyal ürettiği için (bkz. gorevler3.md Görev 4) bu görevin önkoşulu artık var, istenirse başlanabilir |
+| 6 | Alarm'a "önerilen giriş fiyatı" + geri ölçüm kaydı | ✅ (2026-08-14) — Alarm sekmesi artık `/api/kom1/signals`'tan (kalıcı, tüm evren) besleniyor, kartlarda "Giriş Fiyatı" chip'i + canlı %fark var |
 | 7 | Watchlist SPOT gerçek işlevi (sadece liste) | ✅ |
 | 8 | Delist/yeni liste/en yükselen uyarısı | ✅ |
 | 9 | Güvenlik açıkları (`express.static` kapsamı, syncKey rate-limit) | ✅ (2026-08-10), production'da doğrulandı |
 | 10 | Doğrulanmış ölü kod / OI hesap hatası | ✅ |
-| 11 | Chart Settings denetimi (High/Low bug, ölü `settings:apply` dinleyicisi, modalın ~%60-65'i kozmetik) | 📋 **Sadece belgelendi** (2026-08-10) — henüz kod değişikliği yok, kapsam netleşince "Görev 11'e geç" onayı gerekir |
+| 11 | Chart Settings denetimi (High/Low bug, ölü `settings:apply` dinleyicisi) | ✅ (2026-08-10) — 11.1/11.2/11.4/11.5/11.5.1/11.6 tamamlandı, 11.3'ün kozmetik kalanı izleme listesinde |
+| 12 | `Candle` koleksiyonuna TTL / MongoDB depolama riski | ✅ (2026-08-14) — TTL yerine toplayıcı (`collectBinanceCandles`) tamamen durduruldu, hiç kullanılmayan veriydi |
 
 **Bu kuyruktan kalan, henüz görev olarak açılmamış notlar ("izleme listesi"):**
 - `funding:loaded` event'i tüm Coin Detail panelini gereksiz yeniden yüklüyor (performans borcu)
 - Fib Extension/Channel/Time Zone araçları merkezi `_fibAxis` mimarisini kullanmıyor
-- ~~`drawing:settings:saved` debounce yok~~ — **✅ Düzeltildi (2026-08-10)**, production'da doğrulandı: redraw anlık, kayıt 300ms debounce'lu.
 - Sütun menüsü "1D Open" işlevsiz (`dayOpen` veri kaynağı yok)
 - `MiniFloatingWindow` OI Değişimi popout'u hâlâ boş
-- Grafik altı "No Preview" filtre işlevi kısmen dolduruldu (Görev 8), tam kapsam kontrol edilmedi
-- Grafik üzerinde indikatör motoru görselleştirmesi yok (RSI/DEMA9/WT/RC — **Heikin Ashi hariç, o artık chart'a bağlı**, bkz. aşağıda)
-- ~~Grafik ayarları saat dilimi değişikliğinin uygulanıp uygulanmadığından şüpheleniliyor~~ — **kesinleşti, Görev 11.2'ye taşındı** (iki çakışan `settings:apply` dinleyicisi, ikincisi ölü kod)
-- İlk REST yüklemesi başarısız olursa screener toparlanmıyor (doğrulanmadı)
-- ~~Heikin Ashi ve 6 diğer mum stili menüde duruyor ama hesaplanmıyor~~ — **Heikin Ashi ✅ Düzeltildi (2026-08-10)**, production'da doğrulandı (`IndicatorEngine.calcHeikinAshi` artık `chart-pane.js`'e bağlı, canlı veride kayan hesap doğru çalışıyor). Kalan 6 stil (hollow, volume, line_markers, hlc_area, baseline, volume_footprint, session_volume) hâlâ "henüz desteklenmiyor".
+- Görev 11.3'ün kozmetik kalanı (Status line/Scales/Canvas kontrolleri)
+- Grafik üzerinde RSI/WT/RC görselleştirmesi yok (EMA/DEMA/Heikin Ashi artık chart'a bağlı, bkz. aşağıda — v5 migrasyonu bekliyor)
 
 ---
 
 ## 3. `gorevler3.md` — Üçüncü kuyruk, Kom1 sinyal motoru (2026-08-09 → devam ediyor)
 
-**Durum: Görev 1-4 tamamlandı ve CANLI. Görev 5'ten önce DUR kapısındayız.**
+**Durum: Görev 1-6 tamamlandı/canlı gözlemde. Görev 7 kısmen yapıldı. Görev 8 tamamlandı.**
 
 | # | Görev | Durum |
 |---|---|---|
 | 1 | Paylaşılan indikatör motoru (DEMA9, HA, RC) | ✅ |
 | 2 | Büyük TF sinyali (1H/4H: RC + WaveTrend) | ✅ |
 | 3 | 5 dakikalık onay penceresi (HA + DEMA9) | ✅ |
-| 4 | Watchlist Kom1 grubuna yazma + alarm bildirimi | ✅ (2026-08-10), production'a push edildi ve doğrulandı |
-| — | ⏸ DUR (Görev 5'ten önce) | ✅ Geçildi (2026-08-10, kullanıcı onayı) |
-| 5 | Canlı gözlem + ince ayar | Kapsamı netleşti (ilk 10 sinyal, manuel değerlendirme + ban/hata sıklığı, parametreler sabit) — **fiili gözlem, Binance IP banı geçene kadar (~2026-08-11 07:13 UTC) başlayamıyor**, bkz. aşağıdaki kritik bulgu |
-| — | ⏸ DUR (Görev 6'dan önce) | Geçilmedi |
-| 6 | Tüm piyasaya genişletme (dinamik ATR taraması) | ⏳ İmplementasyon tamamlandı (2026-08-12), gözlem sürüyor |
-| 7 | Sunucu taraflı izleme + Telegram bildirimi | ⏳ Başladı (2026-08-14) — keep-alive (GitHub Actions) kuruldu, gerisi bekliyor |
-| 8 | Git düzensizliğini temizle (main/master ayrışması) | 🆕 Yeni açıldı (2026-08-14), henüz başlanmadı |
+| 4 | Watchlist Kom1 grubuna yazma + alarm bildirimi | ✅ (2026-08-10) |
+| 5 | Canlı gözlem + ince ayar | ✅ (2026-08-12) — 9/10 sinyalle kullanıcı onayıyla kapatıldı |
+| 6 | Tüm piyasaya genişletme (hacme göre 3 katman rotasyon) | ⏳ İmplementasyon tamamlandı (2026-08-12), gözlem sürüyor — tier3'ün (3sa) rotasyona girdiği henüz doğrulanmadı |
+| 7 | Sunucu taraflı izleme + Telegram bildirimi | ⏳ Kısmen tamamlandı (2026-08-14): keep-alive (GitHub Actions, sunucu artık uyumuyor) + tarayıcı/sunucu Kom1 tespitinin tek kalıcı kayıtta birleştirilmesi (duplikasyonsuz). **Kalan:** Telegram bildirimi, `AlertStore`'un (fiyat alarmları) MongoDB'ye taşınması |
+| 8 | Git düzensizliğini temizle (main/master ayrışması) | ✅ (2026-08-14) — `master` silindi, tek dal (`main`) kaldı, kayıp iş yoktu |
 
-**Push edildi ve doğrulandı (2026-08-10).** İki ayrı push yapıldı:
-1. Görev 4'ün kendi kodu (Kom1Scanner canlıya alma, Watchlist/alarm entegrasyonu).
-2. Doğrulama sırasında bulunan, Görev 4'ten bağımsız kritik bir `server.js`
-   bug'ının düzeltmesi: Binance proxy'si upstream ban status kodunu (418/429)
-   hiç forward etmiyordu, `kl.map is not a function` çökmesine yol açıyordu.
-   Düzeltildi, production'da doğrulandı (artık ban durumunda çökme yok, temiz
-   `stop()`). Detay: `2026-08-10-binance-proxy-status-forward-fix.md`.
-
-**Şu an aktif durum:** Binance'in kendi IP banı (~2026-08-11 07:13 UTC'ye kadar,
-koddan bağımsız) yüzünden Kom1Scanner henüz gerçek backfill yapamıyor — gerçek
-sinyal üretimi ban geçtikten sonra başlayacak.
+**Bilinen kritik bulgu (2026-08-14):** Render'ın ücretsiz katmanı inaktiflikte
+uyuyup Kom1'in sunucu taraması durunca, geriye dönük taramada ~44 saatte
+~112 sinyalin muhtemelen kaçırıldığı bulundu — bu, Görev 7'nin keep-alive
+parçasının doğrudan gerekçesi oldu. Detay: `2026-08-14-kom1-uyku-kaybi-ve-sinyal-analizi.md`.
 
 **Bu kuyrukta bilinçli olarak ERTELENEN/YAPILMAYAN kararlar** (detaylı tablo `gorevler3.md`'nin başında):
 - Kom2 — bilinen zayıf/doğrulanmamış kural, bu kuyrukta yok
 - Kom3 — hiç tanımlanmadı
 - Kom1 parametreleri (WT eşiği, RC uzunluğu, TOLERANCE_BARS) sabit kodlu, yapılandırılabilir değil
-- Coin evreni sabit 11 coin, dinamik ATR taraması yok (Görev 6'ya ertelendi)
+- ATR14 volatilite ön-filtresi uygulanmadı (sadece hacme göre rotasyon var)
 - Sadece Binance FUTURES, Bybit yok
 - Sinyal aktiflik süresi geçici olarak 24h ("Old" eşiğiyle aynı) — TODO: ileride hedef/stop bazlı kurala geçilecek
 
-**İleri seviye — Kom1 gözlem sonrası (2026-08-10 eklendi, Görev 5 sonucuna bağlı önkoşul):**
-- Chart üzerinde indikatör görselleştirmesi (RSI/DEMA9/HA/WT/RC) — `indicator-engine.js` hazır ama chart'a çizilmiyor
-- Botların gerçek zamanlı çalışır durumda tutulması — izleme/health-check mekanizması
-- Navbar Alert butonunun işlevsel hale getirilmesi
-- Alert → Telegram bildirim entegrasyonu
+**İleri seviye — Kom1 gözlem sonrası:**
+- Chart üzerinde RSI/WT/RC görselleştirmesi — `lightweight-charts v5` migrasyonu gerektiriyor, toplu/tek seferlik bir iş olarak bilinçli ertelendi (EMA/DEMA/Heikin Ashi zaten v4'te chart'a bağlandı)
+- Botların gerçek zamanlı çalışır durumda tutulması — izleme/health-check mekanizması (şu an sadece konsol logları var)
+- Alert → Telegram bildirim entegrasyonu (Görev 7'nin kalanı)
 
 ---
 
-## Şu an nerede duruyoruz — özet
+## Şu an nerede duruyoruz — özet (2026-08-14)
 
-1. **gorevler3.md Görev 4 tamamlandı, kod hazır, test edildi, push edilmedi.**
-2. Görev 5'ten önceki DUR kapısındayız — kapsamı henüz netleşmedi.
-3. Açıkta kalan, kuyruğa hiç girmemiş ama bilinen büyük konular:
-   - **gorevler2.md Görev 9** (güvenlik) — ertelendi, hâlâ açık
-   - **gorevler2.md Görev 6** (önerilen giriş fiyatı + geri ölçüm) — artık Kom1 canlı olduğu için önkoşulu var, istenirse şimdi ele alınabilir
-   - **gorevler2.md Görev 5** (alarm → chart zaman yolculuğu) — ertelendi
-   - Grafik üzerinde indikatör görselleştirmesi yok (izleme listesi maddesi)
+1. **Açık, aktif iş bekleyen:** `gorevler3.md` Görev 7'nin kalanı — Telegram
+   bildirimi + `AlertStore`'un DB'ye taşınması.
+2. **Kullanıcı tanımı bekleyen:** Kom2/Kom3 stratejileri (hiç tanımlanmadı).
+3. **Bilinçli ertelenen, toplu iş olarak bekleyen:** Chart'ta RSI/WT/RC
+   görselleştirmesi (v5 migrasyonu).
+4. **Sadece gözlem gerektiren (aktif iş yok):** `gorevler3.md` Görev 6 —
+   tier3 rotasyonunun (3 saatte bir) fiilen çalıştığını doğrulamak için
+   birkaç saatlik pasif gözlem yeterli.
+5. **gorevler2.md Görev 5** (alarm → chart zaman yolculuğu) — ertelendi,
+   istenirse tekrar gündeme alınabilir.
