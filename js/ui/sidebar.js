@@ -299,11 +299,18 @@ const Sidebar = (() => {
   let _groupTool = {};
   GROUPS.forEach(g => { if (g.sections[0]?.items[0]) _groupTool[g.id] = g.sections[0].items[0].id; });
   let _favorites = _loadFavorites();
-  let _showFavBar = true;
+  let _showFavBar = false;
   let _dragIdx = null;
   let _el = null;
   let _flyoutEl = null;
   let _favBarEl = null;
+  let _favBarPos = _loadFavBarPos(); // { left, top } — null = varsayılan konum (henüz hiç sürüklenmedi)
+
+  function _loadFavBarPos() {
+    try { const s = localStorage.getItem('pintrade_favbar_pos'); if (s) return JSON.parse(s); } catch (e) { }
+    return null;
+  }
+  function _saveFavBarPos() { try { localStorage.setItem('pintrade_favbar_pos', JSON.stringify(_favBarPos)); } catch (e) { } }
 
   function _loadFavorites() {
     try { const s = localStorage.getItem('pintrade_favorites'); if (s) return JSON.parse(s); } catch (e) { }
@@ -519,6 +526,49 @@ const Sidebar = (() => {
     _openGroup = null;
   }
 
+  /** Kayıtlı konum varsa onu, yoksa eski sabit (sol alt) görünümü uygular. */
+  function _applyFavBarPosition() {
+    if (!_favBarEl) return;
+    _favBarEl.style.bottom = 'auto';
+    if (_favBarPos) {
+      _favBarEl.style.left = _favBarPos.left + 'px';
+      _favBarEl.style.top = _favBarPos.top + 'px';
+    } else {
+      _favBarEl.style.left = '52px';
+      _favBarEl.style.top = (window.innerHeight - 40) + 'px';
+    }
+  }
+
+  /** TradingView'daki gibi tutamaçtan (⋮⋮) basılı tutup çubuğu chart üzerinde
+   *  serbestçe sürükleyip bırakabilme — konum `pintrade_favbar_pos`'a kalıcı kaydedilir. */
+  function _bindFavBarDrag(handleEl) {
+    if (!handleEl) return;
+    handleEl.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const rect = _favBarEl.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+      function onMove(ev) {
+        const maxLeft = window.innerWidth - rect.width;
+        const maxTop = window.innerHeight - rect.height;
+        const left = Math.min(Math.max(0, ev.clientX - offsetX), Math.max(0, maxLeft));
+        const top = Math.min(Math.max(0, ev.clientY - offsetY), Math.max(0, maxTop));
+        _favBarEl.style.left = left + 'px';
+        _favBarEl.style.top = top + 'px';
+        _favBarEl.style.bottom = 'auto';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        const r = _favBarEl.getBoundingClientRect();
+        _favBarPos = { left: r.left, top: r.top };
+        _saveFavBarPos();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
   /* ══ Yıldız butonunu güncelle + favbar'i aç/kapat ══ */
   function _renderFavBar() {
     // --- Favbar görünürlüğü ---
@@ -536,13 +586,22 @@ const Sidebar = (() => {
 
     // --- İçerik ---
     if (show) {
-      const html = _favorites.map((fId, idx) => {
+      const itemsHtml = _favorites.map((fId, idx) => {
         const tool = ALL_TOOLS[fId]; if (!tool) return '';
         return `<button class="favorites-bar__item${_activeTool === fId ? ' active' : ''}" draggable="true"
           data-action="favtool" data-tool="${fId}" data-idx="${idx}" title="${tool.label}">${TI[tool.icon] || ''}</button>`;
       }).join('');
-      _favBarEl.innerHTML = html;
-      _favBarEl.querySelectorAll('[data-action="favtool"]').forEach(btn => {
+      // TradingView'daki gibi serbestçe sürüklenip chart üzerinde istenen
+      // yere konumlandırılabilen yüzen bir çubuk — tutamaç (⋮⋮) sürükleniyor,
+      // araç butonlarının kendi draggable="true" sürüklemesiyle (yeniden
+      // sıralama) çakışmasın diye ayrı bir element.
+      _favBarEl.innerHTML = `
+        <div class="favorites-bar__handle" id="favorites-bar-handle" title="Sürükle">⋮⋮</div>
+        <div class="favorites-bar__track" id="favorites-bar-track">${itemsHtml}</div>
+      `;
+      _applyFavBarPosition();
+      const track = document.getElementById('favorites-bar-track');
+      track.querySelectorAll('[data-action="favtool"]').forEach(btn => {
         btn.addEventListener('click', () => _setActiveTool(btn.dataset.tool));
         btn.addEventListener('dragstart', e => { _dragIdx = +btn.dataset.idx; e.dataTransfer.effectAllowed = 'move'; });
         btn.addEventListener('dragover', e => {
@@ -554,6 +613,7 @@ const Sidebar = (() => {
         });
         btn.addEventListener('dragend', () => { _dragIdx = null; });
       });
+      _bindFavBarDrag(document.getElementById('favorites-bar-handle'));
     }
 
     // --- Yıldız buton görünümü ---
@@ -712,7 +772,6 @@ const Sidebar = (() => {
     }
 
     try { const s = localStorage.getItem('pintrade_favbar_show'); if (s !== null) _showFavBar = s === 'true'; } catch(e){}
-    try { localStorage.removeItem('pintrade_favbar_docked'); localStorage.removeItem('pintrade_favbar_pos'); } catch(e){}
 
     // ── First render (before this, read magnetMode from State — State.load() already ran) ──
     const savedMagnet = State.get('magnetMode');

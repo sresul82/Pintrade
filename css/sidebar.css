@@ -255,9 +255,10 @@
    FAVORİLER ÇUBUĞU
 ══════════════════════════════════════════════════════ */
 .favorites-bar {
+  /* left/top JS tarafından (_applyFavBarPosition) atanır — TradingView'daki
+     gibi tutamaçtan sürükleyip chart üzerinde istenen yere bırakılabilir,
+     konum pintrade_favbar_pos'a kalıcı kaydedilir. */
   position: fixed;
-  left: 52px;
-  bottom: 0;
   height: 40px;
   display: none;           /* JS toggle eder */
   align-items: center;
@@ -265,16 +266,38 @@
   gap: 4px;
   padding: 0 8px;
   background: var(--bg-secondary, #161a25);
-  border-top: 1px solid var(--border-primary, #2a2e39);
-  border-right: 1px solid var(--border-primary, #2a2e39);
-  z-index: 100;
+  border: 1px solid var(--border-primary, #2a2e39);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 200;
   overflow-x: auto;
   overflow-y: hidden;
-  min-width: 200px;
-  max-width: calc(100vw - 52px - 300px);
+  max-width: calc(100vw - 24px);
 }
 
-/* scrollbar gerekmiyor, zaten draggable */
+.favorites-bar__handle {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  letter-spacing: -2px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-secondary, #787b86);
+  cursor: grab;
+  user-select: none;
+}
+
+.favorites-bar__handle:active {
+  cursor: grabbing;
+}
+
+.favorites-bar__track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 
 .favorites-bar__item {
   display: flex;
