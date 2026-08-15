@@ -298,27 +298,32 @@ const DetailPanel = (() => {
    *  LSDataStore'da hazır (bkz. js/data/ls-data-store.js başlığı), sadece
    *  arayüze bağlanıyor. Popup kapalıyken de (ucuz DOM güncellemesi)
    *  taze tutuluyor ki açıldığı an güncel görünsün. */
-  function _ratioRow(label, m) {
+  /** Visivero'nun kart düzeni (2026-08-15, kullanıcı referans verdi): her
+   *  gösterge kendi çerçeveli kutusunda, İSİM ÜSTTE + BAR ALTTA (yan yana
+   *  değil). Önceki tur "L/S" ana kartındaki gibi tek satır (başlık solda,
+   *  bar sağda) yapmıştı — o, farklı bir yerleşim, popup'ta ayrı bir kart
+   *  serbestliği var, Visivero'yu birebir taklit etmek daha doğru. */
+  function _ratioCard(label, m) {
     if (!m || m.ratio == null || !isFinite(m.ratio)) return '';
     const pct = (m.ratio / (1 + m.ratio)) * 100;
-    return `<div class="dp-split-row">
-      <span class="dp-split-title" style="width:auto;min-width:60px;">${label}</span>
+    return `<div style="background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; padding:10px 12px;">
+      <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">${label}</div>
       <div class="dp-split-bar" style="width:100%;">
-        <div class="dp-split-buy" style="width:${pct.toFixed(1)}%">${pct.toFixed(1)}%</div>
-        <div class="dp-split-sell" style="width:${(100 - pct).toFixed(1)}%">${(100 - pct).toFixed(1)}%</div>
+        <div class="dp-split-buy" style="width:${pct.toFixed(1)}%">L ${pct.toFixed(1)}%</div>
+        <div class="dp-split-sell" style="width:${(100 - pct).toFixed(1)}%">${(100 - pct).toFixed(1)}% S</div>
       </div>
     </div>`;
   }
 
   function _renderLsPopupContent(metrics) {
     if (typeof MiniFloatingWindow === 'undefined') return;
-    const rows = [
-      _ratioRow('Trader Pos.', metrics?.topPosition),
-      _ratioRow('Exposure', _takerAsRatio(metrics?.taker)),
-      _ratioRow('Top Accts', metrics?.topAccount),
+    const cards = [
+      _ratioCard('Trader Positioning', metrics?.topPosition),
+      _ratioCard('Market Exposure', _takerAsRatio(metrics?.taker)),
+      _ratioCard('Top Accounts', metrics?.topAccount),
     ].filter(Boolean).join('');
-    const html = rows
-      ? `<div class="dp-bars-block" style="gap:12px; text-align:left;">${rows}</div>`
+    const html = cards
+      ? `<div style="display:flex; flex-direction:column; gap:10px;">${cards}</div>`
       : `<div style="text-align:center;">Veri yükleniyor...</div>`;
     MiniFloatingWindow.setContent('ls', html, 'LONG / SHORT');
   }

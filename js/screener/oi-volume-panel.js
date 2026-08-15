@@ -59,7 +59,9 @@ const OiVolumePanel = (() => {
 
   function _ensureCharts(container) {
     if (_oiChart) return;
-    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:hidden; resize:vertical; height:360px; min-height:260px; max-height:70vh;';
+    // [2026-08-15, kullanıcı isteği] Dikey resize kaldırıldı — bu popup'ta
+    // gerek yoktu, sabit bir yükseklik yeterli.
+    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:hidden; resize:none; height:360px;';
     container.innerHTML = `
       <div id="mfw-oi-tf" style="display:flex; gap:2px; flex-shrink:0;"></div>
       <div style="font-size:9px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">Open Interest</div>
