@@ -808,6 +808,7 @@ const App = {
           if(dpPanel) {
             dpPanel.style.display = 'flex';
             dpPanel.style.height = ''; // İçerik-boyutlu (fit-content) düzene dön
+            dpPanel.style.maxHeight = ''; // css/watchlist.css'teki .detail-panel{max-height:80%} tekrar geçerli olsun
             dpPanel.style.background = 'transparent';
           }
           if (detailTab) detailTab.style.display = 'block';
@@ -823,6 +824,13 @@ const App = {
             dpPanel.style.display = 'flex';
             dpPanel.style.flex = '1';
             dpPanel.style.height = '100%';
+            // [2026-08-15, kullanıcı bulgusu] css/watchlist.css'teki
+            // .detail-panel{max-height:80%} kuralı, Watchlist üstte yer
+            // kaplarken gerekliydi ama Watchlist'i gizlediğimiz bu sekmelerde
+            // (Alarm/Alerts/News) hâlâ geçerli kalıyordu — panel gerçek
+            // yüksekliğin sadece %80'inde kesiliyordu (Alarm listesindeki son
+            // kart ekranın altına değil, ortasında bir yere kesiliyordu).
+            dpPanel.style.maxHeight = 'none';
             dpPanel.style.background = 'var(--bg-secondary)'; // Make sure it has a background if taking full height
           }
 
