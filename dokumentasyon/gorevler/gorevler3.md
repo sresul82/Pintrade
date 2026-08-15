@@ -415,6 +415,21 @@ istek atıyor (repo public, ücretsiz), `main`'e push edildi, aktif.
 **Telegram bildirimi ve alarmların MongoDB'ye taşınması kullanıcı
 isteğiyle bu turda ATLANDI** — aşağıdaki kapsam hâlâ geçerli, bekliyor.
 
+**Telegram bildirimi — Kom1 kısmı tamamlandı (2026-08-15).** Kapsam kasıtlı
+olarak daraltıldı: fiyat alarmları (`AlertStore`) hâlâ localStorage'da, kendi
+DB taşıması + izleme döngüsü gerektiren ayrı/büyük bir iş — bu turda sadece
+**Kom1 sinyalleri** bağlandı, çünkü onun sunucu-taraflı izlemesi (`kom1-server-watcher.js`)
+zaten vardı, eksik olan tek şey Telegram'a mesaj atmaktı. `server.js`'e
+`sendTelegramMessage()` eklendi (env değişkeni yoksa sessizce no-op — özellik
+"kapalı" kalır, hata vermez), hem `Kom1ServerWatcher.tick()`'in confirm
+callback'ine hem `POST /api/kom1/signals`'a (11 coin'lik hızlı tarayıcı yolu)
+bağlandı. Kullanıcı kendi Telegram botunu (`@pinsignal_bot`, BotFather ile)
+oluşturdu, `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` Render dashboard'una eklendi.
+**Production'da uçtan uca doğrulandı** — ilk gerçek Kom1 sinyali (1000PEPEUSDT,
+4H) Telegram'a otomatik düştü. **Kalan:** fiyat alarmlarının (`AlertStore`)
+DB'ye taşınması + kendi sunucu izleme döngüsü — ayrı, büyük bir iş, henüz
+başlanmadı.
+
 **Kom1 tespit birleştirmesi (2026-08-14, tamamlandı):** `kom1-scanner.js`
 (tarayıcı, WS, sabit 11 coin) ve `kom1-server-watcher.js` (sunucu, REST,
 kalan evren) artık **tek, duplikasyonsuz kalıcı kayıt** üzerinde

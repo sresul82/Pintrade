@@ -123,7 +123,7 @@ Bu bloğun `[x]` işareti sadece kullanıcının onayı geldikten sonra kaldır�
 
 ---
 
-## [ ] ⏸ DUR — kullanıcı onayı bekle (Görev 5'ten önce)
+## [x] ⏸ DUR — kullanıcı onayı bekle (Görev 5'ten önce)
 
 Görev 4 bittikten sonra **DURACAKSIN**. Görev 5 (alarm → chart zaman yolculuğu) UI/UX kararları içeren bir özellik, kullanıcı onayı gerekiyor.
 
@@ -131,9 +131,22 @@ Bu bloğu geçmek için kullanıcı açıkça "Görev 5'e geç" demeli. Aksi hal
 
 ---
 
-## [ ] Görev 5 — Alarm kartına tıklayınca chart'ın sinyalin tarihine gitmesi ("zaman yolculuğu")
+## [x] Görev 5 — Alarm kartına tıklayınca chart'ın sinyalin tarihine gitmesi ("zaman yolculuğu")
 
-**Ertelendi (2026-08-08):** Kullanıcı "zor iş olabilir, şimdilik atlayalım" dedi — iptal değil, ertelendi. Sırada beklemeye devam ediyor, ne zaman istenirse ele alınır.
+**Tamamlandı (2026-08-15).** Rapor: `2026-08-15-lwc-v5-migration-ve-zaman-yolculugu.md`
+
+**Sonuç:** `alarm-signal-history.js`'deki kart tıklama handler'ı artık karta
+`data-timestamp` taşıyor, `EventBus.emit('symbol:change', {..., targetTimestamp})`
+ile chart'a iletiyor. `chart-core.js`'teki bridge, sembol zaten aktifse
+`ChartPane.goToTime()`'ı doğrudan çağırıyor; farklı bir sembolse (asenkron veri
+yüklemesi bitene kadar) `_pendingGoToTime` olarak bekletip `_onFeedCandles`'da
+tetikliyor. `goToTime()` bar-index hesabı yapmadan `timeScale().setVisibleRange()`
+(zaman-tabanlı, `syncRange()`'in de kullandığı desen) ile TF'e göre makul bir
+pencere (±75 bar) açıp sinyalin ateşlendiği ana ortalıyor. Production'da hem
+asenkron (farklı sembol) hem senkron (zaten açık sembol) yol test edildi — 34
+dakikalık sapma, tek bir 1H bar içinde.
+
+**Ertelenme geçmişi (2026-08-08):** Kullanıcı "zor iş olabilir, şimdilik atlayalım" dedi — iptal değil, ertelendi. `lightweight-charts v5` migrasyonu (aynı gün, Görev 5'ten hemen önce) yapıldıktan sonra ele alındı.
 
 **Bağlam:** Alarm demo kartları çalışırken bilinçli olarak ertelenmişti (o zamanki not: "kolaydan başlayalım, sonra bu eklenir" — bkz. `dokumentasyon/raporlar/2026-08-07-alarm-sekmesi-sinyal-gecmisi-kartlari-demo.md`). Şimdi sırası.
 

@@ -35,7 +35,7 @@
 | 2 | L/S verisini görsel arayüze bağlama | ✅ |
 | 3 | Bybit L/S (faz 2) | ✅ |
 | 4 | fr-tracker.js yanlış backend düzeltmesi | ✅ |
-| 5 | Alarm kartı → chart zaman yolculuğu | ⏸ **Ertelendi** (kullanıcı: "zor iş olabilir, şimdilik atlayalım") |
+| 5 | Alarm kartı → chart zaman yolculuğu | ✅ (2026-08-15) — production'da doğrulandı |
 | 6 | Alarm'a "önerilen giriş fiyatı" + geri ölçüm kaydı | ✅ (2026-08-14) — Alarm sekmesi artık `/api/kom1/signals`'tan (kalıcı, tüm evren) besleniyor, kartlarda "Giriş Fiyatı" chip'i + canlı %fark var |
 | 7 | Watchlist SPOT gerçek işlevi (sadece liste) | ✅ |
 | 8 | Delist/yeni liste/en yükselen uyarısı | ✅ |
@@ -66,7 +66,7 @@
 | 4 | Watchlist Kom1 grubuna yazma + alarm bildirimi | ✅ (2026-08-10) |
 | 5 | Canlı gözlem + ince ayar | ✅ (2026-08-12) — 9/10 sinyalle kullanıcı onayıyla kapatıldı |
 | 6 | Tüm piyasaya genişletme (hacme göre 3 katman rotasyon) | ⏳ İmplementasyon tamamlandı (2026-08-12), gözlem sürüyor — tier3'ün (3sa) rotasyona girdiği henüz doğrulanmadı |
-| 7 | Sunucu taraflı izleme + Telegram bildirimi | ⏳ Kısmen tamamlandı (2026-08-14): keep-alive (GitHub Actions, sunucu artık uyumuyor) + tarayıcı/sunucu Kom1 tespitinin tek kalıcı kayıtta birleştirilmesi (duplikasyonsuz). **Kalan:** Telegram bildirimi, `AlertStore`'un (fiyat alarmları) MongoDB'ye taşınması |
+| 7 | Sunucu taraflı izleme + Telegram bildirimi | ⏳ Kısmen tamamlandı: keep-alive (2026-08-14) + Kom1 tespit birleştirmesi (2026-08-14) + **Kom1 → Telegram bildirimi (2026-08-15, production'da doğrulandı)**. **Kalan:** `AlertStore`'un (fiyat alarmları) MongoDB'ye taşınması + kendi izleme döngüsü |
 | 8 | Git düzensizliğini temizle (main/master ayrışması) | ✅ (2026-08-14) — `master` silindi, tek dal (`main`) kaldı, kayıp iş yoktu |
 
 **Bilinen kritik bulgu (2026-08-14):** Render'ın ücretsiz katmanı inaktiflikte
@@ -83,21 +83,34 @@ parçasının doğrudan gerekçesi oldu. Detay: `2026-08-14-kom1-uyku-kaybi-ve-s
 - Sinyal aktiflik süresi geçici olarak 24h ("Old" eşiğiyle aynı) — TODO: ileride hedef/stop bazlı kurala geçilecek
 
 **İleri seviye — Kom1 gözlem sonrası:**
-- Chart üzerinde RSI/WT/RC görselleştirmesi — `lightweight-charts v5` migrasyonu gerektiriyor, toplu/tek seferlik bir iş olarak bilinçli ertelendi (EMA/DEMA/Heikin Ashi zaten v4'te chart'a bağlandı)
+- Chart üzerinde RSI/WT/RC görselleştirmesi — `lightweight-charts v5` migrasyonu
+  **tamamlandı (2026-08-15)**, ön koşul artık hazır. Detaylı fazlı plan yazıldı
+  (RSI/WaveTrend alt-panel, Regression Channel overlay, TV-tarzı menü) — geçmişte
+  v4'te 3 kez denenip başarısız olmuştu, yeni plan o üç yöntemi tekrarlamıyor,
+  v5'in native pane API'sini kullanıyor. **Henüz kodlanmadı**, sonraki oturumda
+  tam zamanla fazlı olarak ele alınacak.
 - Botların gerçek zamanlı çalışır durumda tutulması — izleme/health-check mekanizması (şu an sadece konsol logları var)
-- Alert → Telegram bildirim entegrasyonu (Görev 7'nin kalanı)
+- Alert → Telegram bildirim entegrasyonu — **Kom1 kısmı tamamlandı (2026-08-15,
+  production'da doğrulandı)**, fiyat alarmları (AlertStore) hâlâ bekliyor
 
 ---
 
-## Şu an nerede duruyoruz — özet (2026-08-14)
+## Şu an nerede duruyoruz — özet (2026-08-15 güncellemesi)
 
-1. **Açık, aktif iş bekleyen:** `gorevler3.md` Görev 7'nin kalanı — Telegram
-   bildirimi + `AlertStore`'un DB'ye taşınması.
-2. **Kullanıcı tanımı bekleyen:** Kom2/Kom3 stratejileri (hiç tanımlanmadı).
-3. **Bilinçli ertelenen, toplu iş olarak bekleyen:** Chart'ta RSI/WT/RC
-   görselleştirmesi (v5 migrasyonu).
+**Bugün tamamlanan ve production'da doğrulanan işler:**
+- `lightweight-charts` v4.1.3 → v5.2.1 migration (tüm chart tipleri, indikatörler, çizim araçları, OI/Volume popup regresyonsuz)
+- `gorevler2.md` Görev 5 — alarm kartı → chart zaman yolculuğu
+- `gorevler3.md` Görev 7'nin Telegram parçası — Kom1 sinyalleri artık Telegram'a düşüyor (fiyat alarmları hariç)
+- Çeşitli UI tutarlılık düzeltmeleri (L/S, OI/Volume, Alarm sekmesi buton/renk standardı, mooo.com backend-URL hatası)
+
+**Kalanlar:**
+1. **Büyük, planı hazır iş:** Chart'ta RSI/WaveTrend (alt-panel)/Regression Channel
+   (overlay) indikatörleri — fazlı plan yazıldı (`~/.claude/plans/robust-strolling-turtle.md`
+   Part C), v4'te 3 kez başarısız olduğu için sonraki oturumda tam zamanla,
+   dikkatli/fazlı ele alınacak.
+2. **Açık, aktif iş bekleyen:** `gorevler3.md` Görev 7'nin kalanı — `AlertStore`'un
+   (fiyat alarmları) DB'ye taşınması + kendi sunucu izleme döngüsü.
+3. **Kullanıcı tanımı bekleyen:** Kom2/Kom3 stratejileri (hiç tanımlanmadı).
 4. **Sadece gözlem gerektiren (aktif iş yok):** `gorevler3.md` Görev 6 —
    tier3 rotasyonunun (3 saatte bir) fiilen çalıştığını doğrulamak için
    birkaç saatlik pasif gözlem yeterli.
-5. **gorevler2.md Görev 5** (alarm → chart zaman yolculuğu) — ertelendi,
-   istenirse tekrar gündeme alınabilir.
