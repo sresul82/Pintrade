@@ -520,7 +520,7 @@ class ChartPane {
     const pScaleId = this.priceSide === 'left' ? 'left' : 'right';
 
     if (this.showVolume) {
-      this.volSeries = this.chart.addHistogramSeries({
+      this.volSeries = this.chart.addSeries(LightweightCharts.HistogramSeries, {
         color: 'rgba(70,130,100,.35)',
         priceFormat: { type: 'volume' },
         priceScaleId: '', // Özel axis yerine overlay axis olmak zorunda! Yoksa ekranı kaplar.
@@ -545,21 +545,21 @@ class ChartPane {
 
     switch (this.chartType) {
       case 'line':
-        this.series = this.chart.addLineSeries({ color: COLORS.accent, lineWidth: 2, priceScaleId: pScaleId, priceFormat: _defaultPF });
+        this.series = this.chart.addSeries(LightweightCharts.LineSeries, { color: COLORS.accent, lineWidth: 2, priceScaleId: pScaleId, priceFormat: _defaultPF });
         break;
       case 'area':
-        this.series = this.chart.addAreaSeries({
+        this.series = this.chart.addSeries(LightweightCharts.AreaSeries, {
           topColor: 'rgba(0,184,196,.3)', bottomColor: 'rgba(0,184,196,.02)',
           lineColor: COLORS.accent, lineWidth: 2, priceScaleId: pScaleId, priceFormat: _defaultPF,
         });
         break;
       case 'bar':
-        this.series = this.chart.addBarSeries({
+        this.series = this.chart.addSeries(LightweightCharts.BarSeries, {
           upColor: up, downColor: down, priceScaleId: pScaleId, priceFormat: _defaultPF,
         });
         break;
       default: // candle
-        this.series = this.chart.addCandlestickSeries({
+        this.series = this.chart.addSeries(LightweightCharts.CandlestickSeries, {
           upColor: up,   downColor: down,
           borderUpColor: bUp, borderDownColor: bDn,
           wickUpColor: wUp,   wickDownColor: wDn,
@@ -658,7 +658,7 @@ class ChartPane {
         this._indSeries[cfg.id].applyOptions({ color: cfg.color });
         return;
       }
-      this._indSeries[cfg.id] = this.chart.addLineSeries({
+      this._indSeries[cfg.id] = this.chart.addSeries(LightweightCharts.LineSeries, {
         color: cfg.color, lineWidth: 2, priceScaleId: this._mainScaleId(),
         priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
         lastValueVisible: false, priceLineVisible: false,

@@ -147,14 +147,14 @@ const OiVolumePanel = (() => {
     const LINE_COLOR = _cssVar('--text-primary', '#d1d4dc');
     const opts = _chartOpts();
     _oiChart = LightweightCharts.createChart(_oiEl, opts);
-    _oiSeries = _oiChart.addAreaSeries({
+    _oiSeries = _oiChart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: LINE_COLOR, lineWidth: 1.5,
       topColor: _withAlpha(LINE_COLOR, 0.24), bottomColor: _withAlpha(LINE_COLOR, 0),
       priceLineVisible: false,
     });
 
     _volChart = LightweightCharts.createChart(_volEl, opts);
-    _volSeries = _volChart.addAreaSeries({
+    _volSeries = _volChart.addSeries(LightweightCharts.AreaSeries, {
       lineColor: LINE_COLOR, lineWidth: 1.5,
       topColor: _withAlpha(LINE_COLOR, 0.24), bottomColor: _withAlpha(LINE_COLOR, 0),
       priceLineVisible: false,

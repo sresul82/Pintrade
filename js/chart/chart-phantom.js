@@ -43,7 +43,7 @@ var ChartPhantom = (() => {
 
     try {
       // Görünmez LineSeries oluştur
-      pane._phantomSeries = pane.chart.addLineSeries({
+      pane._phantomSeries = pane.chart.addSeries(LightweightCharts.LineSeries, {
         color:                  'rgba(0,0,0,0)', // Tamamen şeffaf — kullanıcı görmez
         lineWidth:              1,
         overlay:                true,            // [FIX] Fiyat eksenine bağlanmaz, zoom/fit hesabına girmez
