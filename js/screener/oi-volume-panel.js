@@ -122,11 +122,13 @@ const OiVolumePanel = (() => {
 
   function _ensureCharts(container) {
     if (_oiChart) return;
-    // [2026-08-15, kullanıcı isteği] Bu popup hem dikey hem yatay resize
-    // edilebilir olmalı (L/S ile karıştırılmasın — sadece L/S'in resize'ı
-    // kaldırılması istenmişti). overflow:auto şart, native CSS resize
-    // overflow:visible ile çalışmaz.
-    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:auto; resize:both; height:360px; width:340px; min-width:260px; min-height:220px;';
+    // [2026-08-15, kullanıcı isteği] Resize artık DIŞ pencerede (mini-
+    // floating-window.js'teki .mfw-panel, _PANEL_OPTS.oi.resizable) —
+    // burası sadece o pencerenin kalan alanını dolduruyor (flex:1). Önceden
+    // burada kendi sabit width/height + resize:both'u vardı, ama dış
+    // sarmalayıcı hâlâ sabit/dar olduğu için taşan kısım kırpılıyordu
+    // (fiyat cetveli kayboluyordu) — kullanıcı bunu fark etti.
+    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:hidden; flex:1 1 auto; min-height:0; width:100%; box-sizing:border-box;';
     container.innerHTML = `
       <div id="mfw-oi-tf" style="display:flex; gap:2px; flex-shrink:0;"></div>
       <div style="font-size:9px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.3px;">Open Interest</div>

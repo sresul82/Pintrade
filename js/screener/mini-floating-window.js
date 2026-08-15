@@ -6,7 +6,21 @@
 const MiniFloatingWindow = (() => {
   const _panels = {}; // id -> { el, contentEl }
 
+  // [2026-08-15, kullanıcı geri bildirimi] Önceden TÜM panellerin ölçüsü tek
+  // bir paylaşılan stil bloğundan geliyordu — L/S için "daralt" isteği
+  // yanlışlıkla OI/Volume'u da etkiledi, ve OI/Volume'un kendi resize'ı da
+  // dış sarmalayıcının (mfw-panel) SABİT genişliği + overflow:hidden'ı
+  // yüzünden görünmez/işe yaramaz kalıyordu (içerik resize edilse bile dışarı
+  // taşan kısmı kırpılıyordu). Artık her panel kendi genişlik/resize
+  // ayarına sahip — biri değişince diğeri ETKİLENMEZ. Yeni bir panel eklenirken
+  // buraya kendi satırını ekle.
+  const _PANEL_OPTS = {
+    ls: { width: 280, height: null, resizable: false },       // içerik kendi boyunu belirler (auto-height)
+    oi: { width: 340, height: 400, resizable: true },          // kullanıcı elle büyütüp küçültebilir (hem dikey hem yatay)
+  };
+
   function _createEl(id, title) {
+    const opts = _PANEL_OPTS[id] || { width: 280, height: null, resizable: false };
     const div = document.createElement('div');
     div.className = 'mfw-panel';
     div.setAttribute('role', 'dialog');
@@ -15,8 +29,9 @@ const MiniFloatingWindow = (() => {
       position: fixed;
       top: 90px;
       right: 480px;
-      width: 280px;
-      max-height: 80vh;
+      width: ${opts.width}px;
+      ${opts.height ? `height: ${opts.height}px;` : 'max-height: 80vh;'}
+      ${opts.resizable ? `resize: both; min-width: 260px; min-height: 220px;` : ''}
       display: flex;
       flex-direction: column;
       background: var(--bg-primary);
@@ -45,12 +60,17 @@ const MiniFloatingWindow = (() => {
 
     const content = document.createElement('div');
     content.className = 'mfw-content';
-    // [2026-08-15, kullanıcı isteği] Sabit height + overflow:auto scrollbar
-    // yaratıyordu (L/S 4 karta çıkınca taştı). Artık height:auto — pencere
-    // içeriğine göre kendi boyunu alır, hiçbir zaman scroll oluşmaz. Resize
-    // hâlâ kapalı (L/S için istenen buydu — OI/Volume'un kendi container
-    // override'ı ayrı, orada resize:both var).
-    content.style.cssText = 'flex:0 0 auto; height:auto; overflow:visible; resize:none; padding:14px; font-size:11px; color:var(--text-primary); text-align:center;';
+    if (opts.resizable) {
+      // Resize artık DIŞ sarmalayıcıda (div) — içerik sadece kalan alanı
+      // dolduruyor. min-height:0 flex sütununda gerekli (yoksa içerik kendi
+      // intrinsic boyutunun altına küçülemez, resize küçültme yönünde çalışmaz).
+      content.style.cssText = 'flex:1 1 auto; min-height:0; overflow:hidden; padding:0;';
+    } else {
+      // [2026-08-15, kullanıcı isteği] Sabit height + overflow:auto scrollbar
+      // yaratıyordu (L/S 4 karta çıkınca taştı). height:auto — pencere
+      // içeriğine göre kendi boyunu alır, hiçbir zaman scroll oluşmaz.
+      content.style.cssText = 'flex:0 0 auto; height:auto; overflow:visible; resize:none; padding:14px; font-size:11px; color:var(--text-primary); text-align:center;';
+    }
     content.textContent = 'İçerik yakında eklenecek...';
 
     div.appendChild(tb);
