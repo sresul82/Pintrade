@@ -24,12 +24,23 @@ window.initChartCore = function() {
 
   // ── Bridge: symbol:change from navbar / State.setSymbol ──────
   // When sourceIdx is missing (navbar search), update the active pane
-  EventBus.on('symbol:change', ({ sourceIdx, symbol, exchange }) => {
+  EventBus.on('symbol:change', ({ sourceIdx, symbol, exchange, targetTimestamp }) => {
     if (sourceIdx !== undefined) return; // SyncManager handles pane-level changes
     const active = pm.getActivePane();
     if (!active) return;
     const sym = (symbol || '').toUpperCase();
     if (!sym) return;
+    // "Zaman yolculuğu" (alarm kartına tıklama, bkz. alarm-signal-history.js):
+    // sembol zaten aktifse setSymbol() hiçbir şey yapmaz (çift tetiklenme
+    // koruması, chart-pane.js:1367) — bu durumda veri zaten yüklü, doğrudan
+    // kaydırabiliriz. Farklı bir sembolse setSymbol() ASENKRON veri yükler
+    // (_loadData → DataFeed.load → _onFeedCandles), o yüzden burada hemen
+    // goToTime çağıramayız — pane üzerinde bir "pending" bayrağı bırakıyoruz,
+    // gerçek kaydırma _onFeedCandles veri gelince yapılır.
+    if (targetTimestamp) {
+      if (active.symbol === sym) active.goToTime(targetTimestamp);
+      else active._pendingGoToTime = targetTimestamp;
+    }
     active.setSymbol(sym, exchange);
     // Update search placeholder to reflect the new symbol
     const input = document.getElementById('nb-sym-search');

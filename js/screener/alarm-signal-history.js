@@ -361,7 +361,7 @@ const AlarmSignalHistory = (() => {
       ).join('');
 
       html += `
-        <div class="kom-alarm-card" data-symbol="${sig.symbol.replace(/USDT$/, '')}" data-exchange="${sig.exchange}" style="
+        <div class="kom-alarm-card" data-symbol="${sig.symbol.replace(/USDT$/, '')}" data-exchange="${sig.exchange}" data-timestamp="${sig.timestamp}" style="
           background:var(--bg-secondary); border:0.75px solid rgba(200,200,205,0.85);
           border-radius:10px; padding:10px 12px; cursor:pointer; opacity:${cardOpacity};
           transition: opacity 0.15s ease;
@@ -456,7 +456,13 @@ const AlarmSignalHistory = (() => {
       const cardExchange = card.dataset.exchange || ExchangeRouter.getActive();
       // Kartın kendi borsasına geç — aktif borsa dropdown'undan bağımsız
       // çalışıyoruz, o coin gerçekte hangi borsada sinyal verdiyse oraya gidilir.
-      EventBus.emit('symbol:change', { symbol: sym + 'USDT', exchange: cardExchange });
+      // targetTimestamp: "zaman yolculuğu" — chart bu sinyalin ateşlendiği ana
+      // ortalanır (bkz. chart-core.js'teki symbol:change bridge + ChartPane.goToTime).
+      EventBus.emit('symbol:change', {
+        symbol: sym + 'USDT',
+        exchange: cardExchange,
+        targetTimestamp: Number(card.dataset.timestamp) || undefined,
+      });
 
       // Karta tıklayınca arama kutusu o coin'e dolar, Kom ve Borsa filtreleri
       // "All"a döner — böylece aynı coin'in farklı Kom/borsa kombinasyonlarındaki

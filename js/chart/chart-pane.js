@@ -917,7 +917,15 @@ class ChartPane {
     this._recomputeAllIndicators();
     requestAnimationFrame(() => this._positionCountdown());
 
-    if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
+    // [2026-08-15] Alarm kartından "zaman yolculuğu" bekleniyorsa (bkz.
+    // goToTime()), varsayılan "son 150 bar'a sığdır" davranışını atla —
+    // yoksa önce oraya sığdırır, hemen ardından goToTime tekrar kaydırır,
+    // gözle görülür bir "zıplama" olurdu.
+    if (this._pendingGoToTime) {
+      this.goToTime(this._pendingGoToTime);
+      this._pendingGoToTime = null;
+      this._initialDataLoaded = true;
+    } else if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
       this._initialDataLoaded = true;
       // [FIX] fitContent() phantom'ın (ChartPhantom.update, yukarıda) sağa
       // uzattığı 1000 barlık görünmez seriyi de ekrana sığdırmaya çalışır —
@@ -1828,6 +1836,36 @@ class ChartPane {
       const toBar = totalBars - 1;
       const fromBar = Math.max(0, toBar - visibleBars);
       ts.setVisibleLogicalRange({ from: fromBar, to: toBar + 12 });
+    } catch (_) {}
+  }
+
+  // [2026-08-15, kullanıcı isteği] Alarm sekmesinde bir sinyal kartına
+  // tıklayınca chart'ın "zamana gitmesi" — bar-index hesabına gerek yok,
+  // syncRange() zaten aynı deseni (Unix-timestamp tabanlı setVisibleRange)
+  // kullanıyor, aynısını burada da kullanıyoruz. timestampMs milisaniye
+  // (sig.timestamp, JS Date formatı) — LWC saniye bekliyor, /1000 şart.
+  goToTime(timestampMs) {
+    if (!this.chart || !timestampMs) return;
+    try {
+      const ts = Math.floor(timestampMs / 1000);
+      const tfSec = this._tfSeconds() || 3600;
+      const halfWindow = tfSec * 37; // ~75 barlık pencere, goToRealtime'daki 150-bar oranının yarısı
+      this.chart.timeScale().setVisibleRange({ from: ts - halfWindow, to: ts + halfWindow });
+    } catch (_) {}
+  }
+
+  // [2026-08-15, kullanıcı isteği] Alarm sekmesindeki bir sinyal kartına
+  // tıklanınca chart'ın o sinyalin ateşlendiği zamana "kaydırılması" — bkz.
+  // chart-core.js'teki symbol:change bridge (targetTimestamp) ve
+  // alarm-signal-history.js'teki kart tıklama handler'ı. Bar-index hesabı
+  // yerine syncRange()'in de kullandığı zaman-tabanlı setVisibleRange
+  // kullanılıyor — hangi TF'te kaç bar olduğunu bilmeye gerek kalmıyor.
+  goToTime(timestampMs) {
+    if (!this.chart || !timestampMs) return;
+    try {
+      const ts = Math.floor(timestampMs / 1000); // LWC saniye bekler, sig.timestamp ms
+      const halfWindow = this._tfSeconds() * 75; // goToRealtime'daki ~150 bar'a denk
+      this.chart.timeScale().setVisibleRange({ from: ts - halfWindow, to: ts + halfWindow });
     } catch (_) {}
   }
 
