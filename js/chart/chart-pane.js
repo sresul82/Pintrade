@@ -241,7 +241,7 @@ class ChartPane {
     this.rtBtn = document.createElement('button');
     this.rtBtn.className = 'pane-rt-btn';
     this.rtBtn.title = 'Go to realtime (End)';
-    this.rtBtn.innerHTML = ICONS.arrowRight;
+    this.rtBtn.innerHTML = ICONS.refreshCircle;
     this.cvs.appendChild(this.rtBtn);
 
     // Countdown to bar close label (Issue #3)
@@ -1314,7 +1314,7 @@ class ChartPane {
     // Removed chart type dropdown listener, it is handled globally
 
     // Realtime button
-    this.rtBtn.addEventListener('click', () => this.chart.timeScale().scrollToRealTime());
+    this.rtBtn.addEventListener('click', () => this.goToRealtime());
 
     // Gear button → open TradingView right-click menu
     this.gearBtn.addEventListener('click', e => {
@@ -1813,7 +1813,23 @@ class ChartPane {
   }
 
   fitContent() { this.chart?.timeScale().fitContent(); }
-  goToRealtime() { this.chart?.timeScale().scrollToRealTime(); }
+
+  // [FIX 2026-08-15] native scrollToRealTime() phantom'ın (1000 barlık
+  // görünmez gelecek serisi) zaman aralığını da "gerçek" sayıp oraya kadar
+  // kayıyordu — son gerçek mum ekranın çok solunda kalıp phantom'ın boş
+  // alanı görünüyordu. fitContent/dblclick'teki AYNI mantık burada da
+  // kullanılıyor: gerçek mum sayısına göre logical range hesapla.
+  goToRealtime() {
+    if (!this.chart || !this.candlesData || !this.candlesData.length) return;
+    try {
+      const ts = this.chart.timeScale();
+      const totalBars = this.candlesData.length;
+      const visibleBars = 150;
+      const toBar = totalBars - 1;
+      const fromBar = Math.max(0, toBar - visibleBars);
+      ts.setVisibleLogicalRange({ from: fromBar, to: toBar + 12 });
+    } catch (_) {}
+  }
 
   syncCrosshair(time) {
     if (!this.series || !this.chart || !time) return;
