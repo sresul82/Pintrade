@@ -306,8 +306,10 @@ const DetailPanel = (() => {
   function _ratioCard(label, m) {
     if (!m || m.ratio == null || !isFinite(m.ratio)) return '';
     const pct = (m.ratio / (1 + m.ratio)) * 100;
+    // [2026-08-15, kullanıcı geri bildirimi] --text-secondary koyu zeminde
+    // okunaksızdı — kart başlığı --text-primary'ye çekildi.
     return `<div style="background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; padding:10px 12px;">
-      <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">${label}</div>
+      <div style="font-size:10px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">${label}</div>
       <div class="dp-split-bar" style="width:100%;">
         <div class="dp-split-buy" style="width:${pct.toFixed(1)}%">L ${pct.toFixed(1)}%</div>
         <div class="dp-split-sell" style="width:${(100 - pct).toFixed(1)}%">${(100 - pct).toFixed(1)}% S</div>
@@ -315,12 +317,20 @@ const DetailPanel = (() => {
     </div>`;
   }
 
+  // [2026-08-15, kullanıcı geri bildirimi — 2. kez sorulan eksiklik] Önceden
+  // sadece 3 kart vardı (global/"Long-Short Accounts" popup'ta EKSİKTİ, ana
+  // karttaki "L/S" bar'ıyla aynı veri olduğu için kasten dışarıda
+  // bırakılmıştı). Visivero'da 4 gösterge var — sıralama Binance'in kendi
+  // futures/data endpoint sırasıyla aynı (LSDataStore'daki fetch sırası da
+  // budur): Long/Short Accounts (global) → Top Trader Positions →
+  // Top Trader Accounts → Taker Buy/Sell (Market Exposure).
   function _renderLsPopupContent(metrics) {
     if (typeof MiniFloatingWindow === 'undefined') return;
     const cards = [
+      _ratioCard('Long / Short Accounts', metrics?.global),
       _ratioCard('Trader Positioning', metrics?.topPosition),
-      _ratioCard('Market Exposure', _takerAsRatio(metrics?.taker)),
       _ratioCard('Top Accounts', metrics?.topAccount),
+      _ratioCard('Market Exposure', _takerAsRatio(metrics?.taker)),
     ].filter(Boolean).join('');
     const html = cards
       ? `<div style="display:flex; flex-direction:column; gap:10px;">${cards}</div>`

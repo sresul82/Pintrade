@@ -35,8 +35,11 @@ const MiniFloatingWindow = (() => {
       border-bottom:1px solid var(--border-primary);
       cursor:grab; flex-shrink:0;
     `;
+    // [2026-08-15, kullanıcı geri bildirimi] --text-secondary koyu zeminde
+    // okunaksızdı — başlık --text-primary'ye çekildi (kapatma ikonu görsel
+    // hiyerarşi gereği hâlâ soluk kalabilir, metin değil).
     tb.innerHTML = `
-      <span style="font-size:10px;font-weight:600;color:var(--text-secondary);letter-spacing:0.5px;">${title}</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text-primary);letter-spacing:0.5px;">${title}</span>
       <button class="mfw-close" aria-label="Kapat" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;cursor:pointer;line-height:1;padding:0 2px;">✕</button>
     `;
 

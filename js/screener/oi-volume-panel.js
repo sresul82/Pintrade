@@ -59,7 +59,10 @@ const OiVolumePanel = (() => {
 
   function _chartOpts() {
     return {
-      layout: { background: { type: 'solid', color: 'transparent' }, textColor: _cssVar('--text-secondary', '#8a8f98'), fontSize: 10 },
+      // [2026-08-15, kullanıcı geri bildirimi] --text-secondary (#787b86)
+      // koyu zemin üzerinde okunaksız bulundu — eksen yazıları --text-primary
+      // ile daha açık/beyaza yakın renkte.
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: _cssVar('--text-primary', '#d1d4dc'), fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
       rightPriceScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)') },
       timeScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)'), timeVisible: true },
@@ -75,6 +78,33 @@ const OiVolumePanel = (() => {
     };
   }
 
+  /** İmleç grafiğin üzerine gelince (crosshair) zaman + değeri gösteren
+   *  küçük bir tooltip — referans TradingView/Visivero'daki gibi. lightweight-
+   *  charts'ın kendi built-in tooltip'i yok, subscribeCrosshairMove ile elle
+   *  konumlanan bir DOM elemanı kullanılıyor. */
+  function _attachTooltip(chart, series, hostEl, formatValue) {
+    const tip = document.createElement('div');
+    tip.style.cssText = 'position:absolute; top:4px; display:none; pointer-events:none; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:4px; padding:3px 7px; font-size:10px; color:var(--text-primary); z-index:5; white-space:nowrap;';
+    hostEl.appendChild(tip);
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        tip.style.display = 'none';
+        return;
+      }
+      const d = param.seriesData.get(series);
+      if (!d || d.value == null) {
+        tip.style.display = 'none';
+        return;
+      }
+      const dt = new Date(param.time * 1000);
+      const timeStr = dt.toLocaleString('tr-TR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      tip.textContent = `${timeStr}  ·  ${formatValue(d.value)}`;
+      tip.style.display = 'block';
+      const left = param.point.x + 130 > hostEl.clientWidth ? param.point.x - 130 : param.point.x + 10;
+      tip.style.left = Math.max(0, left) + 'px';
+    });
+  }
+
   function _ensureCharts(container) {
     if (_oiChart) return;
     // [2026-08-15, kullanıcı isteği] Dikey resize kaldırıldı — bu popup'ta
@@ -82,19 +112,20 @@ const OiVolumePanel = (() => {
     container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:hidden; resize:none; height:360px;';
     container.innerHTML = `
       <div id="mfw-oi-tf" style="display:flex; gap:2px; flex-shrink:0;"></div>
-      <div style="font-size:9px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">Open Interest</div>
-      <div id="mfw-oi-chart" style="flex:1; min-height:90px;"></div>
-      <div style="font-size:9px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">Volume</div>
-      <div id="mfw-vol-chart" style="flex:1; min-height:90px;"></div>
+      <div style="font-size:9px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.3px;">Open Interest</div>
+      <div id="mfw-oi-chart" style="flex:1; min-height:90px; position:relative;"></div>
+      <div style="font-size:9px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.3px;">Volume</div>
+      <div id="mfw-vol-chart" style="flex:1; min-height:90px; position:relative;"></div>
     `;
     _oiEl  = container.querySelector('#mfw-oi-chart');
     _volEl = container.querySelector('#mfw-vol-chart');
 
-    // [2026-08-15, kullanıcı geri bildirimi] Neon accent-blue istenmedi —
-    // düz beyaz çizgi/alan kullanılıyor. --text-primary kasıtlı olarak
-    // KULLANILMADI: o değişken temaya göre değişiyor (light theme'de neredeyse
-    // siyaha dönüyor), kullanıcı özellikle "beyaz" istedi — sabit hex.
-    const LINE_COLOR = '#ffffff';
+    // [2026-08-15, kullanıcı geri bildirimi] Neon accent-blue yerine beyaza
+    // yakın çizgi — --text-primary KULLANILIYOR (bu kez kasıtlı): dark
+    // temada #d1d4dc (beyaza çok yakın, kullanıcının istediği "beyaz"
+    // görünümü verir) ve light temada #1f2328'e döner (beyaz zeminde bir
+    // beyaz çizgi görünmez olurdu — tema-duyarlı olması şart).
+    const LINE_COLOR = _cssVar('--text-primary', '#d1d4dc');
     const opts = _chartOpts();
     _oiChart = LightweightCharts.createChart(_oiEl, opts);
     _oiSeries = _oiChart.addAreaSeries({
@@ -109,6 +140,10 @@ const OiVolumePanel = (() => {
       topColor: _withAlpha(LINE_COLOR, 0.24), bottomColor: _withAlpha(LINE_COLOR, 0),
       priceLineVisible: false,
     });
+
+    const _fmtVal = (v) => (typeof formatVolume === 'function' ? formatVolume(v) : v);
+    _attachTooltip(_oiChart, _oiSeries, _oiEl, _fmtVal);
+    _attachTooltip(_volChart, _volSeries, _volEl, _fmtVal);
 
     _ro = new ResizeObserver(() => {
       if (_oiEl && _oiChart)  _oiChart.resize(_oiEl.clientWidth, _oiEl.clientHeight);
