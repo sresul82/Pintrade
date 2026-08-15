@@ -24,6 +24,12 @@ const OiVolumePanel = (() => {
   const TF_SECONDS  = { '5m': 300, '15m': 900, '1H': 3600, '4H': 14400, '1D': 86400 };
   const BINANCE_TF  = { '5m': '5m', '15m': '15m', '1H': '1h', '4H': '4h', '1D': '1d' };
   const BYBIT_TF    = { '5m': '5', '15m': '15', '1H': '60', '4H': '240', '1D': 'D' };
+  // [2026-08-15, kullanıcı isteği] TF değiştikçe grafik "yakınlaşsın" — her
+  // TF'te sondan en fazla bu kadar bar görünür (setVisibleLogicalRange ile).
+  // Küçük TF'lerde bar süresi kısa olduğu için bu aynı bar sayısı otomatik
+  // olarak daha dar/güncel bir zaman penceresine denk gelir (5m: ~3.3s,
+  // 1D: veri tavanı 48s olduğu için zaten tamamı görünür).
+  const VISIBLE_BARS = 40;
 
   let _oiChart = null, _oiSeries = null, _oiEl = null;
   let _volChart = null, _volSeries = null, _volEl = null;
@@ -41,21 +47,33 @@ const OiVolumePanel = (() => {
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
-  const CHART_OPTS = {
-    layout: { background: { type: 'solid', color: 'transparent' }, textColor: 'var(--text-secondary)', fontSize: 10 },
-    grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-    rightPriceScale: { borderColor: 'var(--border-primary)' },
-    timeScale: { borderColor: 'var(--border-primary)', timeVisible: true },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-    // OI ve Volume'un sağ eksen etiketleri (7,037,729,788.00 gibi) uzun
-    // olunca iki grafiğin çizim alanı hizasız duruyordu — K/M/B kısaltması
-    // (chart-config.js'teki formatVolume, ana chart'ın hacim sütununda da
-    // kullanılan aynı fonksiyon) her iki eksende de kullanılınca etiket
-    // genişlikleri birbirine çok yaklaşıyor, grafikler hizalanıyor.
-    localization: { priceFormatter: (v) => (typeof formatVolume === 'function' ? formatVolume(v) : v) },
-    handleScroll: false,
-    handleScale: false,
-  };
+  /** lightweight-charts Canvas üzerine çizer — CSS'in aksine ham 'var(--x)'
+   *  string'lerini ÇÖZEMEZ (sadece DOM/CSSOM cascade çözer). Bunları
+   *  getComputedStyle ile gerçek renk değerine çevirmeden geçmek, önceki
+   *  sürümde OI ekseninin/yazısının "siyah fon üzerine siyah yazı" gibi
+   *  görünmesine (aslında geçersiz renk → varsayılan siyaha düşmesine) yol
+   *  açan asıl sebepti. */
+  function _cssVar(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  }
+
+  function _chartOpts() {
+    return {
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: _cssVar('--text-secondary', '#8a8f98'), fontSize: 10 },
+      grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+      rightPriceScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)') },
+      timeScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)'), timeVisible: true },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      // OI ve Volume'un sağ eksen etiketleri (7,037,729,788.00 gibi) uzun
+      // olunca iki grafiğin çizim alanı hizasız duruyordu — K/M/B kısaltması
+      // (chart-config.js'teki formatVolume, ana chart'ın hacim sütununda da
+      // kullanılan aynı fonksiyon) her iki eksende de kullanılınca etiket
+      // genişlikleri birbirine çok yaklaşıyor, grafikler hizalanıyor.
+      localization: { priceFormatter: (v) => (typeof formatVolume === 'function' ? formatVolume(v) : v) },
+      handleScroll: false,
+      handleScale: false,
+    };
+  }
 
   function _ensureCharts(container) {
     if (_oiChart) return;
@@ -72,23 +90,23 @@ const OiVolumePanel = (() => {
     _oiEl  = container.querySelector('#mfw-oi-chart');
     _volEl = container.querySelector('#mfw-vol-chart');
 
-    // [2026-08-15, kullanıcı geri bildirimi] Önceden OI mavi (#2962ff), Volume
-    // sarı (#f0b90b) — "çok keskin" bulundu. İkisi de aynı chart'ta üst üste
-    // değil, ayrı ayrı mini grafiklerde olduğu için aynı rengi kullanmak
-    // karışıklık yaratmıyor — sidebar'ın neon vurgu rengiyle (--accent-blue,
-    // #00f3ff) tutarlı hale getirildi.
-    const ACCENT = getComputedStyle(document.documentElement).getPropertyValue('--accent-blue').trim() || '#00f3ff';
-    _oiChart = LightweightCharts.createChart(_oiEl, CHART_OPTS);
+    // [2026-08-15, kullanıcı geri bildirimi] Neon accent-blue istenmedi —
+    // düz beyaz çizgi/alan kullanılıyor. --text-primary kasıtlı olarak
+    // KULLANILMADI: o değişken temaya göre değişiyor (light theme'de neredeyse
+    // siyaha dönüyor), kullanıcı özellikle "beyaz" istedi — sabit hex.
+    const LINE_COLOR = '#ffffff';
+    const opts = _chartOpts();
+    _oiChart = LightweightCharts.createChart(_oiEl, opts);
     _oiSeries = _oiChart.addAreaSeries({
-      lineColor: ACCENT, lineWidth: 1.5,
-      topColor: _withAlpha(ACCENT, 0.28), bottomColor: _withAlpha(ACCENT, 0),
+      lineColor: LINE_COLOR, lineWidth: 1.5,
+      topColor: _withAlpha(LINE_COLOR, 0.24), bottomColor: _withAlpha(LINE_COLOR, 0),
       priceLineVisible: false,
     });
 
-    _volChart = LightweightCharts.createChart(_volEl, CHART_OPTS);
+    _volChart = LightweightCharts.createChart(_volEl, opts);
     _volSeries = _volChart.addAreaSeries({
-      lineColor: ACCENT, lineWidth: 1.5,
-      topColor: _withAlpha(ACCENT, 0.28), bottomColor: _withAlpha(ACCENT, 0),
+      lineColor: LINE_COLOR, lineWidth: 1.5,
+      topColor: _withAlpha(LINE_COLOR, 0.24), bottomColor: _withAlpha(LINE_COLOR, 0),
       priceLineVisible: false,
     });
 
@@ -125,6 +143,17 @@ const OiVolumePanel = (() => {
     });
   }
 
+  /** setData() sonrası tüm veriyi (fitContent) değil, sondan VISIBLE_BARS
+   *  kadarını gösterir — TF küçüldükçe bar süresi kısaldığı için bu aynı bar
+   *  sayısı otomatik olarak daha dar/güncel bir zaman penceresi anlamına
+   *  gelir (kullanıcı isteği: "TF değiştikçe grafik çizgisi yakınlaşsın"). */
+  function _applyZoom(chart, barCount) {
+    if (!chart || !barCount) return;
+    const to = barCount - 1 + 2; // sağda birkaç bar boşluk
+    const from = Math.max(0, barCount - VISIBLE_BARS);
+    chart.timeScale().setVisibleLogicalRange({ from, to });
+  }
+
   /** Ham (~1dk) OI kayıtlarını seçili TF'in bar süresine göre "resample"
    *  eder — her bucket'ın son (en güncel) değeri alınır. */
   function _resampleOi() {
@@ -140,7 +169,7 @@ const OiVolumePanel = (() => {
     const data = [...buckets.values()].sort((a, b) => a.time - b.time);
     if (!data.length) return;
     _oiSeries.setData(data);
-    _oiChart.timeScale().fitContent();
+    _applyZoom(_oiChart, data.length);
   }
 
   async function _loadOi(symbol, exchange) {
@@ -180,7 +209,7 @@ const OiVolumePanel = (() => {
       const data = await _fetchKlines(_currentSymbol, _currentExchange, _tf);
       if (!data.length) return;
       _volSeries.setData(data);
-      _volChart.timeScale().fitContent();
+      _applyZoom(_volChart, data.length);
     } catch (e) {
       console.warn('[OiVolumePanel] Volume geçmişi çekilemedi:', e.message);
     }

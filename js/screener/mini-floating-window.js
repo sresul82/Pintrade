@@ -42,14 +42,9 @@ const MiniFloatingWindow = (() => {
 
     const content = document.createElement('div');
     content.className = 'mfw-content';
-    // resize:vertical — kullanıcı panelin alt kenarından tutup dikey
-    // büyütebilsin/küçültebilsin diye (2026-08-15, OI/Volume grafikleri için
-    // istendi, ama tüm panellere genel bir iyileştirme olarak uygulandı).
-    // NOT: flex:1 KULLANILMIYOR — flex-basis:0 (flex:1'in şort-hand'i) elle
-    // ayarlanan/resize ile sürüklenen height'ı geçersiz kılıyordu (flex ana
-    // eksende flex-basis, height'tan öncelikli). Bunun yerine sabit bir
-    // başlangıç height'ı + resize:vertical kullanılıyor.
-    content.style.cssText = 'flex:0 0 auto; height:260px; min-height:120px; max-height:70vh; overflow:auto; resize:vertical; padding:16px; font-size:11px; color:var(--text-secondary); text-align:center;';
+    // [2026-08-15, kullanıcı isteği] resize:vertical kaldırıldı — hiçbir mini
+    // popup (L/S dahil) resize edilebilir olmasın, sabit yükseklik yeterli.
+    content.style.cssText = 'flex:0 0 auto; height:260px; overflow:auto; resize:none; padding:16px; font-size:11px; color:var(--text-secondary); text-align:center;';
     content.textContent = 'İçerik yakında eklenecek...';
 
     div.appendChild(tb);
