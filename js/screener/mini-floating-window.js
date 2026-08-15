@@ -15,7 +15,7 @@ const MiniFloatingWindow = (() => {
       position: fixed;
       top: 90px;
       right: 480px;
-      width: 320px;
+      width: 280px;
       max-height: 80vh;
       display: flex;
       flex-direction: column;
@@ -45,9 +45,12 @@ const MiniFloatingWindow = (() => {
 
     const content = document.createElement('div');
     content.className = 'mfw-content';
-    // [2026-08-15, kullanıcı isteği] resize:vertical kaldırıldı — hiçbir mini
-    // popup (L/S dahil) resize edilebilir olmasın, sabit yükseklik yeterli.
-    content.style.cssText = 'flex:0 0 auto; height:260px; overflow:auto; resize:none; padding:16px; font-size:11px; color:var(--text-secondary); text-align:center;';
+    // [2026-08-15, kullanıcı isteği] Sabit height + overflow:auto scrollbar
+    // yaratıyordu (L/S 4 karta çıkınca taştı). Artık height:auto — pencere
+    // içeriğine göre kendi boyunu alır, hiçbir zaman scroll oluşmaz. Resize
+    // hâlâ kapalı (L/S için istenen buydu — OI/Volume'un kendi container
+    // override'ı ayrı, orada resize:both var).
+    content.style.cssText = 'flex:0 0 auto; height:auto; overflow:visible; resize:none; padding:14px; font-size:11px; color:var(--text-primary); text-align:center;';
     content.textContent = 'İçerik yakında eklenecek...';
 
     div.appendChild(tb);

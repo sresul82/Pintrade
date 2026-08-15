@@ -30,9 +30,18 @@ const OiVolumePanel = (() => {
   // olarak daha dar/güncel bir zaman penceresine denk gelir (5m: ~3.3s,
   // 1D: veri tavanı 48s olduğu için zaten tamamı görünür).
   const VISIBLE_BARS = 40;
+  // [2026-08-15, kullanıcı isteği] Popup resize edilebilir (hem dikey hem
+  // yatay) — genişletilince zaman ekseninde daha fazla bar/zaman görünsün
+  // (ana chart'ta olduğu gibi). Sabit bar sayısı yerine, mevcut piksel
+  // genişliğine göre "bu genişlikte kaç bar sığar" hesaplanıyor.
+  const BAR_PX = 6;
+  function _barsForWidth(w) {
+    return Math.max(15, Math.floor((w || 0) / BAR_PX)) || VISIBLE_BARS;
+  }
 
   let _oiChart = null, _oiSeries = null, _oiEl = null;
   let _volChart = null, _volSeries = null, _volEl = null;
+  let _oiDataLen = 0, _volDataLen = 0;
   let _ro = null;
   let _tf = DEFAULT_TF;
   let _currentSymbol = null, _currentExchange = null;
@@ -84,7 +93,7 @@ const OiVolumePanel = (() => {
    *  konumlanan bir DOM elemanı kullanılıyor. */
   function _attachTooltip(chart, series, hostEl, formatValue) {
     const tip = document.createElement('div');
-    tip.style.cssText = 'position:absolute; top:4px; display:none; pointer-events:none; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:4px; padding:3px 7px; font-size:10px; color:var(--text-primary); z-index:5; white-space:nowrap;';
+    tip.style.cssText = 'position:absolute; display:none; pointer-events:none; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:4px; padding:3px 7px; font-size:10px; color:var(--text-primary); z-index:5; white-space:nowrap;';
     hostEl.appendChild(tip);
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
@@ -100,16 +109,24 @@ const OiVolumePanel = (() => {
       const timeStr = dt.toLocaleString('tr-TR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       tip.textContent = `${timeStr}  ·  ${formatValue(d.value)}`;
       tip.style.display = 'block';
-      const left = param.point.x + 130 > hostEl.clientWidth ? param.point.x - 130 : param.point.x + 10;
-      tip.style.left = Math.max(0, left) + 'px';
+      // [2026-08-15, kullanıcı isteği] Tooltip artık crosshair noktasının
+      // hemen üstünde konumlanıyor (önceden grafiğin üst kenarına sabitti).
+      let left = param.point.x - tip.offsetWidth / 2;
+      left = Math.max(0, Math.min(left, hostEl.clientWidth - tip.offsetWidth));
+      let top = param.point.y - tip.offsetHeight - 8;
+      if (top < 0) top = param.point.y + 10; // üstte yer yoksa noktanın altına al
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
     });
   }
 
   function _ensureCharts(container) {
     if (_oiChart) return;
-    // [2026-08-15, kullanıcı isteği] Dikey resize kaldırıldı — bu popup'ta
-    // gerek yoktu, sabit bir yükseklik yeterli.
-    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:hidden; resize:none; height:360px;';
+    // [2026-08-15, kullanıcı isteği] Bu popup hem dikey hem yatay resize
+    // edilebilir olmalı (L/S ile karıştırılmasın — sadece L/S'in resize'ı
+    // kaldırılması istenmişti). overflow:auto şart, native CSS resize
+    // overflow:visible ile çalışmaz.
+    container.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px; text-align:left; overflow:auto; resize:both; height:360px; width:340px; min-width:260px; min-height:220px;';
     container.innerHTML = `
       <div id="mfw-oi-tf" style="display:flex; gap:2px; flex-shrink:0;"></div>
       <div style="font-size:9px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.3px;">Open Interest</div>
@@ -145,9 +162,18 @@ const OiVolumePanel = (() => {
     _attachTooltip(_oiChart, _oiSeries, _oiEl, _fmtVal);
     _attachTooltip(_volChart, _volSeries, _volEl, _fmtVal);
 
+    // [2026-08-15, kullanıcı isteği] Sadece piksel boyutunu değil, görünür
+    // bar sayısını da yeniden hesaplıyor — popup genişletildikçe zaman
+    // ekseninde daha fazla bar/zaman görünsün.
     _ro = new ResizeObserver(() => {
-      if (_oiEl && _oiChart)  _oiChart.resize(_oiEl.clientWidth, _oiEl.clientHeight);
-      if (_volEl && _volChart) _volChart.resize(_volEl.clientWidth, _volEl.clientHeight);
+      if (_oiEl && _oiChart) {
+        _oiChart.resize(_oiEl.clientWidth, _oiEl.clientHeight);
+        _applyZoom(_oiChart, _oiDataLen, _barsForWidth(_oiEl.clientWidth));
+      }
+      if (_volEl && _volChart) {
+        _volChart.resize(_volEl.clientWidth, _volEl.clientHeight);
+        _applyZoom(_volChart, _volDataLen, _barsForWidth(_volEl.clientWidth));
+      }
     });
     _ro.observe(_oiEl);
     _ro.observe(_volEl);
@@ -182,10 +208,11 @@ const OiVolumePanel = (() => {
    *  kadarını gösterir — TF küçüldükçe bar süresi kısaldığı için bu aynı bar
    *  sayısı otomatik olarak daha dar/güncel bir zaman penceresi anlamına
    *  gelir (kullanıcı isteği: "TF değiştikçe grafik çizgisi yakınlaşsın"). */
-  function _applyZoom(chart, barCount) {
+  function _applyZoom(chart, barCount, barsVisible) {
     if (!chart || !barCount) return;
+    const visible = barsVisible || VISIBLE_BARS;
     const to = barCount - 1 + 2; // sağda birkaç bar boşluk
-    const from = Math.max(0, barCount - VISIBLE_BARS);
+    const from = Math.max(0, barCount - visible);
     chart.timeScale().setVisibleLogicalRange({ from, to });
   }
 
@@ -204,7 +231,8 @@ const OiVolumePanel = (() => {
     const data = [...buckets.values()].sort((a, b) => a.time - b.time);
     if (!data.length) return;
     _oiSeries.setData(data);
-    _applyZoom(_oiChart, data.length);
+    _oiDataLen = data.length;
+    _applyZoom(_oiChart, _oiDataLen, _barsForWidth(_oiEl?.clientWidth));
   }
 
   async function _loadOi(symbol, exchange) {
@@ -244,7 +272,8 @@ const OiVolumePanel = (() => {
       const data = await _fetchKlines(_currentSymbol, _currentExchange, _tf);
       if (!data.length) return;
       _volSeries.setData(data);
-      _applyZoom(_volChart, data.length);
+      _volDataLen = data.length;
+      _applyZoom(_volChart, _volDataLen, _barsForWidth(_volEl?.clientWidth));
     } catch (e) {
       console.warn('[OiVolumePanel] Volume geçmişi çekilemedi:', e.message);
     }

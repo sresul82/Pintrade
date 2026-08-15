@@ -307,10 +307,14 @@ const DetailPanel = (() => {
     if (!m || m.ratio == null || !isFinite(m.ratio)) return '';
     const pct = (m.ratio / (1 + m.ratio)) * 100;
     // [2026-08-15, kullanıcı geri bildirimi] --text-secondary koyu zeminde
-    // okunaksızdı — kart başlığı --text-primary'ye çekildi.
-    return `<div style="background:var(--bg-tertiary); border:1px solid var(--border-primary); border-radius:8px; padding:10px 12px;">
+    // okunaksızdı — kart başlığı --text-primary'ye çekildi. Kenarlık
+    // --border-secondary'ye (daha açık) çekildi ve zemine hafif beyaz overlay
+    // eklendi (inset box-shadow) — önceki --bg-tertiary popup'ın kendi
+    // zeminiyle (--bg-primary) yeterince ayrışmıyordu. Bar da kart genişliği
+    // yerine %90'a çekildi — biraz daha narin görünsün diye.
+    return `<div style="background:var(--bg-tertiary); box-shadow:inset 0 0 0 999px rgba(255,255,255,0.035); border:1px solid var(--border-secondary); border-radius:8px; padding:10px 14px;">
       <div style="font-size:10px; font-weight:700; color:var(--text-primary); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">${label}</div>
-      <div class="dp-split-bar" style="width:100%;">
+      <div class="dp-split-bar" style="width:90%; margin:0 auto;">
         <div class="dp-split-buy" style="width:${pct.toFixed(1)}%">L ${pct.toFixed(1)}%</div>
         <div class="dp-split-sell" style="width:${(100 - pct).toFixed(1)}%">${(100 - pct).toFixed(1)}% S</div>
       </div>
