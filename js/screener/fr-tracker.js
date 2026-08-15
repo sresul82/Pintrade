@@ -176,7 +176,8 @@ class FRTracker {
     async preloadFromServer(symbol, exchange, hours = 48) {
         try {
             const sym = symbol.endsWith('USDT') ? symbol : symbol + 'USDT';
-            const resp = await fetch(`/api/history/fr/${exchange}/${sym}?hours=${hours}`);
+            const backend = window.AppConfig?.BACKEND_URL || '';
+            const resp = await fetch(`${backend}/api/history/fr/${exchange}/${sym}?hours=${hours}`);
             if (!resp.ok) return;
             const records = await resp.json(); // [{ timestamp, fundingRate }, ...]
             if (!Array.isArray(records) || records.length === 0) return;

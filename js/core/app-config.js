@@ -135,6 +135,7 @@ const AppConfig = (() => {
   console.log('[AppConfig] Loaded ✓');
 
   return {
+    BACKEND_URL,
     API,
     SYNC_API,
     TF_MAP,

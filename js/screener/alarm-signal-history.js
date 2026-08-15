@@ -150,7 +150,14 @@ const AlarmSignalHistory = (() => {
   // (server hiçbir Cache-Control header'ı göndermiyor) ama olası bir
   // ara-katman (CDN/proxy) önbelleklemesini de bu şekilde bertaraf ediyoruz.
   async function _fetchOnce() {
-    const res = await fetch('/api/kom1/signals?limit=50', { cache: 'no-store' });
+    // [2026-08-15, kullanıcı bulgusu] Göreli '/api/...' adresi sadece
+    // frontend+backend AYNI origin'deyken çalışır (Render'da öyle). Ama
+    // pintrade.mooo.com aslında GitHub Pages'te barınıyor (bkz. CNAME
+    // dosyası, Server: GitHub.com) — orada bu adres backend'e değil GitHub
+    // Pages'in kendisine gidip 404 dönüyordu. AppConfig.BACKEND_URL her
+    // zaman gerçek Render adresini verir, origin ne olursa olsun.
+    const backend = window.AppConfig?.BACKEND_URL || '';
+    const res = await fetch(`${backend}/api/kom1/signals?limit=50`, { cache: 'no-store' });
     if (!res.ok) {
       console.warn(`[AlarmSignalHistory] /api/kom1/signals HTTP ${res.status}`);
       return null;

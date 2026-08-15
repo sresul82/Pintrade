@@ -244,7 +244,8 @@ const OiVolumePanel = (() => {
   async function _loadOi(symbol, exchange) {
     if (!_oiSeries) return;
     try {
-      const res = await fetch(`/api/history/market/${exchange}/${symbol}?hours=48`);
+      const backend = window.AppConfig?.BACKEND_URL || '';
+      const res = await fetch(`${backend}/api/history/market/${exchange}/${symbol}?hours=48`);
       if (!res.ok) return;
       _rawOiRecords = await res.json();
       _resampleOi();

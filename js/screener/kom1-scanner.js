@@ -108,7 +108,8 @@ const Kom1Scanner = (() => {
   // toleranslı tasarlandı (tekrar deneme yok, basit tutuldu).
   async function _persistConfirmed(confirmed) {
     try {
-      const res = await fetch('/api/kom1/signals', {
+      const backend = window.AppConfig?.BACKEND_URL || '';
+      const res = await fetch(`${backend}/api/kom1/signals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
