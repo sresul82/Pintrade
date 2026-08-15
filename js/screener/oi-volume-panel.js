@@ -185,15 +185,19 @@ const OiVolumePanel = (() => {
 
   function _renderTfButtons(el) {
     if (!el) return;
-    // [2026-08-15, kullanıcı geri bildirimi] Aktif TF butonu önceden dolu
-    // mavi arka fonla vurgulanıyordu — proje kuralı: butonlarda dolu neon
-    // arka fon yok, sadece metin neon renkte + ince kenarlık.
+    // [2026-08-15, kullanıcı geri bildirimi: "tek elden çıkmış gibi olmalı"]
+    // Aktif buton vurgusu artık projedeki TEK referans örnekle (css/chart.css
+    // .rsb-btn.active + .rsb-label — sidebar'ın "yumuşak turkuaz" hissi)
+    // birebir aynı formülü kullanıyor: renk + text-shadow glow. Önceden
+    // burada glow yoktu, sadece düz renk vardı — aynı hex olsa da glow'suz
+    // çok daha "çıplak/keskin neon" görünüyordu.
     el.innerHTML = TF_OPTIONS.map(tf => `
       <button type="button" data-tf="${tf}" style="
         padding:2px 8px; font-size:10px; font-weight:600; border-radius:4px; cursor:pointer;
         background:transparent;
         border:1px solid ${tf === _tf ? 'var(--accent-blue)' : 'var(--border-primary)'};
         color:${tf === _tf ? 'var(--accent-blue)' : 'var(--text-secondary)'};
+        text-shadow:${tf === _tf ? 'var(--accent-blue-glow)' : 'none'};
       ">${tf}</button>`).join('');
     el.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', () => {

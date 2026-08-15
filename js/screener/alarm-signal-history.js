@@ -257,26 +257,31 @@ const AlarmSignalHistory = (() => {
     return filtered;
   }
 
-  // [2026-08-15, proje kuralı — bkz. pintrade-neon-buton-arka-fon-yasak
-  // memory'si] Aktif segment butonunda dolu neon arka fon KULLANILMAZ,
-  // sadece metin neon renkte olur, arka fon şeffaf kalır.
+  // [2026-08-15, kullanıcı geri bildirimi: "tek elden çıkmış gibi olmalı"]
+  // Projedeki TEK referans "aktif buton" formülüyle (css/chart.css
+  // .rsb-btn.active + .rsb-label — sidebar'ın yumuşak turkuaz hissi)
+  // birebir aynı: renk + text-shadow glow, dolu arka fon yok. Önceden
+  // burada glow yoktu ve pasif durumda keyfi bir opacity:0.7 çarpanı vardı
+  // (oi-volume-panel.js'teki TF butonlarında ise hiç opacity kullanılmıyordu)
+  // — aynı "pasif" hissi farklı dosyalarda farklı görünüyordu, artık ikisi
+  // de sadece renk değiştiriyor, opacity karışmıyor.
   function _segBtnStyle(active) {
     return active
-      ? 'background:transparent; color:var(--accent-blue); opacity:1;'
-      : 'background:transparent; color:var(--text-secondary); opacity:0.7;';
+      ? 'background:transparent; color:var(--accent-blue); text-shadow:var(--accent-blue-glow);'
+      : 'background:transparent; color:var(--text-secondary); text-shadow:none;';
   }
 
   function _buildToolbarHTML() {
     const segsHtml = KOM_SEGMENTS.map(seg => `
       <button type="button" class="alarm-kom-seg" data-kom="${seg.key}" style="
-        padding:4px 10px; font-size:11px; font-weight:600; border:none; border-radius:5px;
+        padding:4px 10px; font-size:10px; font-weight:600; border:none; border-radius:5px;
         cursor:pointer; white-space:nowrap; transition:background 0.15s ease, color 0.15s ease;
         ${_segBtnStyle(_state.komFilter === seg.key)}
       ">${seg.label}</button>`).join('');
 
     const excSegsHtml = EXCHANGE_SEGMENTS.map(seg => `
       <button type="button" class="alarm-exc-seg" data-exc="${seg.key}" style="
-        padding:4px 10px; font-size:11px; font-weight:600; border:none; border-radius:5px;
+        padding:4px 10px; font-size:10px; font-weight:600; border:none; border-radius:5px;
         cursor:pointer; white-space:nowrap; transition:background 0.15s ease, color 0.15s ease;
         ${_segBtnStyle(_state.exchangeFilter === seg.key)}
       ">${seg.label}</button>`).join('');
