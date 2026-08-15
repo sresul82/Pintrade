@@ -663,7 +663,10 @@ mongoose.connection.once('open', () => {
     // Node bu sürümde process'i çökertebilir; _staggeredStart'ın diğer
     // toplayıcıları kendi içinde try/catch'li, burada da aynı güvenlik sağlanıyor.
     Kom1ServerWatcher.tick(async (confirmed) => {
-      try { await Kom1SignalLog.create(confirmed); }
+      try {
+        await Kom1SignalLog.create(confirmed);
+        sendTelegramMessage(_kom1TelegramText(confirmed));
+      }
       catch (err) { console.warn('[Kom1ServerWatcher] Sinyal kaydedilemedi:', err.message); }
     }).then(async () => {
       // Tarama durumunu (katman/hacim/son-tarandı) kalıcı hale getir —
@@ -925,6 +928,7 @@ app.post('/api/kom1/signals', async (req, res) => {
       firedAt: b.firedAt ? new Date(b.firedAt) : undefined,
       confirmedAt: new Date(b.confirmedAt),
     });
+    sendTelegramMessage(_kom1TelegramText({ symbol: b.symbol, bigTf: b.bigTf, price: b.price }));
     res.status(201).json({ ok: true, id: doc._id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1022,6 +1026,42 @@ function fetchJsonUrl(url) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Telegram bildirimi (gorevler3.md Görev 7'nin kalanı, 2026-08-15) ──
+// TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID .env'de (Render dashboard, sır —
+// koda gömülmez) tanımlı DEĞİLSE fonksiyon sessizce hiçbir şey yapmaz —
+// özellik "kapalı" kalır, hata fırlatmaz. Kapsam şimdilik SADECE Kom1
+// sinyalleri — fiyat alarmları (AlertStore) hâlâ localStorage'da, ayrı
+// bir iş (server-side monitoring + DB taşıma gerektiriyor).
+function sendTelegramMessage(text) {
+  const token  = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return; // özellik yapılandırılmamış — no-op
+  const body = JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' });
+  const req = https.request({
+    hostname: 'api.telegram.org',
+    path: `/bot${token}/sendMessage`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, (res) => {
+    // Ateşle-unut: sinyal kaydını Telegram'ın çevrimiçi olup olmamasına
+    // bağlı kılmıyoruz, sadece hata durumunda logluyoruz.
+    if (res.statusCode >= 400) {
+      let errBody = '';
+      res.on('data', d => errBody += d);
+      res.on('end', () => console.warn('[Telegram] sendMessage başarısız:', res.statusCode, errBody.slice(0, 200)));
+    }
+  });
+  req.on('error', (err) => console.warn('[Telegram] sendMessage isteği atılamadı:', err.message));
+  req.write(body);
+  req.end();
+}
+
+function _kom1TelegramText(sig) {
+  const tf = (sig.bigTf || '').toUpperCase();
+  const price = typeof sig.price === 'number' ? sig.price : '—';
+  return `🟢 <b>Kom1 sinyali</b>\n${sig.symbol} — ${tf}\nFiyat: ${price}`;
+}
 
 // ==========================================
 // 7. Sunucuyu Başlat
