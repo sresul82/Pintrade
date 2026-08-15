@@ -137,12 +137,36 @@ const AlarmSignalHistory = (() => {
   // aynı kural kullanılıyor.
   let _serverKom1Records = [];
 
+  // [2026-08-15, kullanıcı bulgusu] Kullanıcı sürekli (gizli pencerede bile)
+  // "No results" görüyordu — DevTools'ta bu isteğin tek başına 404 döndüğü
+  // görüldü, aynı anda gönderilen onlarca başka istek sorunsuzdu. Önceden
+  // başarısız yanıt (res.ok===false) SESSİZCE yutuluyordu — hiç log
+  // basılmıyordu, sadece network-seviyesi exception'lar (catch bloğu)
+  // loglanıyordu. Artık: (1) başarısız durum da konsola yazılıyor (bir
+  // dahaki sefere DevTools ekran görüntüsüne gerek kalmadan teşhis
+  // edilebilsin diye), (2) tek seferlik ağ/geçici sunucu hıçkırığı yüzünden
+  // koca dakika boş kalınmasın diye bir kez otomatik tekrar deneniyor, (3)
+  // cache:'no-store' — bu bir sunucu tarafı önbellekleme sorunu değildi
+  // (server hiçbir Cache-Control header'ı göndermiyor) ama olası bir
+  // ara-katman (CDN/proxy) önbelleklemesini de bu şekilde bertaraf ediyoruz.
+  async function _fetchOnce() {
+    const res = await fetch('/api/kom1/signals?limit=50', { cache: 'no-store' });
+    if (!res.ok) {
+      console.warn(`[AlarmSignalHistory] /api/kom1/signals HTTP ${res.status}`);
+      return null;
+    }
+    const records = await res.json();
+    return Array.isArray(records) ? records : null;
+  }
+
   async function _fetchServerKom1Signals() {
     try {
-      const res = await fetch('/api/kom1/signals?limit=50');
-      if (!res.ok) return;
-      const records = await res.json();
-      if (!Array.isArray(records)) return;
+      let records = await _fetchOnce();
+      if (!records) {
+        await new Promise(r => setTimeout(r, 1500));
+        records = await _fetchOnce();
+      }
+      if (!records) return;
       _serverKom1Records = records;
       if (document.getElementById('dp-alarm-tab')?.offsetParent) render();
     } catch (err) {
@@ -233,9 +257,12 @@ const AlarmSignalHistory = (() => {
     return filtered;
   }
 
+  // [2026-08-15, proje kuralı — bkz. pintrade-neon-buton-arka-fon-yasak
+  // memory'si] Aktif segment butonunda dolu neon arka fon KULLANILMAZ,
+  // sadece metin neon renkte olur, arka fon şeffaf kalır.
   function _segBtnStyle(active) {
     return active
-      ? 'background:var(--accent-blue); color:#fff; opacity:1;'
+      ? 'background:transparent; color:var(--accent-blue); opacity:1;'
       : 'background:transparent; color:var(--text-secondary); opacity:0.7;';
   }
 
