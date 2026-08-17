@@ -77,6 +77,13 @@ const SCAN_PACE_MS = 120;
 // istek grupları için düşünülmüş) bu kadar büyük bir toplu istek grubunda
 // paylaşılan IP ağırlık bütçesini riske attığı gerçek bir olayla görüldü.
 const UNIVERSE_SCAN_PACE_MS = 300;
+// [2026-08-18, ÜÇÜNCÜ DÜZELTME — kullanıcı isteği, Kom1'in Görev 1'deki
+// staggered-start çözümüyle aynı felsefe] Tek bir chunk'ı (40 sembol) bile
+// düz 300ms aralıkla art arda göndermek production'da ban tetikledi. Artık
+// chunk kendi içinde GRUP_SIZE'lık alt gruplara bölünüyor, gruplar arasına
+// istekler-arası tempodan (300ms) çok daha BELİRGİN bir bekleme konuyor.
+const UNIVERSE_SCAN_GROUP_SIZE = 20;
+const UNIVERSE_SCAN_GROUP_PAUSE_MS = 1500;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -252,22 +259,32 @@ async function _advanceUniverseScan() {
   const state = _universeScanState;
   const chunk = state.symbols.slice(state.cursor, state.cursor + UNIVERSE_SCAN_CHUNK_SIZE);
 
-  for (const symbol of chunk) {
-    let atrPct;
-    try {
-      atrPct = await _getAtrPct(symbol);
-      await sleep(UNIVERSE_SCAN_PACE_MS);
-    } catch (err) {
-      if (String(err.message).startsWith('BAN_SIGNAL')) {
-        console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tüm tarama iptal edildi, ${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra baştan denenecek.`);
-        _universeScanState = null; // yarım kalan turu tamamen at, baştan başla
-        throw err; // _maybeRefreshUniverse backoff'u uygulasın
+  // [2026-08-18, ÜÇÜNCÜ DÜZELTME — kullanıcı isteği] Tek bir chunk'ı (40
+  // sembol) düz 300ms aralıklarla art arda göndermek bile production'da ban
+  // tetikledi — Kom1'in Görev 1'de staggered-start ile çözdüğü sorunun aynısı.
+  // Aynı yaklaşım: chunk'ı da kendi içinde GRUP_SIZE'lık (20) alt gruplara
+  // böl, her grup arasına BELİRGİN bir bekleme (GROUP_PAUSE_MS, 1.5sn) koy —
+  // sadece istekler arası 300ms değil, gruplar arası gerçek bir "nefes payı".
+  for (let g = 0; g < chunk.length; g += UNIVERSE_SCAN_GROUP_SIZE) {
+    const group = chunk.slice(g, g + UNIVERSE_SCAN_GROUP_SIZE);
+    for (const symbol of group) {
+      let atrPct;
+      try {
+        atrPct = await _getAtrPct(symbol);
+        await sleep(UNIVERSE_SCAN_PACE_MS);
+      } catch (err) {
+        if (String(err.message).startsWith('BAN_SIGNAL')) {
+          console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tüm tarama iptal edildi, ${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra baştan denenecek.`);
+          _universeScanState = null; // yarım kalan turu tamamen at, baştan başla
+          throw err; // _maybeRefreshUniverse backoff'u uygulasın
+        }
+        continue; // tekil sembol hatası bu grubu durdurmasın
       }
-      continue; // tekil sembol hatası bu chunk'ı durdurmasın
+      if (atrPct !== null && atrPct >= ATR_MIN_PCT) {
+        state.hard.push({ symbol, quoteVolume24h: state.volumeBySymbol.get(symbol) || 0 });
+      }
     }
-    if (atrPct !== null && atrPct >= ATR_MIN_PCT) {
-      state.hard.push({ symbol, quoteVolume24h: state.volumeBySymbol.get(symbol) || 0 });
-    }
+    if (g + UNIVERSE_SCAN_GROUP_SIZE < chunk.length) await sleep(UNIVERSE_SCAN_GROUP_PAUSE_MS);
   }
   state.cursor += chunk.length;
   console.log(`[Kom2ServerWatcher] Evren taraması ilerledi: ${state.cursor}/${state.symbols.length} sembol işlendi (${state.hard.length} "sert coin" bulundu şimdiye kadar).`);
@@ -544,4 +561,5 @@ module.exports = {
   SMALL_TF, DEMA_PERIOD, SMALL_TF_BARS,
   CONFIRM_TOLERANCE_MS, SIGNAL_VALIDITY_MS,
   TIER_SIZES, TIER_INTERVAL_MS, UNIVERSE_REFRESH_MS, SCAN_PACE_MS,
+  UNIVERSE_SCAN_PACE_MS, UNIVERSE_SCAN_CHUNK_SIZE, UNIVERSE_SCAN_GROUP_SIZE, UNIVERSE_SCAN_GROUP_PAUSE_MS,
 };
