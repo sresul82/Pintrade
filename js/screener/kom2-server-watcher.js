@@ -198,71 +198,88 @@ async function _getAtrPct(symbol) {
   return atrPct;
 }
 
+// [2026-08-18, İKİNCİ DÜZELTME — kullanıcı bulgusu] TEK bir tick içinde
+// ~527 isteği art arda göndermek (pace'i ne kadar yavaşlatırsak yavaşlatalım)
+// paylaşılan IP ağırlık bütçesinde Kom1'in tick'i/diğer toplayıcılarla
+// çakışıp ban tetikleyebiliyor (gerçek olay: tek bir tam-taramada bile
+// "Ban sinyali evren taramasında (ONTUSDT)"). Kom1'in kendi çözümü aynı
+// mantık: TÜM evreni tek turda taramaz, katmanlara böler, her tick'te
+// sadece "sırası gelen" küçük bir alt kümeyi tarar. Kom2'nin ATR sınıflama
+// taraması burada AYNI FELSEFEYLE parçalara bölündü: tek seferde tüm evreni
+// DEĞİL, her tick'te en fazla UNIVERSE_SCAN_CHUNK_SIZE sembolü işler,
+// `_universeScanState` ile tick'ler arasında kaldığı yerden devam eder.
+// ~527 sembol / 40 sembol-tick ≈ 14 tick × 5dk ≈ ~70 dakikada bir tam tur
+// tamamlanır — her tick'te sadece ~12 saniyelik REST aktivitesi (40×300ms).
+const UNIVERSE_SCAN_CHUNK_SIZE = 40;
+
 // symbol -> { tier, quoteVolume24h, lastScannedAt } — SADECE ATR14>=%12
 // ("sert coin") olan semboller burada yer alır.
 const _universe = new Map();
-let _lastUniverseRefresh = 0;
+let _lastUniverseRefresh = 0; // en son TAMAMLANMIŞ (başarılı ya da başarısız) taramanın bitiş zamanı
 let _volumeTierEdges = [0, 0]; // [p33, p66] — compute_volume_tier_edges portu
 const _dirty = new Set();
 
+// Devam eden parçalı tarama durumu — null: tarama yok. Doluysa bir sonraki
+// tick'te kaldığı yerden devam eder (bkz. _advanceUniverseScan).
+let _universeScanState = null;
+
 /**
- * exchangeInfo + 24hr ticker ile TÜM USDT perpetual evrenini çeker, her
- * adayın ATR14/fiyatını hesaplar (SCAN_PACE_MS ile aralıklı, ban sinyalinde
- * durur — backtest/kom2/fetch_data.py:build_hard_coin_universe ile aynı
- * yöntem), ATR>=%12 olanları evrene alır, hacme göre 3 katmana böler.
- * Kom1'den farklı olarak bu tarama HER seferinde tüm evreni ATR için
- * yeniden değerlendirir (Kom1'de ATR sadece aday oluştuğunda kontrol
- * ediliyordu) — çünkü burada ATR evrene GİRİŞ/ÇIKIŞ şartı, dinamik olarak
- * güncellenmesi gerekiyor (bir coin zamanla "sertleşebilir/sakinleşebilir").
+ * Devam eden bir tarama yoksa exchangeInfo+24hr ticker çekip YENİ bir tarama
+ * başlatır (state'i sıfırdan kurar); varsa doğrudan kaldığı yerden devam
+ * eder. Her çağrıda SADECE UNIVERSE_SCAN_CHUNK_SIZE kadar sembolün ATR'sini
+ * hesaplar — tam tur için ÇOK KEZ çağrılması gerekir (bkz. _maybeRefreshUniverse).
+ * Tur tamamlanınca (cursor sembol listesinin sonuna ulaşınca) sonucu uygular:
+ * ATR>=%12 olanları evrene alır, hacme göre 3 katmana böler.
  */
-async function _refreshUniverse() {
-  const [info, tickers] = await Promise.all([
-    fetchJson('/fapi/v1/exchangeInfo'),
-    fetchJson('/fapi/v1/ticker/24hr'),
-  ]);
-  if (!info || !Array.isArray(info.symbols) || !Array.isArray(tickers)) {
-    throw new Error('exchangeInfo/24hr ticker beklenmeyen yanıt');
+async function _advanceUniverseScan() {
+  if (!_universeScanState) {
+    const [info, tickers] = await Promise.all([
+      fetchJson('/fapi/v1/exchangeInfo'),
+      fetchJson('/fapi/v1/ticker/24hr'),
+    ]);
+    if (!info || !Array.isArray(info.symbols) || !Array.isArray(tickers)) {
+      throw new Error('exchangeInfo/24hr ticker beklenmeyen yanıt');
+    }
+    const symbols = info.symbols
+      .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT'))
+      .map(s => s.symbol);
+    const volumeBySymbol = new Map();
+    for (const t of tickers) volumeBySymbol.set(t.symbol, parseFloat(t.quoteVolume) || 0);
+    _universeScanState = { symbols, volumeBySymbol, cursor: 0, hard: [] };
+    console.log(`[Kom2ServerWatcher] Yeni evren taraması başladı: ${symbols.length} sembol, ${UNIVERSE_SCAN_CHUNK_SIZE}/tick ile parçalı taranacak.`);
   }
 
-  const tradingUsdtPerp = info.symbols
-    .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.symbol.endsWith('USDT'))
-    .map(s => s.symbol);
+  const state = _universeScanState;
+  const chunk = state.symbols.slice(state.cursor, state.cursor + UNIVERSE_SCAN_CHUNK_SIZE);
 
-  const volumeBySymbol = new Map();
-  for (const t of tickers) volumeBySymbol.set(t.symbol, parseFloat(t.quoteVolume) || 0);
-
-  const hard = [];
-  for (const symbol of tradingUsdtPerp) {
+  for (const symbol of chunk) {
     let atrPct;
     try {
       atrPct = await _getAtrPct(symbol);
-      // [2026-08-18 DÜZELTME] 120ms (SCAN_PACE_MS, küçük/nadir istekler için)
-      // yerine daha yavaş UNIVERSE_SCAN_PACE_MS — bu tarama 527 isteği KISA
-      // sürede art arda gönderiyor, Kom1'in tick'i + collectBinanceData ile
-      // AYNI paylaşılan IP ağırlık bütçesinde çakışıp ban tetikleyebiliyor
-      // (gerçek olay, 2026-08-18: "Ban sinyali evren taramasında (ETHUSDT)").
       await sleep(UNIVERSE_SCAN_PACE_MS);
     } catch (err) {
       if (String(err.message).startsWith('BAN_SIGNAL')) {
-        console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tarama şu ana kadarki sonuçla durduruldu.`);
-        break;
+        console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tüm tarama iptal edildi, ${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra baştan denenecek.`);
+        _universeScanState = null; // yarım kalan turu tamamen at, baştan başla
+        throw err; // _maybeRefreshUniverse backoff'u uygulasın
       }
-      continue; // tekil sembol hatası tüm taramayı durdurmasın
+      continue; // tekil sembol hatası bu chunk'ı durdurmasın
     }
     if (atrPct !== null && atrPct >= ATR_MIN_PCT) {
-      hard.push({ symbol, quoteVolume24h: volumeBySymbol.get(symbol) || 0 });
+      state.hard.push({ symbol, quoteVolume24h: state.volumeBySymbol.get(symbol) || 0 });
     }
   }
+  state.cursor += chunk.length;
+  console.log(`[Kom2ServerWatcher] Evren taraması ilerledi: ${state.cursor}/${state.symbols.length} sembol işlendi (${state.hard.length} "sert coin" bulundu şimdiye kadar).`);
+
+  if (state.cursor < state.symbols.length) return; // tur bitmedi, bir sonraki tick'te devam
+
+  // Tur tamamlandı — sonucu uygula.
+  const hard = state.hard;
+  _universeScanState = null;
 
   if (hard.length === 0) {
-    // [2026-08-18 DÜZELTME] "önceki liste korunuyor" ilk çalıştırmada
-    // yanıltıcıydı (o an henüz hiç liste yok) — asıl önemlisi burada
-    // _lastUniverseRefresh'i GÜNCELLEMİYORDU, bu yüzden _maybeRefreshUniverse
-    // bir sonraki tick'te (5dk sonra) taramayı BAŞTAN deniyordu — ban
-    // sonrası banlı IP'yi her 5 dakikada bir yeniden dövmeye yol açan asıl
-    // hata buydu. Artık backoff _maybeRefreshUniverse'de, deneme ÖNCESİNDE
-    // damgalanıyor (aşağı bkz.) — bu fonksiyon artık sadece log basıyor.
-    console.warn(`[Kom2ServerWatcher] Evren taraması hiç "sert coin" bulamadı (${_universe.size > 0 ? 'önceki liste korunuyor' : 'ilk çalıştırma, evren boş kalıyor'}) — bir sonraki deneme ~${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra.`);
+    console.warn(`[Kom2ServerWatcher] Tam tur tamamlandı ama hiç "sert coin" bulunamadı (${_universe.size > 0 ? 'önceki liste korunuyor' : 'evren boş kalıyor'}) — bir sonraki tam tarama ~${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra.`);
     return;
   }
 
@@ -289,7 +306,7 @@ async function _refreshUniverse() {
   }
 
   const s = getUniverseSummary();
-  console.log(`[Kom2ServerWatcher] Evren yenilendi: ${s.total} "sert coin" (ATR>=%${ATR_MIN_PCT}), Katman1=${s.tier1}, Katman2=${s.tier2}, Katman3=${s.tier3}.`);
+  console.log(`[Kom2ServerWatcher] ✅ Evren tam turu tamamlandı: ${s.total} "sert coin" (ATR>=%${ATR_MIN_PCT}), Katman1=${s.tier1}, Katman2=${s.tier2}, Katman3=${s.tier3}.`);
 }
 
 function _percentile(sortedArr, p) {
@@ -298,21 +315,32 @@ function _percentile(sortedArr, p) {
 }
 
 async function _maybeRefreshUniverse() {
-  // [2026-08-18 KRİTİK DÜZELTME — İKİNCİ KATMAN] Önceki halde koruma şartı
-  // `_universe.size > 0 && ...` idi: evren BOŞ kaldığı sürece (ör. ban
-  // nedeniyle ilk tarama hiç coin bulamadıysa) bu şart HİÇBİR ZAMAN
-  // sağlanmıyordu — `_lastUniverseRefresh`'i deneme öncesi damgalamak TEK
-  // BAŞINA yetmiyordu, çünkü guard'ın kendisi `size>0`'a bağımlıydı ve her
-  // tick'te yine `false` dönüp taramayı tekrar tetikliyordu. Doğru davranış:
-  // backoff SADECE zamana bağlı olmalı, evren dolu/boş olmasından bağımsız
-  // — "en son ne zaman DENEDİK" sorusu, "elimizde veri var mı" sorusundan
-  // ayrı. `_universe.size` kontrolü tamamen kaldırıldı.
+  // Devam eden bir parçalı tarama varsa, 24 saatlik bekleme şartından
+  // BAĞIMSIZ olarak her tick'te bir sonraki parçayı işlemeye devam et —
+  // aksi halde tur asla tamamlanamaz.
+  if (_universeScanState) {
+    try {
+      await _advanceUniverseScan();
+    } catch (err) {
+      // BAN_SIGNAL burada yakalanır (_advanceUniverseScan zaten state'i
+      // temizleyip fırlattı) — backoff'u burada uygula.
+      _lastUniverseRefresh = Date.now();
+      console.warn('[Kom2ServerWatcher] Evren taraması başarısız, önceki liste kullanılmaya devam:', err.message);
+    }
+    return;
+  }
+
+  // Yeni bir tur başlatma şartı: en son TAMAMLANMIŞ turdan bu yana
+  // UNIVERSE_REFRESH_MS (24sa) geçmiş olmalı — evrenin dolu/boş olmasından
+  // bağımsız (2026-08-18'de düzeltilen kritik hata: eskiden `_universe.size>0`
+  // şartına bağlıydı, evren boş kaldığı sürece hiç beklemeden tekrar
+  // deniyordu, banlı IP'yi sürekli yeniden dövüyordu).
   if (Date.now() - _lastUniverseRefresh < UNIVERSE_REFRESH_MS) return;
-  _lastUniverseRefresh = Date.now(); // denemeden ÖNCE damgala — başarılı olsun ya da olmasın
   try {
-    await _refreshUniverse();
+    await _advanceUniverseScan(); // turun İLK parçası
   } catch (err) {
-    console.warn('[Kom2ServerWatcher] Evren yenileme başarısız, önceki liste kullanılmaya devam:', err.message);
+    _lastUniverseRefresh = Date.now();
+    console.warn('[Kom2ServerWatcher] Evren taraması başlatılamadı, önceki liste kullanılmaya devam:', err.message);
   }
 }
 
