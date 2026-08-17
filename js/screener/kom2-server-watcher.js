@@ -82,8 +82,16 @@ const UNIVERSE_SCAN_PACE_MS = 300;
 // düz 300ms aralıkla art arda göndermek production'da ban tetikledi. Artık
 // chunk kendi içinde GRUP_SIZE'lık alt gruplara bölünüyor, gruplar arasına
 // istekler-arası tempodan (300ms) çok daha BELİRGİN bir bekleme konuyor.
-const UNIVERSE_SCAN_GROUP_SIZE = 20;
-const UNIVERSE_SCAN_GROUP_PAUSE_MS = 1500;
+// [2026-08-18, DÖRDÜNCÜ DÜZELTME] Ban, deploy'dan ~74 saniye sonra — Kom2'nin
+// tick'inin BAŞLADIĞI an — geldi (yeni eklenen teşhisle doğrulandı:
+// lastError=BAN_SIGNAL_418, ilk grubun daha ilk sembolünde). Bu, grup
+// boyutu/temposundan çok, o anki paylaşılan IP çakışmasına (muhtemelen
+// Kom1'in tick'i, server.js'teki 40000ms gecikmeyle bu sırada hâlâ
+// çalışıyor olabilir) işaret ediyor. Ek güvenlik payı: grup küçültüldü,
+// gruplar arası bekleme artırıldı; asıl düzeltme server.js'teki tick
+// başlangıç gecikmesinin çok daha ileri itilmesi (bkz. o dosyadaki not).
+const UNIVERSE_SCAN_GROUP_SIZE = 10;
+const UNIVERSE_SCAN_GROUP_PAUSE_MS = 3000;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -279,9 +287,15 @@ async function _advanceUniverseScan() {
         await sleep(UNIVERSE_SCAN_PACE_MS);
       } catch (err) {
         if (String(err.message).startsWith('BAN_SIGNAL')) {
-          console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tüm tarama iptal edildi, ${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra baştan denenecek.`);
+          // [2026-08-18, teşhis iyileştirmesi] Ne kadar ilerlemişken banlandığı
+          // _lastError'a yazılsın — state null'lanmadan ÖNCE, aksi halde bu
+          // bilgi kayboluyordu (bkz. kullanıcının "processed/totalSymbols
+          // görünmüyor" bulgusu).
+          const processedSoFar = state.cursor + g + group.indexOf(symbol);
+          console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}, ${processedSoFar}/${state.symbols.length} sembol işlenmişti) — tüm tarama iptal edildi, ${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra baştan denenecek.`);
           _universeScanState = null; // yarım kalan turu tamamen at, baştan başla
-          throw err; // _maybeRefreshUniverse backoff'u uygulasın
+          const enriched = new Error(`${err.message} (${symbol}, ${processedSoFar}/${state.symbols.length} sembol işlenmişken)`);
+          throw enriched; // _maybeRefreshUniverse backoff'u uygulasın
         }
         continue; // tekil sembol hatası bu grubu durdurmasın
       }

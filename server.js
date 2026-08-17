@@ -823,16 +823,15 @@ mongoose.connection.once('open', () => {
   // yazar) tick'ten (Mongo'dan okur) 5sn ÖNCE başlıyor ki aynı 5dk'lık
   // pencerede veri önce yazılmış olsun.
   //
-  // [2026-08-18, kullanıcı sorusu üzerine düzeltme] İlk yazımda 45000/50000ms
-  // seçilmişti (Kom1'in 40000ms'inden SADECE 5-10sn sonra) — bu, START
-  // ÇAKIŞMASINI önler ama Kom1'in TİPİK tick SÜRESİYLE (o turda "sırası
-  // gelen" ~60-140 sembol × 2 TF, SCAN_PACE_MS=120ms ile ~15-20sn sürebilir)
-  // çakışma riskini önlemezdi — Kom1'in tick'i 40000ms'de başlayıp 55000-
-  // 60000ms'ye kadar sürebilirken Kom2 daha 50000ms'de kendi REST isteklerine
-  // (5m onayı) başlamış olurdu. Şimdi 70000/75000ms'ye çekildi — Kom1'in
-  // tipik tick'i bittikten SONRA rahat bir pay bırakıyor (bkz. 2026-08-12'deki
-  // gerçek ban olayı, .claude/CLAUDE.md "bot-architecture" — iki ağır işin
-  // aynı pencerede çakışması riskli).
+  // [2026-08-18, DÖRDÜNCÜ DÜZELTME] 70000/75000ms de yetmedi — production'da
+  // ban, Kom2'nin tick'i başlar başlamaz (deploy'dan ~74sn sonra) geldi.
+  // Muhtemel sebep: bu gecenin çok sayıda arka arkaya redeploy'u Kom1'in
+  // KENDİ tick'ini de her seferinde yeniden başlattı, bu da Kom1'in
+  // "sırası gelen sembol" birikimini büyütüp tipik tick süresini
+  // beklenenden çok uzatmış olabilir. Güvenlik payı çok daha büyütüldü:
+  // 180000/185000ms (3dk/3dk5sn) — Kom1'in tick'inin (40000ms'de başlıyor)
+  // ne kadar uzun sürerse sürsün bitmiş olacağı bir noktaya itildi. Hâlâ
+  // aynı 5dk'lık tick periyodu içinde kalıyor.
   //
   // ⚠️ SOĞUK BAŞLAŞLANGIÇ: OI geçmişi sıfırdan birikmeye başlıyor, 7 günlük
   // kalıcılık penceresi dolmadan (yaklaşık 2026-08-25) Kom2 HİÇ sinyal
@@ -843,7 +842,7 @@ mongoose.connection.once('open', () => {
     .then(records => Kom2ServerWatcher.loadScanState(records))
     .catch(err => console.warn('[Kom2ServerWatcher] Kayıtlı tarama durumu yüklenemedi (ilk çalıştırma olabilir):', err.message));
 
-  _staggeredStart(collectKom2OiLsData, 70000, 5 * 60 * 1000);
+  _staggeredStart(collectKom2OiLsData, 180000, 5 * 60 * 1000);
 
   _staggeredStart(() => {
     const queryOiHistory = (symbol, sinceMs) =>
@@ -873,7 +872,7 @@ mongoose.connection.once('open', () => {
         );
       } catch (err) { console.warn('[Kom2ServerWatcher] Tarama durumu kaydedilemedi:', err.message); }
     }).catch(err => console.error('[Kom2ServerWatcher] tick hatası:', err.message));
-  }, 75000, 5 * 60 * 1000);
+  }, 185000, 5 * 60 * 1000);
 });
 
 // ==========================================
