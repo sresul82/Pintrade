@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 *_log.txt
 *_log*.txt
+backtest/kom2/cross_check_cases.json

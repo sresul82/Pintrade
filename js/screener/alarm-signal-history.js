@@ -137,6 +137,12 @@ const AlarmSignalHistory = (() => {
   // aynı kural kullanılıyor.
   let _serverKom1Records = [];
 
+  // Kom2 (2026-08-17, kullanıcı onayıyla) — OI-kalıcılık yolu, tamamen
+  // server-side (Kom1'in aksine bir "browser tarayıcı" hızlı-yol karşılığı
+  // YOK, bu yüzden Kom1'deki EventBus.on('kom1:signalConfirmed', ...) anlık
+  // tazeleme mekanizması burada yok — sadece periyodik polling).
+  let _serverKom2Records = [];
+
   // [2026-08-15, kullanıcı bulgusu] Kullanıcı sürekli (gizli pencerede bile)
   // "No results" görüyordu — DevTools'ta bu isteğin tek başına 404 döndüğü
   // görüldü, aynı anda gönderilen onlarca başka istek sorunsuzdu. Önceden
@@ -181,6 +187,32 @@ const AlarmSignalHistory = (() => {
     }
   }
 
+  async function _fetchKom2Once() {
+    const backend = window.AppConfig?.BACKEND_URL || '';
+    const res = await fetch(`${backend}/api/kom2/signals?limit=50`, { cache: 'no-store' });
+    if (!res.ok) {
+      console.warn(`[AlarmSignalHistory] /api/kom2/signals HTTP ${res.status}`);
+      return null;
+    }
+    const records = await res.json();
+    return Array.isArray(records) ? records : null;
+  }
+
+  async function _fetchServerKom2Signals() {
+    try {
+      let records = await _fetchKom2Once();
+      if (!records) {
+        await new Promise(r => setTimeout(r, 1500));
+        records = await _fetchKom2Once();
+      }
+      if (!records) return;
+      _serverKom2Records = records;
+      if (document.getElementById('dp-alarm-tab')?.offsetParent) render();
+    } catch (err) {
+      console.warn('[AlarmSignalHistory] /api/kom2/signals çekilemedi:', err.message);
+    }
+  }
+
   /** Önerilen giriş fiyatı (sinyalin oluştuğu barın kapanışı, sunucuda
    *  saklanan `price`) ile şu anki fiyat arasındaki ham fark — "geri ölçüm"
    *  (gorevler2.md Görev 6, başlangıç modeli: ham fark yeterli, gelişmiş
@@ -212,14 +244,43 @@ const AlarmSignalHistory = (() => {
     });
   }
 
-  /** _demoSignals()'tan sadece Kom2/Kom3 placeholder kartları — Kom1 artık
-   *  _kom1LiveSignals()'tan geliyor, demo Kom1 kartları listeden çıkarıldı. */
-  function _kom23DemoSignals() {
-    return _demoSignals().filter(sig => sig.kom !== 1);
+  /** Kom2 — OI-kalıcılık sinyalleri (2026-08-17, kullanıcı onayıyla,
+   *  /api/kom2/signals'tan). Kom1LiveSignals'ın aynı deseni, farklı alanlar. */
+  function _kom2LiveSignals() {
+    return _serverKom2Records.map(entry => {
+      const ticker = (typeof MarketDataStore !== 'undefined' && MarketDataStore.getTicker)
+        ? MarketDataStore.getTicker(entry.symbol) : null;
+      const currentPrice = ticker?.price;
+      const priceChangePct = (typeof currentPrice === 'number' && entry.price)
+        ? ((currentPrice - entry.price) / entry.price) * 100
+        : 0;
+      return {
+        symbol: entry.symbol,
+        kom: 2,
+        exchange: 'binance', // Kom2 sadece Binance FUTURES tarıyor
+        timestamp: new Date(entry.confirmedAt).getTime(),
+        expiresAt: entry.expiresAt, // _isOldVisual bunu tercih eder (bkz. aşağı)
+        priceChangePct,
+        chips: [
+          { label: 'OI Artışı',   value: `+%${entry.oiGainPct?.toFixed(1)} (${entry.daysHeld}g)`, color: '#16a34a' },
+          { label: 'Global L/S',  value: entry.lsRatio?.toFixed(3),      color: '#16a34a' },
+          { label: 'Giriş Fiyatı', value: formatPrice(entry.price),      color: 'var(--text-primary)' },
+          { label: 'HA Close',    value: formatPrice(entry.haClose),     color: '#16a34a' },
+          { label: 'DEMA9',       value: formatPrice(entry.dema9),       color: 'var(--text-primary)' },
+        ],
+        rule: `OI kalıcılık testi (eşik≥%15, ${entry.daysHeld}g, pullback≤%10) + Global L/S<1.0 + 5dk onay: HA yeşil + DEMA9 üstü — 6 saat geçerli`,
+      };
+    });
+  }
+
+  /** _demoSignals()'tan sadece Kom3 placeholder kartları — Kom1/Kom2 artık
+   *  gerçek sunucu kaydından geliyor, demo kartları listeden çıkarıldı. */
+  function _kom3DemoSignals() {
+    return _demoSignals().filter(sig => sig.kom === 3);
   }
 
   function _allSignals() {
-    return [..._kom1LiveSignals(), ..._kom23DemoSignals()];
+    return [..._kom1LiveSignals(), ..._kom2LiveSignals(), ..._kom3DemoSignals()];
   }
 
   // Toolbar state: active Combo filter + exchange filter + search term (uppercase).
@@ -238,8 +299,21 @@ const AlarmSignalHistory = (() => {
     { key: 'bybit',   label: 'Bybit' },
   ];
 
+  // Kom2'nin geçerlilik süresi Kom1/Kom3'ün 24 saatlik "Old" kuralından
+  // FARKLI (2026-08-17, kullanıcı kararı — kısa/orta vadeli karakter):
+  // sunucuda hesaplanıp saklanan `expiresAt` (confirmedAt+6sa) varsa o
+  // esas alınır (tek doğruluk kaynağı sunucuda); yoksa (demo/eski kayıt
+  // gibi bir durumda) 6 saatlik sabite düşülür.
+  const KOM2_VALIDITY_MS = 6 * 60 * 60 * 1000;
+
   function _isOldVisual(sig) {
-    return sig.isOld || (Date.now() - sig.timestamp) > 24 * 60 * 60 * 1000;
+    if (sig.isOld) return true;
+    if (sig.kom === 2) {
+      return sig.expiresAt
+        ? Date.now() > new Date(sig.expiresAt).getTime()
+        : (Date.now() - sig.timestamp) > KOM2_VALIDITY_MS;
+    }
+    return (Date.now() - sig.timestamp) > 24 * 60 * 60 * 1000;
   }
 
   /** Watchlist'in "Signals" sistem listesini beslemek için — sadece güncel
@@ -499,6 +573,8 @@ const AlarmSignalHistory = (() => {
       _attachDelegation(container);
       _fetchServerKom1Signals();
       setInterval(_fetchServerKom1Signals, 60 * 1000); // sunucu kaydı 5dk'da bir yenilendiği için 60sn yeterli
+      _fetchServerKom2Signals();
+      setInterval(_fetchServerKom2Signals, 60 * 1000);
       _inited = true;
     }
     render();

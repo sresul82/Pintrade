@@ -6,6 +6,7 @@ const https   = require('https');
 const path    = require('path');
 const rateLimit = require('express-rate-limit');
 const Kom1ServerWatcher = require('./js/screener/kom1-server-watcher.js');
+const Kom2ServerWatcher = require('./js/screener/kom2-server-watcher.js');
 
 const app  = express();
 const PORT = process.env.PORT || 5500;
@@ -221,6 +222,68 @@ const kom1ScanStateSchema = new mongoose.Schema({
   lastScannedAt: Date,
 });
 const Kom1ScanState = mongoose.model('Kom1ScanState', kom1ScanStateSchema);
+
+// ── Kom2 Sunucu Gözlemi (2026-08-17, kullanıcı onayıyla, plan: robust-strolling-turtle) ──
+// js/screener/kom2-server-watcher.js — OI-kalıcılık yolu (divergence YOK,
+// backtest/train-test'te seyrelttiği görüldü), parametreler: eşik=%15,
+// gün=7, pullback≤%10, ls=global_below_1. Kom1'den FARKLI: sinyaller
+// süresiz değil, `expiresAt` (confirmedAt+6sa) sonrası "aktif değil"
+// sayılır — kısa/orta vadeli karakter (backtest: +1g ufku tutarsız/negatif).
+// Mevcut MarketData/LSMetrics koleksiyonları (48-60sa TTL, LSMetrics sadece
+// 8 sabit coin) Kom2'nin 7 günlük kalıcılık penceresine YETMİYOR — bu yüzden
+// Kom2 kendi bağımsız OI/L-S geçmiş koleksiyonlarına sahip (aşağıda).
+//
+// ── OI geçmişi (Kom2ServerWatcher'ın "sert coin" evreni, ~80 sembol) ──
+const kom2OiHistorySchema = new mongoose.Schema({
+  symbol: { type: String, required: true },
+  timestamp: { type: Date, required: true },
+  sumOpenInterest: Number,
+  sumOpenInterestValue: Number,
+  createdAt: { type: Date, default: Date.now },
+});
+kom2OiHistorySchema.index({ symbol: 1, timestamp: 1 });
+kom2OiHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }); // Binance'in kendi 30 günlük kısıtıyla aynı — daha uzun tutmanın faydası yok
+const Kom2OiHistory = mongoose.model('Kom2OiHistory', kom2OiHistorySchema);
+
+// ── Global L/S oranı geçmişi — SADECE global_below_1 varyantı için gerekli,
+// top-trader alanları v1 kapsamı dışı (kolayca eklenebilir, bkz. plan). ──
+const kom2LsHistorySchema = new mongoose.Schema({
+  symbol: { type: String, required: true },
+  timestamp: { type: Date, required: true },
+  globalRatio: Number,
+  globalLongPct: Number,
+  globalShortPct: Number,
+  createdAt: { type: Date, default: Date.now },
+});
+kom2LsHistorySchema.index({ symbol: 1, timestamp: 1 });
+kom2LsHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+const Kom2LsHistory = mongoose.model('Kom2LsHistory', kom2LsHistorySchema);
+
+// ── Kesinleşmiş Kom2 sinyalleri ──────────────────────────────────────
+const kom2SignalSchema = new mongoose.Schema({
+  symbol: { type: String, required: true },
+  oiGainPct: Number,
+  daysHeld: Number,
+  lsRatio: Number,
+  price: Number,
+  haOpen: Number, haClose: Number, dema9: Number,
+  firedAt: Date,
+  confirmedAt: { type: Date, required: true },
+  expiresAt: { type: Date, required: true }, // Kom1'in aksine — kısa/orta vadeli, 6 saat sonra "aktif değil"
+  createdAt: { type: Date, default: Date.now },
+});
+kom2SignalSchema.index({ confirmedAt: -1 });
+kom2SignalSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }); // geçmiş kayıt olarak yine 30 gün, "aktiflik" (expiresAt) ayrı bir kavram
+const Kom2SignalLog = mongoose.model('Kom2SignalLog', kom2SignalSchema);
+
+// ── Kom2 Tarama Durumu — Kom1ScanState'in birebir aynısı ────────────
+const kom2ScanStateSchema = new mongoose.Schema({
+  symbol: { type: String, required: true, unique: true },
+  tier: Number,
+  quoteVolume24h: Number,
+  lastScannedAt: Date,
+});
+const Kom2ScanState = mongoose.model('Kom2ScanState', kom2ScanStateSchema);
 
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
@@ -483,6 +546,76 @@ async function collectLSData() {
   }
 }
 
+// ── Kom2: OI + Global L/S Geçmişi (her 5dk, Kom2ServerWatcher'ın "sert
+// coin" evreni — ~80 sembol, sabit liste DEĞİL, her turda güncel evrenden
+// okunur). collectLSData'nın desenini taklit eder, ama FARKLI olarak canlı
+// ileri-toplama (geriye sayfalama YOK — Kom2ServerWatcher'ın 7 günlük
+// kalıcılık testi zamanla biriken bu geçmişi kullanacak, bkz. plan
+// "soğuk başlangıç" notu: ilk ~7 gün Kom2 hiç sinyal ÜRETEMEZ, bu normal).
+// [2026-08-18, kullanıcı sorusu üzerine düzeltme] limit=5 (ilk yazımda 15'ti):
+// bu collector 5 dakikada bir çalışıyor ve period=5m veri çekiyor — yani her
+// turda genelde SADECE ~1 yeni kayıt birikmiş olur. limit=15 seçilmiş olması
+// her turda ÖNCEKİ turlarla ÇAKIŞAN ~14 kaydı da tekrar tekrar yazdırıyordu
+// (tekilleştirme indeksi YOK, bkz. şema notu) — 80 sembol × 2 koleksiyon ×
+// 15 kayıt × (günde 288 tur) ~= 691.200 kayıt/gün gibi büyük ölçüde gereksiz
+// bir yazım hacmine yol açardı. limit=5, kaçırılan tek bir tur (~5dk) için
+// hâlâ yeterli tampon bırakırken israfı ~3 kat azaltıyor. ──
+async function collectKom2OiLsData() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    const symbols = Kom2ServerWatcher.getUniverseSummary().symbols;
+    if (!symbols.length) {
+      console.log('[Collector] Kom2 OI/L-S: evren henüz yenilenmedi, bu tur atlandı.');
+      return;
+    }
+
+    const now = new Date();
+    const oiDocs = [];
+    const lsDocs = [];
+
+    const BATCH = 5;
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      const batch = symbols.slice(i, i + BATCH);
+      await Promise.allSettled(batch.map(async (sym) => {
+        try {
+          const [oiHist, lsHist] = await Promise.all([
+            fetchJson('fapi.binance.com', `/futures/data/openInterestHist?symbol=${sym}&period=5m&limit=5`),
+            fetchJson('fapi.binance.com', `/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=5`),
+          ]);
+          if (Array.isArray(oiHist)) {
+            for (const r of oiHist) {
+              oiDocs.push({
+                symbol: sym, timestamp: new Date(r.timestamp),
+                sumOpenInterest: parseFloat(r.sumOpenInterest),
+                sumOpenInterestValue: parseFloat(r.sumOpenInterestValue),
+                createdAt: now,
+              });
+            }
+          }
+          if (Array.isArray(lsHist)) {
+            for (const r of lsHist) {
+              lsDocs.push({
+                symbol: sym, timestamp: new Date(r.timestamp),
+                globalRatio: parseFloat(r.longShortRatio),
+                globalLongPct: parseFloat(r.longAccount),
+                globalShortPct: parseFloat(r.shortAccount),
+                createdAt: now,
+              });
+            }
+          }
+        } catch { /* sessizce geç — tek sembol hatası turu durdurmasın */ }
+      }));
+      await sleep(250);
+    }
+
+    if (oiDocs.length > 0) await Kom2OiHistory.insertMany(oiDocs, { ordered: false }).catch(() => {});
+    if (lsDocs.length > 0) await Kom2LsHistory.insertMany(lsDocs, { ordered: false }).catch(() => {});
+    console.log(`[Collector] Kom2 OI/L-S: ${symbols.length} sembol, ${oiDocs.length} OI + ${lsDocs.length} L/S kaydı eklendi.`);
+  } catch (e) {
+    console.error('[Collector] Kom2 OI/L-S hatası:', e.message);
+  }
+}
+
 // ── Bybit: L/S Metrikleri (her 5dk, aynı sabit coin listesi) ────────
 // Bybit'in public API'sinde Binance'in topPosition/topAccount/taker'ına
 // karşılık gelen bir endpoint YOK — sadece /v5/market/account-ratio var
@@ -684,6 +817,63 @@ mongoose.connection.once('open', () => {
       } catch (err) { console.warn('[Kom1ServerWatcher] Tarama durumu kaydedilemedi:', err.message); }
     }).catch(err => console.error('[Kom1ServerWatcher] tick hatası:', err.message));
   }, 40000, 5 * 60 * 1000);
+
+  // ── Kom2 sunucu gözlemi (2026-08-17, kullanıcı onayıyla, plan: robust-
+  // strolling-turtle) — OI-kalıcılık yolu. Collector (OI/L-S Mongo'ya
+  // yazar) tick'ten (Mongo'dan okur) 5sn ÖNCE başlıyor ki aynı 5dk'lık
+  // pencerede veri önce yazılmış olsun.
+  //
+  // [2026-08-18, kullanıcı sorusu üzerine düzeltme] İlk yazımda 45000/50000ms
+  // seçilmişti (Kom1'in 40000ms'inden SADECE 5-10sn sonra) — bu, START
+  // ÇAKIŞMASINI önler ama Kom1'in TİPİK tick SÜRESİYLE (o turda "sırası
+  // gelen" ~60-140 sembol × 2 TF, SCAN_PACE_MS=120ms ile ~15-20sn sürebilir)
+  // çakışma riskini önlemezdi — Kom1'in tick'i 40000ms'de başlayıp 55000-
+  // 60000ms'ye kadar sürebilirken Kom2 daha 50000ms'de kendi REST isteklerine
+  // (5m onayı) başlamış olurdu. Şimdi 70000/75000ms'ye çekildi — Kom1'in
+  // tipik tick'i bittikten SONRA rahat bir pay bırakıyor (bkz. 2026-08-12'deki
+  // gerçek ban olayı, .claude/CLAUDE.md "bot-architecture" — iki ağır işin
+  // aynı pencerede çakışması riskli).
+  //
+  // ⚠️ SOĞUK BAŞLAŞLANGIÇ: OI geçmişi sıfırdan birikmeye başlıyor, 7 günlük
+  // kalıcılık penceresi dolmadan (yaklaşık 2026-08-25) Kom2 HİÇ sinyal
+  // ÜRETEMEZ — bu bir hata/ban belirtisi DEĞİL, beklenen bir durum.
+  console.log('[Kom2ServerWatcher] ⚠️ Soğuk başlangıç: OI/L-S geçmişi şimdi birikmeye başlıyor, 7 günlük kalıcılık penceresi dolmadan (yaklaşık 7 gün sonra) hiç sinyal üretilmeyecek. Bu normal, hata/ban değil.');
+
+  Kom2ScanState.find({}, { _id: 0, __v: 0 }).lean()
+    .then(records => Kom2ServerWatcher.loadScanState(records))
+    .catch(err => console.warn('[Kom2ServerWatcher] Kayıtlı tarama durumu yüklenemedi (ilk çalıştırma olabilir):', err.message));
+
+  _staggeredStart(collectKom2OiLsData, 70000, 5 * 60 * 1000);
+
+  _staggeredStart(() => {
+    const queryOiHistory = (symbol, sinceMs) =>
+      Kom2OiHistory.find({ symbol, timestamp: { $gte: new Date(sinceMs) } }, { _id: 0, timestamp: 1, sumOpenInterest: 1 })
+        .sort({ timestamp: 1 }).lean()
+        .then(rows => rows.map(r => ({ timestamp: r.timestamp.getTime(), value: r.sumOpenInterest })));
+    const queryLsHistory = (symbol, sinceMs) =>
+      Kom2LsHistory.find({ symbol, timestamp: { $gte: new Date(sinceMs) } }, { _id: 0, timestamp: 1, globalRatio: 1 })
+        .sort({ timestamp: 1 }).lean()
+        .then(rows => rows.map(r => ({ timestamp: r.timestamp.getTime(), value: r.globalRatio })));
+
+    Kom2ServerWatcher.tick(queryOiHistory, queryLsHistory, async (confirmed) => {
+      // NOT: Telegram'a bilinçli olarak BAĞLANMADI (kullanıcı isteği,
+      // 2026-08-17) — ayrı, ileri seviye bir iş olarak bekliyor.
+      try {
+        await Kom2SignalLog.create(confirmed);
+      } catch (err) { console.warn('[Kom2ServerWatcher] Sinyal kaydedilemedi:', err.message); }
+    }).then(async () => {
+      const records = Kom2ServerWatcher.getScanStateForPersist();
+      if (!records.length) return;
+      try {
+        await Kom2ScanState.bulkWrite(
+          records.map(r => ({
+            updateOne: { filter: { symbol: r.symbol }, update: { $set: r }, upsert: true }
+          })),
+          { ordered: false }
+        );
+      } catch (err) { console.warn('[Kom2ServerWatcher] Tarama durumu kaydedilemedi:', err.message); }
+    }).catch(err => console.error('[Kom2ServerWatcher] tick hatası:', err.message));
+  }, 75000, 5 * 60 * 1000);
 });
 
 // ==========================================
@@ -941,6 +1131,27 @@ app.post('/api/kom1/signals', async (req, res) => {
 // çalıştığını görmek için (tarayıcı hiç açılmasa bile).
 app.get('/api/kom1/status', (req, res) => {
   res.json({ pending: Kom1ServerWatcher.getPending(), universe: Kom1ServerWatcher.getUniverseSummary() });
+});
+
+// ── Kom2 Sunucu Gözlemi (2026-08-17, kullanıcı onayıyla) ─────────────
+// GET /api/kom2/signals — kesinleşmiş sinyaller (en yeni önce). POST YOK
+// — Kom2'nin Kom1'in 11-coin browser tarayıcısı gibi bir karşılığı yok,
+// tamamen server-side.
+app.get('/api/kom2/signals', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const records = await Kom2SignalLog.find({}, { _id: 0, __v: 0 })
+      .sort({ confirmedAt: -1 }).limit(limit).lean();
+    res.json(records);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/kom2/status — bekleyen adaylar + evren özeti (Kom1'in
+// /api/kom1/status'üyle aynı şekil).
+app.get('/api/kom2/status', (req, res) => {
+  res.json({ pending: Kom2ServerWatcher.getPending(), universe: Kom2ServerWatcher.getUniverseSummary() });
 });
 
 // ── Sağlık Kontrolü ─────────────────────────────────────────────────
