@@ -230,6 +230,11 @@ const _dirty = new Set();
 // tick'te kaldığı yerden devam eder (bkz. _advanceUniverseScan).
 let _universeScanState = null;
 
+// [2026-08-18, teşhis alanları — kullanıcı isteği] Render log görüntüleyicisi
+// yeni satırları güvenilir şekilde göstermediği için, /api/kom2/status'un
+// kendisi tanı koymaya yetecek bilgiyi taşısın diye eklendi.
+let _lastError = null; // { message: string, at: number(ms) } | null
+
 /**
  * Devam eden bir tarama yoksa exchangeInfo+24hr ticker çekip YENİ bir tarama
  * başlatır (state'i sıfırdan kurar); varsa doğrudan kaldığı yerden devam
@@ -296,9 +301,12 @@ async function _advanceUniverseScan() {
   _universeScanState = null;
 
   if (hard.length === 0) {
+    _lastError = { message: 'Tam tur tamamlandı ama hiç "sert coin" (ATR>=%12) bulunamadı', at: Date.now() };
     console.warn(`[Kom2ServerWatcher] Tam tur tamamlandı ama hiç "sert coin" bulunamadı (${_universe.size > 0 ? 'önceki liste korunuyor' : 'evren boş kalıyor'}) — bir sonraki tam tarama ~${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra.`);
     return;
   }
+
+  _lastError = null; // başarılı tur — önceki hata artık geçerli değil
 
   const volumes = hard.map(h => h.quoteVolume24h).filter(v => v > 0).sort((a, b) => a - b);
   _volumeTierEdges = volumes.length
@@ -342,6 +350,7 @@ async function _maybeRefreshUniverse() {
       // BAN_SIGNAL burada yakalanır (_advanceUniverseScan zaten state'i
       // temizleyip fırlattı) — backoff'u burada uygula.
       _lastUniverseRefresh = Date.now();
+      _lastError = { message: err.message, at: Date.now() };
       console.warn('[Kom2ServerWatcher] Evren taraması başarısız, önceki liste kullanılmaya devam:', err.message);
     }
     return;
@@ -357,6 +366,7 @@ async function _maybeRefreshUniverse() {
     await _advanceUniverseScan(); // turun İLK parçası
   } catch (err) {
     _lastUniverseRefresh = Date.now();
+    _lastError = { message: err.message, at: Date.now() };
     console.warn('[Kom2ServerWatcher] Evren taraması başlatılamadı, önceki liste kullanılmaya devam:', err.message);
   }
 }
@@ -398,11 +408,24 @@ function getScanStateForPersist() {
 function getUniverseSummary() {
   const counts = { 1: 0, 2: 0, 3: 0 };
   for (const s of _universe.values()) counts[s.tier] = (counts[s.tier] || 0) + 1;
+  const nextAttemptAt = _universeScanState
+    ? null // aktif taramanın kendisi zaten "sıradaki deneme" — ayrı bir gelecek zaman yok
+    : (_lastUniverseRefresh ? _lastUniverseRefresh + UNIVERSE_REFRESH_MS : Date.now());
   return {
     total: _universe.size, tier1: counts[1], tier2: counts[2], tier3: counts[3],
     lastRefreshedAt: _lastUniverseRefresh || null,
     symbols: [..._universe.keys()], // collectKom2OiLsData'nın OI/L-S çekeceği sembol listesi
     volumeTierEdges: _volumeTierEdges,
+    // [2026-08-18, teşhis alanları — kullanıcı isteği, log görüntüleyicisine
+    // güvenilir erişim olmadığı için eklendi]
+    scan: {
+      active: _universeScanState !== null,
+      processed: _universeScanState ? _universeScanState.cursor : null,
+      totalSymbols: _universeScanState ? _universeScanState.symbols.length : null,
+      hardFoundSoFar: _universeScanState ? _universeScanState.hard.length : null,
+    },
+    lastError: _lastError, // { message, at } | null
+    nextAttemptAt, // ms epoch — bir sonraki YENİ tur denemesinin planlandığı an (aktif tarama varken null)
   };
 }
 
