@@ -72,6 +72,11 @@ const TIER_INTERVAL_MS = {
 // ATR_CACHE_TTL_MS ile aynı ritimde, tutarlı).
 const UNIVERSE_REFRESH_MS = 24 * 60 * 60 * 1000;
 const SCAN_PACE_MS = 120;
+// [2026-08-18 EKLENDİ] _refreshUniverse'ün 527 sembollük ATR taraması için
+// ayrı, daha yavaş bir tempo — SCAN_PACE_MS'in (Kom1'den miras, küçük/nadir
+// istek grupları için düşünülmüş) bu kadar büyük bir toplu istek grubunda
+// paylaşılan IP ağırlık bütçesini riske attığı gerçek bir olayla görüldü.
+const UNIVERSE_SCAN_PACE_MS = 300;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -231,7 +236,12 @@ async function _refreshUniverse() {
     let atrPct;
     try {
       atrPct = await _getAtrPct(symbol);
-      await sleep(SCAN_PACE_MS);
+      // [2026-08-18 DÜZELTME] 120ms (SCAN_PACE_MS, küçük/nadir istekler için)
+      // yerine daha yavaş UNIVERSE_SCAN_PACE_MS — bu tarama 527 isteği KISA
+      // sürede art arda gönderiyor, Kom1'in tick'i + collectBinanceData ile
+      // AYNI paylaşılan IP ağırlık bütçesinde çakışıp ban tetikleyebiliyor
+      // (gerçek olay, 2026-08-18: "Ban sinyali evren taramasında (ETHUSDT)").
+      await sleep(UNIVERSE_SCAN_PACE_MS);
     } catch (err) {
       if (String(err.message).startsWith('BAN_SIGNAL')) {
         console.warn(`[Kom2ServerWatcher] ⛔ Ban sinyali evren taramasında (${symbol}) — tarama şu ana kadarki sonuçla durduruldu.`);
@@ -245,7 +255,14 @@ async function _refreshUniverse() {
   }
 
   if (hard.length === 0) {
-    console.warn('[Kom2ServerWatcher] Evren taraması hiç "sert coin" bulamadı — önceki liste korunuyor.');
+    // [2026-08-18 DÜZELTME] "önceki liste korunuyor" ilk çalıştırmada
+    // yanıltıcıydı (o an henüz hiç liste yok) — asıl önemlisi burada
+    // _lastUniverseRefresh'i GÜNCELLEMİYORDU, bu yüzden _maybeRefreshUniverse
+    // bir sonraki tick'te (5dk sonra) taramayı BAŞTAN deniyordu — ban
+    // sonrası banlı IP'yi her 5 dakikada bir yeniden dövmeye yol açan asıl
+    // hata buydu. Artık backoff _maybeRefreshUniverse'de, deneme ÖNCESİNDE
+    // damgalanıyor (aşağı bkz.) — bu fonksiyon artık sadece log basıyor.
+    console.warn(`[Kom2ServerWatcher] Evren taraması hiç "sert coin" bulamadı (${_universe.size > 0 ? 'önceki liste korunuyor' : 'ilk çalıştırma, evren boş kalıyor'}) — bir sonraki deneme ~${Math.round(UNIVERSE_REFRESH_MS / 3600000)} saat sonra.`);
     return;
   }
 
@@ -271,7 +288,6 @@ async function _refreshUniverse() {
     if (!seen.has(symbol)) _universe.delete(symbol);
   }
 
-  _lastUniverseRefresh = Date.now();
   const s = getUniverseSummary();
   console.log(`[Kom2ServerWatcher] Evren yenilendi: ${s.total} "sert coin" (ATR>=%${ATR_MIN_PCT}), Katman1=${s.tier1}, Katman2=${s.tier2}, Katman3=${s.tier3}.`);
 }
@@ -282,7 +298,17 @@ function _percentile(sortedArr, p) {
 }
 
 async function _maybeRefreshUniverse() {
-  if (_universe.size > 0 && Date.now() - _lastUniverseRefresh < UNIVERSE_REFRESH_MS) return;
+  // [2026-08-18 KRİTİK DÜZELTME — İKİNCİ KATMAN] Önceki halde koruma şartı
+  // `_universe.size > 0 && ...` idi: evren BOŞ kaldığı sürece (ör. ban
+  // nedeniyle ilk tarama hiç coin bulamadıysa) bu şart HİÇBİR ZAMAN
+  // sağlanmıyordu — `_lastUniverseRefresh`'i deneme öncesi damgalamak TEK
+  // BAŞINA yetmiyordu, çünkü guard'ın kendisi `size>0`'a bağımlıydı ve her
+  // tick'te yine `false` dönüp taramayı tekrar tetikliyordu. Doğru davranış:
+  // backoff SADECE zamana bağlı olmalı, evren dolu/boş olmasından bağımsız
+  // — "en son ne zaman DENEDİK" sorusu, "elimizde veri var mı" sorusundan
+  // ayrı. `_universe.size` kontrolü tamamen kaldırıldı.
+  if (Date.now() - _lastUniverseRefresh < UNIVERSE_REFRESH_MS) return;
+  _lastUniverseRefresh = Date.now(); // denemeden ÖNCE damgala — başarılı olsun ya da olmasın
   try {
     await _refreshUniverse();
   } catch (err) {
