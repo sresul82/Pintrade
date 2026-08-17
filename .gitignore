@@ -8,3 +8,5 @@ graphify-out/
 backtest/kom2/data/
 __pycache__/
 *.pyc
+*_log.txt
+*_log*.txt
