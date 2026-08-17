@@ -5,3 +5,6 @@ out.txt
 tmp/
 graphify-out/
 .claude/scheduled_tasks.lock
+backtest/kom2/data/
+__pycache__/
+*.pyc

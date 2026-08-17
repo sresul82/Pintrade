@@ -200,6 +200,7 @@ const kom1SignalSchema = new mongoose.Schema({
   bigTf:  { type: String, required: true },
   rcMid: Number, wtVal: Number, wtPrev: Number, price: Number,
   haOpen: Number, haClose: Number, dema9: Number,
+  atrPct: Number, // 2026-08-17 — sinyal anındaki ATR14/fiyat %, ATR bandı filtresiyle birlikte eklendi
   firedAt: Date, confirmedAt: { type: Date, required: true },
   createdAt: { type: Date, default: Date.now },
 });

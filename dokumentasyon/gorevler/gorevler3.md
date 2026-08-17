@@ -400,6 +400,35 @@ vermedi). Tam detay ve "sonraki oturum için" checklist'i:
 
 **Rapor:** `2026-08-12-gorev6-tum-piyasa-genisletme.md`
 
+### ATR14 bandı (%12-40) filtresi eklendi — 2026-08-17, kullanıcı onayıyla deploy
+
+"ATR14 volatilite filtresi hâlâ uygulanmadı" notu artık geçerli değil.
+Ayrı, izole bir Python backtest ortamında (`backtest/kom2/`) yapılan analiz
+(dokumentasyon/raporlar/2026-08-16-kom1-atr-ince-bant-analizi.md,
+2026-08-16-kom1-atr-band-evren-kapsami.md,
+2026-08-17-kom1-atr-dagilim-ve-genis-bant-analizi.md) sonucunda **%12-40**
+bandı (evrende ~70 coin, 526 sembol üzerinden) seçildi ve
+`js/screener/kom1-server-watcher.js`'e eklendi (`_checkBigTF` içinde,
+`_pending`'e girmeden hemen önceki bir kapı — evren/katman taraması
+DEĞİŞMEDİ, tüm semboller eskisi gibi taranıyor, sadece ATR bandı dışındaki
+adaylar sinyale dönüşemiyor). `Kom1SignalLog` şemasına `atrPct` alanı
+eklendi (server.js) — bundan sonraki her kesinleşen sinyal kendi ATR
+değerini de taşıyacak, filtre öncesi/sonrası sinyaller `confirmedAt` +
+`atrPct` alanlarının varlığıyla ayırt edilebilir.
+
+**Bilinen kısıt (kullanıcı bilerek kabul etti):** Bu bant sadece TEK bir
+~2.3 günlük gerçek sinyal penceresinde (200 sinyal, Kom1SignalLog'un API
+üzerinden erişilebilen tüm geçmişi) doğrulandı — bağımsız/eski bir zaman
+diliminde ayrıca test edilemedi (ne API limiti aşılabiliyor ne de bu
+makineden production Mongo'ya erişim var). Sentetik yeniden-üretim
+alternatifi de kullanıcı kararıyla yapılmadı (risk/getiri dengesi yeterli
+görülmedi).
+
+**Deploy sonrası izlenecek:** Görev 5'in gözlem prosedürüyle aynı —
+`GET /api/kom1/status`, `/api/kom1/signals` (artık `atrPct` alanıyla),
+konsol logları (`ATR bandı dışı (...): aday elendi` satırları — eleme
+oranının makul olduğunu doğrulamak için).
+
 ---
 
 ## [~] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — kısmen başladı)

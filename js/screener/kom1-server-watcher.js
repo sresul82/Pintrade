@@ -55,6 +55,25 @@ const SMALL_TF_BARS   = 40;
 const BIG_TFS = ['1h', '4h'];
 const BARS = RC_LENGTH + 30;
 
+// ── ATR14 volatilite bandı filtresi (2026-08-17, kullanıcı onayıyla deploy) ──
+// backtest/kom2/ altındaki ayrı Python backtest ortamında doğrulandı: günlük
+// ATR14/fiyat %12-40 arası bandı, tam coin evreninde (526 sembol, o an ~70
+// coin bu bantta) sabit-ufuklu (+1sa/+4sa/+1g) getiride en iyi sonucu verdi
+// (bkz. dokumentasyon/raporlar/2026-08-16-kom1-atr-ince-bant-analizi.md,
+// 2026-08-17-kom1-atr-dagilim-ve-genis-bant-analizi.md). Bağımsız/eski bir
+// zaman penceresinde ayrıca doğrulanamadı (Kom1SignalLog geçmişi ~2.3 gün,
+// API 200 sinyalle sınırlı, bu makineden production Mongo'ya erişim yok) —
+// kullanıcı bu riski bilerek kabul edip deploy kararı verdi.
+// Kapsam: evren/katman taraması (RC+WT büyük TF kontrolü) DEĞİŞMEDİ, tüm
+// semboller eskisi gibi taranmaya devam ediyor ("taransın ama sinyal
+// üretmesin") — filtre SADECE bir big-TF adayı (_pending'e girmeden hemen
+// önce) oluştuğunda, o sembolün ATR'si bandın dışındaysa sinyali eler.
+const ATR_BAND_LOW_PCT  = 12;
+const ATR_BAND_HIGH_PCT = 40;
+const ATR_TF = '1d';
+const ATR_KLINE_LIMIT = 20; // 14 TR + pay
+const ATR_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // günlük veriye dayanıyor, sık yenilenmesine gerek yok
+
 // ── gorevler3.md Görev 6 — hacme göre 3 katman + rotasyon aralıkları ────
 const TIER_SIZES = { 1: 100, 2: 200 }; // 3. katman: kalan her şey
 const TIER_INTERVAL_MS = {
@@ -106,6 +125,47 @@ function fetchKlines(symbol, interval, limit) {
 
 function hlc3(highs, lows, closes) {
   return closes.map((c, i) => (highs[i] + lows[i] + c) / 3);
+}
+
+// backtest/kom2/fetch_data.py:compute_atr14_pct ile BİREBİR AYNI formül
+// (basit ortalama son 14 TR, Wilder smoothing değil) — tutarlılık için.
+function computeAtr14Pct(klines) {
+  if (!Array.isArray(klines) || klines.length < 15) return null;
+  const highs  = klines.map(k => parseFloat(k[2]));
+  const lows   = klines.map(k => parseFloat(k[3]));
+  const closes = klines.map(k => parseFloat(k[4]));
+  const trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1]),
+    ));
+  }
+  const last14 = trs.slice(-14);
+  const atr14 = last14.reduce((a, b) => a + b, 0) / 14;
+  const lastClose = closes[closes.length - 1];
+  if (!(lastClose > 0)) return null;
+  return atr14 / lastClose * 100;
+}
+
+// symbol -> { atrPct, computedAt } — sadece BİR big-TF adayı oluştuğunda
+// doldurulur (bkz. _checkBigTF), evrenin tamamı için ayrı bir tarama YOK.
+const _atrCache = new Map();
+
+async function _getAtrPct(symbol) {
+  const cached = _atrCache.get(symbol);
+  if (cached && Date.now() - cached.computedAt < ATR_CACHE_TTL_MS) return cached.atrPct;
+  try {
+    const kl = await fetchKlines(symbol, ATR_TF, ATR_KLINE_LIMIT);
+    const atrPct = computeAtr14Pct(kl);
+    _atrCache.set(symbol, { atrPct, computedAt: Date.now() });
+    return atrPct;
+  } catch (err) {
+    if (String(err.message).startsWith('BAN_SIGNAL')) throw err;
+    console.warn(`[Kom1ServerWatcher] ATR hesaplanamadı (${symbol}):`, err.message);
+    return cached ? cached.atrPct : null; // eski değer varsa kullan, yoksa "bilinmiyor"
+  }
 }
 
 // ── Sembol evreni + katman ataması (in-memory, server.js Mongo ile besler/kalıcı tutar) ──
@@ -249,9 +309,17 @@ async function _checkBigTF(symbol, tf) {
   const price = closes[closes.length - 1];
   if (price > rc.mid) return;
 
+  // ATR bandı kapısı — nadiren tetiklenir (sadece burada, gerçek bir aday
+  // oluştuğunda), evrenin tamamını her tick'te taramaz.
+  const atrPct = await _getAtrPct(symbol);
+  if (atrPct === null || atrPct < ATR_BAND_LOW_PCT || atrPct >= ATR_BAND_HIGH_PCT) {
+    console.log(`[Kom1ServerWatcher] ATR bandı dışı (${symbol}: ATR=${atrPct === null ? 'bilinmiyor' : atrPct.toFixed(2) + '%'}), aday elendi.`);
+    return;
+  }
+
   const now = Date.now();
   _pending.set(key, {
-    symbol, bigTf: tf, rcMid: rc.mid, wtVal: wt.val, wtPrev: wt.prev, price,
+    symbol, bigTf: tf, rcMid: rc.mid, wtVal: wt.val, wtPrev: wt.prev, price, atrPct,
     firedAt: now, expiresAt: now + toleranceMs(tf),
   });
   console.log(`[Kom1ServerWatcher] Büyük TF sinyali ateşlendi: ${symbol} ${tf} — fiyat=${price}, RC_mid=${rc.mid.toFixed(4)}, WT ${wt.prev}→${wt.val}.`);
