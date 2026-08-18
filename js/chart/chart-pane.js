@@ -349,6 +349,11 @@ class ChartPane {
       this._syncDrawingCanvasClip(); // Fix Issue 1: dynamic scale width
       if (this.redrawDrawings) this.redrawDrawings();
     });
+    // NOT (2026-08-18): RSI panelinde çift-tıkla ayar açma denendi ama LWC'nin
+    // dblclick param'ının hangi pane'e denk geldiğini güvenilir şekilde
+    // doğrulayamadım (otomatik test ortamında koordinat ölçekleme sorunu
+    // yüzünden) — riskli/yarım bir özellik eklemek yerine ŞİMDİLİK atlandı.
+    // Ayar penceresine erişim: sol-üst legend'deki ⚙ ikonu (zaten çalışıyor).
     this.chart.timeScale().subscribeVisibleTimeRangeChange(r => {
       this._onRangeChange(r);
       this._syncDrawingCanvasClip(); // Fix Issue 1: dynamic scale width

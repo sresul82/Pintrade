@@ -1350,7 +1350,12 @@ const App = {
       const cfg = pane?.indicators.find(i => i.id === indicatorId);
       if (!pane || !cfg) return;
 
-      const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
+      if (cfg.type === 'rsi') {
+        _openRsiSettings(pane, cfg, indicatorId);
+        return;
+      }
+
+      const NAME = { ema: 'EMA', dema: 'DEMA' };
       const backdrop = document.createElement('div');
       backdrop.id = 'ind-settings-backdrop';
       backdrop.className = 'modal-backdrop';
@@ -1390,5 +1395,109 @@ const App = {
         pane.updateIndicatorSettings(indicatorId, { period: (Number.isFinite(period) && period > 0) ? period : cfg.period, color });
       });
     });
+
+    // ── RSI'ye özel ayar penceresi (2026-08-18, kullanıcı isteği — TV'nin
+    // Inputs/Style sekmelerine karşılık gelen alanlar tek bir formda) ──────
+    function _openRsiSettings(pane, cfg, indicatorId) {
+      const backdrop = document.createElement('div');
+      backdrop.id = 'ind-settings-backdrop';
+      backdrop.className = 'modal-backdrop';
+      const colorRow = (id, label, value) => `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <label class="form-label" style="margin:0;">${label}</label>
+          <input id="${id}" type="color" value="${value}" style="width:64px; height:26px; background:transparent; border:1px solid var(--border-primary); border-radius:5px; cursor:pointer;">
+        </div>`;
+      backdrop.innerHTML = `
+        <div class="modal" style="width:300px; max-height:80vh; overflow-y:auto;">
+          <div class="modal-header">
+            <span>RSI settings</span>
+            <button id="ind-settings-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">Inputs</div>
+            <label class="form-label">Length</label>
+            <input class="form-input" id="rsi-period" type="number" min="1" step="1" value="${cfg.period}" style="margin-bottom:10px;">
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <div style="flex:1;">
+                <label class="form-label">Upper band</label>
+                <input class="form-input" id="rsi-upper" type="number" min="1" max="100" step="1" value="${cfg.upperBand}">
+              </div>
+              <div style="flex:1;">
+                <label class="form-label">Lower band</label>
+                <input class="form-input" id="rsi-lower" type="number" min="0" max="99" step="1" value="${cfg.lowerBand}">
+              </div>
+            </div>
+
+            <div style="font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); text-transform:uppercase; margin:12px 0 6px; padding-top:8px; border-top:0.5px solid var(--border-primary);">Style</div>
+            ${colorRow('rsi-color', 'RSI line', cfg.color)}
+            ${colorRow('rsi-band-color', 'Band lines (30/70)', _toHex(cfg.bandColor))}
+            ${colorRow('rsi-fill-color', 'Background fill', _toHex(cfg.fillColor))}
+            ${colorRow('rsi-ob-color', 'Overbought fill', _toHex(cfg.obColor))}
+            ${colorRow('rsi-os-color', 'Oversold fill', _toHex(cfg.osColor))}
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+              <label class="form-label" style="margin:0;">Crosshair marker</label>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <input id="rsi-marker-radius" type="number" min="0" max="10" step="1" value="${cfg.markerRadius}" style="width:44px; height:26px; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:5px; color:var(--text-primary); text-align:center; font-size:11px;">
+                <input id="rsi-marker-color" type="color" value="${_toHex(cfg.markerColor || cfg.color)}" style="width:44px; height:26px; background:transparent; border:1px solid var(--border-primary); border-radius:5px; cursor:pointer;">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="justify-content:space-between;">
+            <button class="btn" id="ind-settings-remove" style="color:#e05c5c;">Remove</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn" id="ind-settings-cancel">Cancel</button>
+              <button class="btn" id="ind-settings-apply" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">Apply</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(backdrop);
+      const close = () => backdrop.remove();
+      backdrop.addEventListener('click', (e2) => { if (e2.target === backdrop) close(); });
+      document.getElementById('ind-settings-close')?.addEventListener('click', close);
+      document.getElementById('ind-settings-cancel')?.addEventListener('click', close);
+      document.getElementById('ind-settings-remove')?.addEventListener('click', () => {
+        close();
+        pane.removeIndicator(indicatorId);
+      });
+      document.getElementById('ind-settings-apply')?.addEventListener('click', () => {
+        const num = (id, fallback) => {
+          const v = parseFloat(document.getElementById(id)?.value);
+          return Number.isFinite(v) ? v : fallback;
+        };
+        const col = (id, fallback) => document.getElementById(id)?.value || fallback;
+        const patch = {
+          period: Math.max(1, Math.round(num('rsi-period', cfg.period))),
+          upperBand: num('rsi-upper', cfg.upperBand),
+          lowerBand: num('rsi-lower', cfg.lowerBand),
+          color: col('rsi-color', cfg.color),
+          bandColor: _hexToRgba(col('rsi-band-color', cfg.bandColor), 0.5),
+          fillColor: _hexToRgba(col('rsi-fill-color', cfg.fillColor), 0.06),
+          obColor: _hexToRgba(col('rsi-ob-color', cfg.obColor), 0.35),
+          osColor: _hexToRgba(col('rsi-os-color', cfg.osColor), 0.35),
+          markerColor: col('rsi-marker-color', cfg.markerColor || cfg.color),
+          markerRadius: Math.max(0, Math.round(num('rsi-marker-radius', cfg.markerRadius))),
+        };
+        close();
+        pane.updateIndicatorSettings(indicatorId, patch);
+      });
+    }
+
+    // rgba(...)/hex renk stringlerini <input type=color>'ın anladığı #rrggbb'ye çevirir.
+    function _toHex(c) {
+      if (!c) return '#808080';
+      if (c.startsWith('#')) return c;
+      const m = /rgba?\(([^)]+)\)/.exec(c);
+      if (!m) return '#808080';
+      const [r, g, b] = m[1].split(',').map(s => Math.round(parseFloat(s)));
+      return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+    }
+
+    // #rrggbb + istenen alpha'yı rgba(...) string'ine çevirir (dolgular için
+    // saydamlık gerekiyor, düz #rrggbb tüm alt paneli kapatırdı).
+    function _hexToRgba(hex, alpha) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
   },
 };
