@@ -112,6 +112,18 @@ uzatmamak için). Kullanıcı sabah uyandığında bu raporla birlikte kısa bir
 4. Bu gecenin "sık redeploy = kümülatif risk" dersi ileride `.claude/CLAUDE.md`
    "bot-architecture" bölümüne eklenmeyi hak ediyor — kullanıcı onayıyla.
 
+## Blok takibi (pasif, sık istek atılmadan)
+
+- **00:41 UTC** — İlk doğrulama: `/api/binance/futures/klines` → CloudFront 403.
+- **01:22 UTC** (45dk sonra, tek kontrol) — Hâlâ 403.
+- **02:53 UTC** (~90dk sonra, tek kontrol) — Hâlâ 403. `/health` sorunsuz
+  (server ayakta, DB bağlı, uptime ~3 saat — restart yok), sadece Binance
+  proxy yolu engelli. ~2 saat 12 dakikadır blok sürüyor — 2026-08-08'deki
+  11 saatlik olayla tutarlı bir süre aralığında, henüz açılmadı.
+- Bundan sonra gece boyunca aktif/sık kontrol YAPILMAYACAK (blok'u
+  uzatmamak için) — kullanıcı sabah uyandığında son durumu tek bir kontrolle
+  netleştireceğim.
+
 ## Değiştirilen dosyalar (bu gece, hepsi push edildi)
 
 - `js/screener/kom2-server-watcher.js` — backoff, tick-başına-parçalama,
