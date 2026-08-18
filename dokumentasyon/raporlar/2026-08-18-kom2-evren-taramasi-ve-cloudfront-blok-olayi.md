@@ -123,6 +123,15 @@ uzatmamak için). Kullanıcı sabah uyandığında bu raporla birlikte kısa bir
 - **05:55 UTC** (~3 saat sonra, tek kontrol) — Hâlâ 403. Server sağlıklı
   (uptime ~6sa, restart yok). Blok başlangıcından (ilk gerçek ban ~23:36,
   ilk doğrulama 00:41) bu yana ~5-6 saat geçti.
+- **08:56 UTC** (~3 saat sonra, tek kontrol) — Hâlâ 403. **Önemli fark:**
+  `/health`'in `uptime`'ı bu kez ~1sa45dk (6304sn) — önceki kontrolde ~6sa
+  idi, yani sunucu ~07:11 UTC civarında KENDİLİĞİNDEN restart olmuş (benim
+  bir deploy'um YOK). Muhtemelen Render'ın kendi platform davranışı (free
+  tier inaktivite sonrası uyku/uyanma ya da periyodik restart). Bu önemli:
+  restart benim müdahalemden bağımsız olduğu halde blok hâlâ sürüyor — bu,
+  "sık redeploy = tek sebep" teorisini tam açıklamıyor olabilir, blok IP
+  üzerinde daha kalıcı/zaman-tabanlı bir mekanizma olabilir. Toplam blok
+  süresi şu an ~9-9.5 saat (23:36 ilk ban → 08:56).
 - Bundan sonra gece boyunca aktif/sık kontrol YAPILMAYACAK (blok'u
   uzatmamak için) — kullanıcı sabah uyandığında son durumu tek bir kontrolle
   netleştireceğim.
