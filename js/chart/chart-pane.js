@@ -113,14 +113,17 @@ class ChartPane {
     this.syncing    = false;
 
     // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri (EMA/DEMA).
-    // RSI subpane 2026-08-12'de kaldırıldı (bkz. sınıfın üstündeki başlık
-    // yorumu) — v5 migrasyonu bekleniyor (gorevler3.md izleme listesi).
-    // Kayıtlı state'te eski 'rsi' girdileri kalmış olabilir — restore
-    // ederken atılıyor, aksi halde artık desteklenmeyen bir tür main
-    // eksene (mumların ölçeğine) yanlışlıkla çizilmeye çalışılırdı.
-    this.indicators   = Array.isArray(s.indicators) ? s.indicators.filter(i => i.type !== 'rsi').map(i => ({ ...i })) : [];
-    this._indSeries   = {};    // id -> LWC line series (ema/dema, mumlarla aynı ölçek)
+    // RSI subpane 2026-08-12'de kaldırılmıştı (v5 migrasyonu bekleniyordu) —
+    // 2026-08-18'de v5 native pane API'siyle geri getirildi (bkz.
+    // _rebuildIndicatorOverlays/SUBPANE_TYPES). Artık 'rsi' türü de normal
+    // şekilde saklanıp geri yükleniyor, filtrelenmiyor.
+    this.indicators   = Array.isArray(s.indicators) ? s.indicators.map(i => ({ ...i })) : [];
+    this._indSeries   = {};    // id -> LWC line series (overlay: ema/dema aynı ölçek; subpane: rsi kendi pane'i)
     this._indLegendEl = null;
+    this._indPaneIndex = {};  // id -> paneIndex (SADECE subpane türleri için, ör. rsi)
+    this._indAuxSeries = {};  // id -> {ob, os} BaselineSeries (overbought/oversold gradient dolgu)
+    this._indFillEl = {};     // id -> HTML div (bant-arası sabit dolgu overlay'i)
+    this._indPriceLines = {}; // id -> [priceLine,...] (30/70 referans çizgileri)
 
     this._build();
     this._initChart();
@@ -311,6 +314,11 @@ class ChartPane {
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true },
       handleScale:  { mouseWheel: true, pinch: true },
+      // 2026-08-18 (kullanıcı geri bildirimi, RSI subpane) — v5'in panel
+      // ayırıcısının varsayılan rengi (#E0E3EB) chart'ın koyu arka fonunda
+      // beyaz bir çizgi gibi görünüyordu. `enableResize` varsayılan zaten
+      // true (native sürükle-boyutlandır).
+      panes: { separatorColor: 'rgba(150,150,150,0.25)', separatorHoverColor: 'rgba(150,150,150,0.4)' },
     });
     
     // Issue #2: Main bottom Time Scale formatting uses dynamic tick types (Time vs Date)
@@ -325,6 +333,15 @@ class ChartPane {
     // gorevler2.md Görev 14 — kayıtlı state'ten geri yüklenen indikatörlerin
     // series/alt-chart'ları burada kurulur (veri henüz gelmedi, değerler
     // _onFeedCandles gelince _recomputeAllIndicators() ile doldurulur).
+    // [2026-08-18 DÜZELTME] RSI subpane'inin burada (chart hâlâ yer tutucu
+    // width:100/height:100 boyutundayken, ResizeObserver henüz bağlanmadan)
+    // kurulması, pane'in stretchFactor'ünün yanlış bir taban üzerinden
+    // hesaplanmasına yol açıyordu — kullanıcı bulgusu: "sayfa yeni
+    // yüklendiğinde RSI grafiği pencere dışında kalıyor". `_chartReady`
+    // false olduğu sürece _rebuildIndicatorOverlays subpane türlerini
+    // atlar (bkz. o fonksiyonun başı) — ResizeObserver'ın İLK gerçek
+    // resize'ında tekrar çağrılıp o zaman kurulacaklar.
+    this._chartReady = false;
     if (this.indicators.length) this._rebuildIndicatorOverlays();
 
     this.chart.subscribeCrosshairMove(p => {
@@ -370,7 +387,16 @@ class ChartPane {
           // Fix Issue 1: Sync drawing canvas to dynamic price/time scale sizes
           this._syncDrawingCanvasClip();
           if (this.redrawDrawings) this.redrawDrawings();
+          // RSI bant-arası dolgu overlay'i pane yüksekliğine bağlı — resize'da yeniden konumlan.
+          if (this.indicators.some(i => ChartPane.SUBPANE_TYPES.has(i.type))) this._repositionIndicatorFills();
 
+          if (!this._chartReady) {
+            // Chart artık GERÇEK boyutunda — daha önce (constructor'da, hâlâ
+            // 100x100 yer tutucuyken) atlanan subpane türü göstergeleri
+            // (RSI) şimdi doğru taban üzerinden kur.
+            this._chartReady = true;
+            if (this.indicators.some(i => ChartPane.SUBPANE_TYPES.has(i.type))) this._rebuildIndicatorOverlays();
+          }
           if (!this.loaded) { this.loaded = true; this._loadData(); }
         }
       }
@@ -607,16 +633,27 @@ class ChartPane {
   /** Mumların kullandığı ('right' veya 'left') asıl fiyat ekseninin ID'si. */
   _mainScaleId() { return this.priceSide === 'left' ? 'left' : 'right'; }
 
-  /** indicators: [{id, type:'ema'|'dema', period, color}] eklenir/kaldırılır. */
+  /** indicators: [{id, type:'ema'|'dema'|'rsi', period, color}] eklenir/kaldırılır.
+   *  'ema'/'dema': ana panelde overlay (mumlarla aynı ölçek).
+   *  'rsi': v5 native pane API'siyle AYRI bir alt-panel (subpane) — TV'deki
+   *  gibi sabit 0-100 eksen + 30/70 referans çizgileri. */
   addIndicator(type, opts = {}) {
-    const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800' };
-    const DEFAULT_PERIOD = { ema: 20, dema: 9 };
+    const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800', rsi: '#a855f7' };
+    const DEFAULT_PERIOD = { ema: 20, dema: 9, rsi: 14 };
     const cfg = {
       id: 'ind_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       type,
       period: opts.period ?? DEFAULT_PERIOD[type] ?? 14,
       color: opts.color || DEFAULT_COLOR[type] || '#2962ff',
     };
+    if (type === 'rsi') {
+      // 2026-08-18 (kullanıcı geri bildirimi) — TV'nin RSI ayar penceresine
+      // (Inputs/Style) karşılık gelen alanlar. `opts` ile açıkça verilenler
+      // korunur, verilmeyenler ChartPane.RSI_DEFAULTS_APPLY'nin varsayılanlarına
+      // düşer (eski/kayıtlı state'te de AYNI fonksiyon kullanılıyor, tek yerden).
+      Object.assign(cfg, opts);
+      ChartPane.RSI_DEFAULTS_APPLY(cfg);
+    }
     this.indicators.push(cfg);
     this._rebuildIndicatorOverlays();
     this._recomputeAllIndicators();
@@ -641,31 +678,222 @@ class ChartPane {
     EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
   }
 
+  // Subpane (ana panelden ayrı, kendi eksenli) gösterge türleri — şimdilik
+  // sadece RSI (Faz 1). Faz 2'de WaveTrend eklenince kendi paneIndex'i
+  // (2) alacak, RSI'nin sabit index=1'ine dokunmayacak.
+  static SUBPANE_TYPES = new Set(['rsi']);
+  static SUBPANE_INDEX = { rsi: 1 };
+
+  /** Eski (Faz 1) kayıtlı state'te veya elle oluşturulan cfg'lerde eksik
+   *  olabilecek RSI stil alanlarını cfg üzerine YAZAR (mutate) — addIndicator
+   *  ile YENİ eklenenler zaten dolu gelir, bu sadece geriye dönük/eksik
+   *  durumlar için güvenlik ağı. */
+  static RSI_DEFAULTS_APPLY(cfg) {
+    if (cfg.type !== 'rsi') return cfg;
+    cfg.upperBand ??= 70;
+    cfg.lowerBand ??= 30;
+    cfg.bandColor ??= 'rgba(150,150,150,0.5)';
+    cfg.fillColor ??= 'rgba(150,150,150,0.06)';
+    cfg.obColor ??= 'rgba(34,197,94,0.35)';
+    cfg.osColor ??= 'rgba(239,68,68,0.35)';
+    cfg.markerColor ??= null;
+    cfg.markerRadius ??= 2;
+    cfg.divergenceEnabled ??= false;
+    return cfg;
+  }
+
   /** Aktif `this.indicators`e göre series'leri (yeniden) kurar. */
   _rebuildIndicatorOverlays() {
     const wanted = new Set(this.indicators.map(i => i.id));
 
-    // Artık listede olmayan series'leri kaldır
+    // Artık listede olmayan series'leri kaldır — subpane türündeyse (ör. RSI)
+    // ve o pane'de BAŞKA seri kalmadıysa, pane'in kendisini de kapat (TV'deki
+    // gibi — gösterge silinince alt panel tamamen kaybolsun, boş şerit kalmasın).
     Object.keys(this._indSeries).forEach(id => {
       if (!wanted.has(id)) {
+        const removedPaneIndex = this._indPaneIndex[id];
         try { this.chart.removeSeries(this._indSeries[id]); } catch (_) {}
         delete this._indSeries[id];
+        delete this._indPaneIndex[id];
+        // OB/OS yardımcı serileri + bant-arası dolgu div'i (bkz. aşağı) da temizle.
+        const aux = this._indAuxSeries[id];
+        if (aux) {
+          try { this.chart.removeSeries(aux.ob); } catch (_) {}
+          try { this.chart.removeSeries(aux.os); } catch (_) {}
+          delete this._indAuxSeries[id];
+        }
+        if (this._indFillEl[id]) { this._indFillEl[id].remove(); delete this._indFillEl[id]; }
+        if (removedPaneIndex != null) {
+          const stillUsed = Object.values(this._indPaneIndex).includes(removedPaneIndex);
+          if (!stillUsed) {
+            try { this.chart.removePane(removedPaneIndex); } catch (_) {}
+          }
+        }
       }
     });
 
     this.indicators.forEach(cfg => {
+      const isSubpane = ChartPane.SUBPANE_TYPES.has(cfg.type);
+      // Chart hâlâ yer tutucu boyuttaysa (ilk gerçek resize olmadıysa) subpane
+      // türü göstergeleri KURMA — bkz. constructor'daki `_chartReady` notu.
+      // Overlay türleri (ema/dema) bundan etkilenmez, hemen kurulabilirler.
+      if (isSubpane && !this._chartReady) return;
       if (this._indSeries[cfg.id]) {
-        this._indSeries[cfg.id].applyOptions({ color: cfg.color });
+        this._indSeries[cfg.id].applyOptions({
+          color: cfg.color,
+          ...(isSubpane ? {
+            crosshairMarkerRadius: cfg.markerRadius,
+            crosshairMarkerBackgroundColor: cfg.markerColor || cfg.color,
+            crosshairMarkerBorderColor: cfg.markerColor || cfg.color,
+          } : {}),
+        });
+        if (isSubpane) this._rebuildSubpaneAux(cfg);
         return;
       }
-      this._indSeries[cfg.id] = this.chart.addSeries(LightweightCharts.LineSeries, {
-        color: cfg.color, lineWidth: 2, priceScaleId: this._mainScaleId(),
-        priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
-        lastValueVisible: false, priceLineVisible: false,
-      });
+      if (isSubpane) {
+        const paneIndex = ChartPane.SUBPANE_INDEX[cfg.type];
+        const series = this.chart.addSeries(LightweightCharts.LineSeries, {
+          color: cfg.color, lineWidth: 2,
+          priceScaleId: 'right', // OB/OS yardımcı serileriyle (bkz. _rebuildSubpaneAux) AYNI ölçek
+          priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+          lastValueVisible: false, priceLineVisible: false,
+          // 2026-08-18 (kullanıcı geri bildirimi) — varsayılan yarıçap (4)
+          // büyük geliyordu, ayrıca rengi ayarlardan değiştirilebilir olmalı.
+          crosshairMarkerRadius: cfg.markerRadius,
+          crosshairMarkerBackgroundColor: cfg.markerColor || cfg.color,
+          crosshairMarkerBorderColor: cfg.markerColor || cfg.color,
+          autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
+        }, paneIndex);
+        series.priceScale().applyOptions({ autoScale: false, borderVisible: true });
+        this._indSeries[cfg.id] = series;
+        this._indPaneIndex[cfg.id] = paneIndex;
+        this._rebuildSubpaneAux(cfg);
+        // Ana panele göre küçük bir şerit — TV'deki RSI alt panelinin oranına yakın.
+        const pane = this.chart.panes()[paneIndex];
+        if (pane) pane.setStretchFactor(0.3);
+      } else {
+        this._indSeries[cfg.id] = this.chart.addSeries(LightweightCharts.LineSeries, {
+          color: cfg.color, lineWidth: 2, priceScaleId: this._mainScaleId(),
+          priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
+          lastValueVisible: false, priceLineVisible: false,
+        });
+      }
     });
 
     this._updateIndicatorLegend();
+  }
+
+  /** RSI (subpane) için: 30/70 referans çizgileri (cfg.bandColor) + overbought/
+   *  oversold gradient dolguları (iki BaselineSeries, custom-series/canvas
+   *  yazmadan native LWC ile) + iki bant arasındaki sabit dolgu (HTML overlay,
+   *  fiyat ekseni sabit 0-100 olduğu için sadece pane yüksekliği değişince
+   *  yeniden konumlanması yeterli, bkz. _repositionIndicatorFills). Ayar
+   *  değişikliğinde (updateIndicatorSettings) baştan kurulur — ucuz, seyrek. */
+  _rebuildSubpaneAux(cfg) {
+    const series = this._indSeries[cfg.id];
+    if (!series) return;
+    // [2026-08-18 DÜZELTME] Faz 1'de kaydedilmiş ESKİ persisted state'te
+    // (localStorage `paneStates`) bu yeni alanlar yok — cfg'ye kalıcı olarak
+    // (bir kereliğine) yaz, aksi halde her seferinde undefined'a düşüp
+    // baseValue/priceToCoordinate NaN/null üretirdi (bkz. kullanıcı bulgusu:
+    // dolgu overlay'i "display:none" kalıyordu).
+    ChartPane.RSI_DEFAULTS_APPLY(cfg);
+    const paneIndex = this._indPaneIndex[cfg.id];
+
+    // Eski referans çizgilerini/yardımcı serileri temizle (renk/değer değişmiş olabilir).
+    try { series.removePriceLine?.(); } catch (_) {}
+    (this._indPriceLines?.[cfg.id] || []).forEach(l => { try { series.removePriceLine(l); } catch (_) {} });
+    this._indPriceLines = this._indPriceLines || {};
+    this._indPriceLines[cfg.id] = [cfg.lowerBand, cfg.upperBand].map(level => series.createPriceLine({
+      price: level, color: cfg.bandColor, lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '',
+    }));
+
+    const existingAux = this._indAuxSeries[cfg.id];
+    if (existingAux) {
+      existingAux.ob.applyOptions({ topFillColor1: cfg.obColor, topFillColor2: this._fadeColor(cfg.obColor) });
+      existingAux.os.applyOptions({ bottomFillColor1: this._fadeColor(cfg.osColor), bottomFillColor2: cfg.osColor });
+    } else {
+      const transparent = 'rgba(0,0,0,0)';
+      // [2026-08-18 DÜZELTME] Ana RSI serisiyle AYNI price scale + sabit
+      // 0-100 autoscale bilgisini AÇIKÇA paylaştır — aksi halde bu iki yeni
+      // seri kendi bağımsız otomatik ölçeğine göre çizilip dolgu ya hiç
+      // görünmüyor ya da yanlış hizada render oluyordu (kullanıcı bulgusu:
+      // "overbuy dolgusunu göremiyorum"). LWC v5'te seriden scale ID'sini
+      // OKUMANIN bir yolu yok (`priceScaleId()`/`.id` gibi bir getter mevcut
+      // değil, doğrulandı) — bu yüzden hem ana RSI serisine hem buradaki iki
+      // seriye AYNI sabit `'right'` ID'si açıkça veriliyor.
+      const sharedScaleId = 'right';
+      const sharedAutoscale = () => ({ priceRange: { minValue: 0, maxValue: 100 } });
+      const ob = this.chart.addSeries(LightweightCharts.BaselineSeries, {
+        baseValue: { type: 'price', price: cfg.upperBand },
+        priceScaleId: sharedScaleId,
+        autoscaleInfoProvider: sharedAutoscale,
+        topLineColor: transparent, bottomLineColor: transparent,
+        topFillColor1: cfg.obColor, topFillColor2: this._fadeColor(cfg.obColor),
+        bottomFillColor1: transparent, bottomFillColor2: transparent,
+        lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+      }, paneIndex);
+      const os = this.chart.addSeries(LightweightCharts.BaselineSeries, {
+        baseValue: { type: 'price', price: cfg.lowerBand },
+        priceScaleId: sharedScaleId,
+        autoscaleInfoProvider: sharedAutoscale,
+        topLineColor: transparent, bottomLineColor: transparent,
+        topFillColor1: transparent, topFillColor2: transparent,
+        bottomFillColor1: this._fadeColor(cfg.osColor), bottomFillColor2: cfg.osColor,
+        lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+      }, paneIndex);
+      this._indAuxSeries[cfg.id] = { ob, os };
+    }
+
+    // Bant-arası (lowerBand-upperBand) sabit dolgu — HTML overlay, cvs'nin
+    // (tüm pane'leri kapsayan container) üzerine mutlak konumlu.
+    if (!this._indFillEl[cfg.id]) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute; left:0; right:0; pointer-events:none; z-index:1;';
+      this.cvs.appendChild(el);
+      this._indFillEl[cfg.id] = el;
+    }
+    this._indFillEl[cfg.id].style.background = cfg.fillColor;
+    this._repositionIndicatorFills();
+  }
+
+  /** rgba(...) rengi aynı ton, alfa≈0'a yakın haliyle döner — BaselineSeries'in
+   *  gradient dolgusunun taban(0'dan uzak)dan tepeye (0'a yakın) doğru
+   *  soluklaşması için (TV'nin "gradient fill" hissi). */
+  _fadeColor(rgba) {
+    const m = /rgba?\(([^)]+)\)/.exec(rgba);
+    if (!m) return rgba;
+    const parts = m[1].split(',').map(s => s.trim());
+    return `rgba(${parts[0]},${parts[1]},${parts[2]},0.02)`;
+  }
+
+  /** Bant-arası dolgu div'lerini, ilgili RSI serisinin `priceToCoordinate()`
+   *  değerlerine göre yeniden konumlar. Fiyat ekseni sabit (autoScale:false,
+   *  0-100) olduğu için SADECE pane yüksekliği değişince (resize, stretch
+   *  factor, pane ekle/kaldır) tekrar çağrılması yeterli — bkz. ResizeObserver
+   *  callback'i ve _rebuildIndicatorOverlays/_rebuildSubpaneAux çağrı noktaları. */
+  _repositionIndicatorFills() {
+    this.indicators.forEach(cfg => {
+      const el = this._indFillEl[cfg.id];
+      const series = this._indSeries[cfg.id];
+      if (!el || !series) return;
+      const yTop = series.priceToCoordinate(cfg.upperBand);
+      const yBottom = series.priceToCoordinate(cfg.lowerBand);
+      if (yTop == null || yBottom == null) { el.style.display = 'none'; return; }
+      // series.priceToCoordinate pane-içi koordinat döner; pane'in cvs
+      // içindeki dikey ofsetini eklemek gerekiyor (RSI her zaman pane 1,
+      // ana panelin altında).
+      const paneIndex = this._indPaneIndex[cfg.id];
+      let offsetY = 0;
+      for (let i = 0; i < paneIndex; i++) {
+        const p = this.chart.panes()[i];
+        if (p) offsetY += p.getHeight();
+      }
+      el.style.display = 'block';
+      el.style.top = `${offsetY + Math.min(yTop, yBottom)}px`;
+      el.style.height = `${Math.abs(yBottom - yTop)}px`;
+    });
   }
 
   /** `this.candlesData`'dan tüm aktif indikatörleri yeniden hesaplar.
@@ -694,9 +922,9 @@ class ChartPane {
     const lastTime = times[times.length - 1];
 
     this.indicators.forEach(cfg => {
-      const arr = cfg.type === 'ema'
-        ? IndicatorEngine.calcEMAFull(closes, cfg.period)
-        : IndicatorEngine.calcDEMAFull(closes, cfg.period);
+      const arr = cfg.type === 'ema' ? IndicatorEngine.calcEMAFull(closes, cfg.period)
+        : cfg.type === 'dema' ? IndicatorEngine.calcDEMAFull(closes, cfg.period)
+        : IndicatorEngine.calcRSIFull(closes, cfg.period); // 'rsi'
       const points = [];
       for (let i = 0; i < arr.length; i++) {
         if (arr[i] == null) continue;
@@ -708,9 +936,19 @@ class ChartPane {
         if (tickOnly && lastPoint) series.update(lastPoint);
         else series.setData(points);
       }
+      // Overbought/oversold gradient dolgu serileri AYNI veri noktalarını
+      // kullanır (BaselineSeries kendi baseValue'suna göre üst/alt renklerini
+      // otomatik uyguluyor, bkz. _rebuildSubpaneAux).
+      const aux = this._indAuxSeries[cfg.id];
+      if (aux) {
+        const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
+        if (tickOnly && lastPoint) { aux.ob.update(lastPoint); aux.os.update(lastPoint); }
+        else { aux.ob.setData(points); aux.os.setData(points); }
+      }
       cfg._lastValue = points.length ? points[points.length - 1].value : null;
     });
 
+    this._repositionIndicatorFills();
     this._updateIndicatorLegend(tickOnly);
   }
 

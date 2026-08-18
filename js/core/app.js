@@ -1283,13 +1283,14 @@ const App = {
   // ══════════════════════════════════════════════════════════════
   _bindIndicatorsModal() {
     const TV_BLUE = '#2962ff';
-    // RSI (ve MACD/Stochastic gibi subpane gerektiren diğer indikatörler)
-    // 2026-08-12'de kataloğa alınmadı — bkz. gorevler3.md izleme listesi:
-    // lightweight-charts v5 migrasyonu bekleniyor (native pane desteği
-    // olmadan bu tür indikatörler TV kalitesinde gösterilemiyor).
+    // RSI, 2026-08-18'de v5 native pane API'siyle katalog'a geri eklendi
+    // (bkz. chart-pane.js ChartPane.SUBPANE_TYPES) — 2026-08-12'de v5
+    // migrasyonu beklenerek çıkarılmıştı. WaveTrend/Regression Channel
+    // (Faz 2/3) henüz eklenmedi.
     const CATALOG = [
       { type: 'ema',  name: 'Moving Average Exponential', short: 'EMA',  desc: 'Overlay — ana chart üzerinde' },
       { type: 'dema', name: 'Double EMA',                 short: 'DEMA', desc: 'Overlay — ana chart üzerinde' },
+      { type: 'rsi',  name: 'Relative Strength Index',    short: 'RSI',  desc: 'Subpane — ayrı alt panelde' },
     ];
 
     const btn = document.getElementById('btn-indicators');
