@@ -120,6 +120,9 @@ uzatmamak için). Kullanıcı sabah uyandığında bu raporla birlikte kısa bir
   (server ayakta, DB bağlı, uptime ~3 saat — restart yok), sadece Binance
   proxy yolu engelli. ~2 saat 12 dakikadır blok sürüyor — 2026-08-08'deki
   11 saatlik olayla tutarlı bir süre aralığında, henüz açılmadı.
+- **05:55 UTC** (~3 saat sonra, tek kontrol) — Hâlâ 403. Server sağlıklı
+  (uptime ~6sa, restart yok). Blok başlangıcından (ilk gerçek ban ~23:36,
+  ilk doğrulama 00:41) bu yana ~5-6 saat geçti.
 - Bundan sonra gece boyunca aktif/sık kontrol YAPILMAYACAK (blok'u
   uzatmamak için) — kullanıcı sabah uyandığında son durumu tek bir kontrolle
   netleştireceğim.
