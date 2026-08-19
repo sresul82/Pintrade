@@ -912,7 +912,20 @@ class ChartPane {
           crosshairMarkerBorderColor: cfg.markerColor || cfg.color,
           autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
         }, paneIndex);
-        series.priceScale().applyOptions({ autoScale: false, borderVisible: true });
+        // [DÜZELTME 2026-08-19, 4. tur — F5 sonrası RSI'nin GERÇEK kök nedeni]
+        // Kullanıcının konsol çıktısıyla doğrulandı: F5 sonrası
+        // `series.priceToCoordinate(cfg._lastValue)` **0** dönüyordu (fiyat
+        // ekseni hiç kurulmamış demek) — fiyat eksenine çift tıklayınca
+        // (LWC'nin dahili "autoScale'e sıfırla" davranışı) düzeliyordu ve
+        // KALICI oluyordu. `autoScale:false` + sabit `autoscaleInfoProvider`
+        // kombinasyonu, ölçeğin bazı ilk-kurulum sıralamalarında HİÇ
+        // hesaplanmadan kalmasına yol açıyordu. OB/OS/MA yardımcı serileri
+        // (bkz. _rebuildSubpaneAux) zaten SADECE `autoscaleInfoProvider`
+        // kullanıyor, `autoScale:false` hiç YOK — ve onlarda bu sorun hiç
+        // bildirilmedi. Ana RSI serisini de AYNI (daha güvenilir) desene
+        // getiriyoruz: `autoScale:false` satırı TAMAMEN kaldırıldı,
+        // `autoscaleInfoProvider` (sabit 0-100) tek başına aralığı zorluyor.
+        series.priceScale().applyOptions({ borderVisible: true });
         this._indSeries[cfg.id] = series;
         this._indPaneIndex[cfg.id] = paneIndex;
         this._rebuildSubpaneAux(cfg);
@@ -1091,8 +1104,8 @@ class ChartPane {
   }
 
   /** Bant-arası dolgu div'lerini, ilgili RSI serisinin `priceToCoordinate()`
-   *  değerlerine göre yeniden konumlar. Fiyat ekseni sabit (autoScale:false,
-   *  0-100) olduğu için SADECE pane yüksekliği değişince (resize, stretch
+   *  değerlerine göre yeniden konumlar. Fiyat ekseni sabit (autoscaleInfoProvider
+   *  ile 0-100'e kilitli) olduğu için SADECE pane yüksekliği değişince (resize, stretch
    *  factor, pane ekle/kaldır) tekrar çağrılması yeterli — bkz. ResizeObserver
    *  callback'i ve _rebuildIndicatorOverlays/_rebuildSubpaneAux çağrı noktaları. */
   _repositionIndicatorFills() {
