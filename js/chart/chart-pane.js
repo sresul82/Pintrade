@@ -450,11 +450,14 @@ class ChartPane {
     // da ekrana sığdırır — mumlar sola kayar. Çift tıklamayı yakalayıp gerçek
     // mum aralığına geri döneriz.
     this.cvs.addEventListener('dblclick', (e) => {
-      // [2026-08-19, kullanıcı isteği] Bir subpane (RSI vb.) üzerine çift
-      // tıklanınca o indikatörün ayar penceresini aç — aşağıdaki "zaman
-      // eksenini fitContent'e sığdır" davranışı SADECE ana panel/zaman
-      // ekseni çift tıklaması için anlamlı, subpane'de tetiklenmesin.
+      // [2026-08-19, 2. tur — kullanıcı düzeltmesi] SADECE indikatörün
+      // ÇİZGİSİNE (birkaç piksel toleransla) çift tıklanınca ayar penceresini
+      // aç — subpane'in HERHANGİ bir yerine (fiyat cetveli dahil) çift
+      // tıklamak DEĞİL. Tıklanan x'teki zamana en yakın veri noktasının
+      // gerçek y-koordinatını hesaplayıp tıklama y'siyle karşılaştırıyoruz.
+      const HIT_TOLERANCE_PX = 6;
       const rect = this.cvs.getBoundingClientRect();
+      const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const panes = this.chart.panes();
       if (panes[0] && y > panes[0].getHeight()) {
@@ -463,7 +466,15 @@ class ChartPane {
           const h = panes[i].getHeight();
           if (y <= offsetY + h) {
             const indId = Object.keys(this._indPaneIndex).find(id => this._indPaneIndex[id] === i);
-            if (indId) EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: indId });
+            const series = indId ? this._indSeries[indId] : null;
+            if (series) {
+              const time = this.chart.timeScale().coordinateToTime(x);
+              const val = time != null ? this._nearestSeriesValue(series, time) : null;
+              const lineY = val != null ? series.priceToCoordinate(val) : null;
+              if (lineY != null && Math.abs((y - offsetY) - lineY) <= HIT_TOLERANCE_PX) {
+                EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: indId });
+              }
+            }
             return;
           }
           offsetY += h;
@@ -1092,6 +1103,24 @@ class ChartPane {
    *  bir `subscribeCrosshairMove` aboneliği yeter, ayar değişince yeniden
    *  bağlamaya gerek yok (closure `cfg`'yi referans olarak tutuyor).
    */
+  /** Bir LWC line-series'in verilerinde, verilen zamana en yakın noktanın
+   *  değerini döner (ikili arama — `series.data()` zamana göre sıralı).
+   *  Çizgiye çift tıklama hit-test'i için (bkz. dblclick handler). */
+  _nearestSeriesValue(series, time) {
+    const data = series.data();
+    if (!data.length) return null;
+    if (time <= data[0].time) return data[0].value;
+    if (time >= data[data.length - 1].time) return data[data.length - 1].value;
+    let lo = 0, hi = data.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].time < time) lo = mid + 1; else hi = mid;
+    }
+    const a = data[lo - 1], b = data[lo];
+    if (!a) return b.value;
+    return (time - a.time) <= (b.time - time) ? a.value : b.value;
+  }
+
   _attachRsiTooltip(cfg) {
     if (this._indTooltipEl[cfg.id]) return; // zaten bağlı
     const tip = document.createElement('div');
