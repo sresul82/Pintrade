@@ -1396,93 +1396,326 @@ const App = {
       });
     });
 
-    // ── RSI'ye özel ayar penceresi (2026-08-18, kullanıcı isteği — TV'nin
-    // Inputs/Style sekmelerine karşılık gelen alanlar tek bir formda) ──────
-    function _openRsiSettings(pane, cfg, indicatorId) {
-      const backdrop = document.createElement('div');
-      backdrop.id = 'ind-settings-backdrop';
-      backdrop.className = 'modal-backdrop';
-      const colorRow = (id, label, value) => `
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-          <label class="form-label" style="margin:0;">${label}</label>
-          <input id="${id}" type="color" value="${value}" style="width:64px; height:26px; background:transparent; border:1px solid var(--border-primary); border-radius:5px; cursor:pointer;">
-        </div>`;
-      backdrop.innerHTML = `
-        <div class="modal" style="width:300px; max-height:80vh; overflow-y:auto;">
-          <div class="modal-header">
-            <span>RSI settings</span>
-            <button id="ind-settings-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
-          </div>
-          <div class="modal-body">
-            <div style="font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">Inputs</div>
-            <label class="form-label">Length</label>
-            <input class="form-input" id="rsi-period" type="number" min="1" step="1" value="${cfg.period}" style="margin-bottom:10px;">
-            <div style="display:flex; gap:8px; margin-bottom:10px;">
-              <div style="flex:1;">
-                <label class="form-label">Upper band</label>
-                <input class="form-input" id="rsi-upper" type="number" min="1" max="100" step="1" value="${cfg.upperBand}">
-              </div>
-              <div style="flex:1;">
-                <label class="form-label">Lower band</label>
-                <input class="form-input" id="rsi-lower" type="number" min="0" max="99" step="1" value="${cfg.lowerBand}">
-              </div>
-            </div>
+    // ── RSI'ye özel ayar penceresi (2026-08-18, kullanıcı isteği).
+    // [3. DÜZELTME] İlk iki sürüm hem tasarım dilinden sapıyordu hem de gerçek
+    // sekme (Inputs/Style/Visibility) sistemi yoktu, hizalama tutarsızdı,
+    // Remove kırmızıydı. Şimdi: gerçek dsd-tabs sekme geçişi (drawing-
+    // settings-dialog.js'teki AYNI tab-switching deseni), TÜM satırlar aynı
+    // dsd-row/dsd-label(sabit 120px)/dsd-row-controls hizasında, Remove
+    // dahil hiçbir buton dolu/parlak renk KULLANMIYOR (sadece dsd-btn-cancel/
+    // dsd-btn-ok'un kendi nötr stili — "neon buton arka fon yasağı" kuralı).
+    const RSI_TABS = ['inputs', 'style', 'visibility'];
+    let _rsiActiveTab = 'inputs';
 
-            <div style="font-size:10px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); text-transform:uppercase; margin:12px 0 6px; padding-top:8px; border-top:0.5px solid var(--border-primary);">Style</div>
-            ${colorRow('rsi-color', 'RSI line', cfg.color)}
-            ${colorRow('rsi-band-color', 'Band lines (30/70)', _toHex(cfg.bandColor))}
-            ${colorRow('rsi-fill-color', 'Background fill', _toHex(cfg.fillColor))}
-            ${colorRow('rsi-ob-color', 'Overbought fill', _toHex(cfg.obColor))}
-            ${colorRow('rsi-os-color', 'Oversold fill', _toHex(cfg.osColor))}
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-              <label class="form-label" style="margin:0;">Crosshair marker</label>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <input id="rsi-marker-radius" type="number" min="0" max="10" step="1" value="${cfg.markerRadius}" style="width:44px; height:26px; background:var(--bg-primary); border:1px solid var(--border-primary); border-radius:5px; color:var(--text-primary); text-align:center; font-size:11px;">
-                <input id="rsi-marker-color" type="color" value="${_toHex(cfg.markerColor || cfg.color)}" style="width:44px; height:26px; background:transparent; border:1px solid var(--border-primary); border-radius:5px; cursor:pointer;">
-              </div>
-            </div>
+    // [DÜZELTME 2026-08-19, KRİTİK] `data-color` HAM (alfa dahil) renk olmalı —
+    // önceden buraya `_toHex(cfg.fillColor)` gibi ALFASI SİLİNMİŞ bir hex
+    // veriliyordu, ve `_rsiSyncDraftFromDom()` HER sekme geçişinde/Ok'ta bu
+    // swatch'ın dataset.color'ını kullanıcı hiç dokunmasa bile geri cfg'ye
+    // yazıyordu — yani fillColor/obColor/osColor gibi düşük-alfa (%6-35)
+    // renkler ayarlara her girişte SESSİZCE opak hale geliyordu. Bu da RSI
+    // panelinin (30-70 arası dolgu) devasa OPAK GRİ bir blokla kaplanması
+    // hatasının kök nedeniydi — dolgu div'i chart canvas'ının ÜSTÜNDE
+    // (z-index:1) durduğu için altındaki RSI çizgisini/MA'yı da görünmez
+    // yapıyordu. `_toHex` SADECE swatch'ın görsel önizlemesi için kullanılır,
+    // `data-color`'a HİÇBİR ZAMAN verilmez.
+    function _rsiSwatch(id, rawColor) {
+      return `<div class="dsd-color-swatch" id="${id}" data-color="${rawColor}" style="background:${_toHex(rawColor)};"></div>`;
+    }
+    function _rsiRow(label, controlsHtml) {
+      return `<div class="dsd-row"><div class="dsd-label" style="width:120px;">${label}</div><div class="dsd-row-controls">${controlsHtml}</div></div>`;
+    }
+    // 2026-08-19 (kullanıcı geri bildirimi, SERT) — `.tv-checkbox`/`.tv-check-box`
+    // işaretliyken DOLU `--accent-blue` (#00f3ff, neon camgöbeği) arka fon
+    // kullanıyor — bu proje genelinde zaten yasak olan "dolu neon arka fon"
+    // deseni (bkz. [[pintrade-neon-buton-arka-fon-yasak]]), checkbox'lar için
+    // de aynı ihlal. Kullanıcının ÖNCEDEN onayladığı, tüm çizim araçları
+    // ayarlarında (drawing-settings-dialog.js, dsd-*-tabs.js) kullanılan
+    // `.dsd-checkbox-label` (düz native checkbox + accent-color:#2962ff,
+    // dolu arka fon YOK) BİREBİR buraya da taşındı — yeni bir tasarım icat
+    // EDİLMEDİ, mevcut olan kopyalandı.
+    function _rsiCheck(id, label, checked) {
+      return `<label class="dsd-checkbox-label" style="margin-bottom:12px;">
+        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}/>
+        <span>${label}</span>
+      </label>`;
+    }
+    function _rsiSelect(id, options, selected) {
+      return `<select class="dsd-input" id="${id}">${options.map(([v, label]) =>
+        `<option value="${v}" ${v === selected ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
+    }
+    // TV Style sekmesi: HER satırın solunda kendi göster/gizle checkbox'ı var
+    // ("neden bizim RSI'da checkbox yok" geri bildirimi) — aynı düz/neon-siz
+    // checkbox, satırın en solunda, dsd-row'un doğal flex akışına ek bir
+    // eleman olarak.
+    function _rsiToggleRow(id, checked, label, controlsHtml) {
+      return `<div class="dsd-row">
+        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} style="width:14px; height:14px; cursor:pointer; accent-color:#2962ff; flex-shrink:0;"/>
+        <div class="dsd-label" style="width:104px;">${label}</div>
+        <div class="dsd-row-controls">${controlsHtml}</div>
+      </div>`;
+    }
+    // 2026-08-19 (kullanıcı isteği #5) — Çizgi türü satırları (RSI/MA/Bull/
+    // Bear/Band) artık TV'deki gibi renk+kalınlık+stil tek bir combo'da:
+    // proje genelinde Trendline/Regression Channel vb. araçlarda kullanılan
+    // AYNI `DSDColorPicker.showCombinedLineSettings` + `.dsd-reg-line-combo`/
+    // `.dsd-reg-swatch` deseni (bkz. drawing-settings-dialog.js) — yeni bir
+    // picker İCAT EDİLMEDİ.
+    function _rsiLineCombo(id, color, width, style) {
+      return `<div class="dsd-reg-line-combo" id="${id}" data-color="${color}" data-width="${width}" data-linestyle="${style}"
+        style="display:flex; align-items:center; gap:4px; background:#1e222d; border:1px solid #363c4e; border-radius:4px; padding:3px 7px; cursor:pointer;">
+        <div class="dsd-reg-swatch" style="width:20px; height:20px; border-radius:3px; background:${_toHex(color)}; flex-shrink:0; pointer-events:none;"></div>
+      </div>`;
+    }
+    // TV: değer alanı Style sekmesindeki band satırlarında combo'nun YANINDA.
+    function _rsiBandRow(toggleId, checked, label, comboId, color, width, style, valueId, value) {
+      return _rsiToggleRow(toggleId, checked, label, _rsiLineCombo(comboId, color, width, style) +
+        `<input type="number" class="dsd-input" id="${valueId}" min="0" max="100" step="1" value="${value}" style="max-width:64px; flex:0 0 64px;"/>`);
+    }
+
+    const RSI_SOURCE_OPTIONS = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'], ['hl2', 'HL2'], ['hlc3', 'HLC3'], ['ohlc4', 'OHLC4']];
+    const RSI_MA_TYPE_OPTIONS = [['none', 'None'], ['sma', 'SMA'], ['ema', 'EMA'], ['smma', 'SMMA (RMA)'], ['wma', 'WMA']];
+    const RSI_PRECISION_OPTIONS = [['', 'Default'], ['0', '0'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
+    // TV: Chart (indikatörün kendi zaman dilimi) + sabit TF listesi.
+    const RSI_TIMEFRAME_OPTIONS = [
+      ['chart', 'Chart'], ['1', '1 minute'], ['3', '3 minutes'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'],
+      ['60', '1 hour'], ['120', '2 hours'], ['240', '4 hours'], ['360', '6 hours'], ['720', '12 hours'],
+      ['1D', '1 day'], ['3D', '3 days'], ['1W', '1 week'], ['1M', '1 month'],
+    ];
+    // Style sekmesinde Upper/Middle/Lower Band göster/gizle checkbox'ı ÜÇÜ DE
+    // aynı cfg.showBandLines alanına yazar (tek bant SETİNİN varlığı/yokluğu —
+    // ama 2026-08-19'dan itibaren renk/kalınlık/stil'leri BAĞIMSIZ, kullanıcı
+    // isteği: "her biri ayrı ayrı değiştirilebilmeli").
+    const RSI_BAND_TOGGLE_IDS = ['rsi-band-toggle-upper', 'rsi-band-toggle-middle', 'rsi-band-toggle-lower'];
+
+    function _rsiRenderTab(tab, cfg) {
+      if (tab === 'inputs') {
+        return `
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="rsi-period" min="1" step="1" value="${cfg.period}"/>`)}
+          ${_rsiRow('Source', _rsiSelect('rsi-source', RSI_SOURCE_OPTIONS, cfg.source))}
+          ${_rsiCheck('rsi-divergence', 'Calculate Divergence', cfg.divergenceEnabled)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Smoothing</div>
+          ${_rsiRow('Type', _rsiSelect('rsi-ma-type', RSI_MA_TYPE_OPTIONS, cfg.maType))}
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="rsi-ma-length" min="1" step="1" value="${cfg.maLength}"/>`)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Calculation</div>
+          ${_rsiRow('Timeframe', _rsiSelect('rsi-calc-tf', RSI_TIMEFRAME_OPTIONS, cfg.calcTimeframe))}
+          ${_rsiCheck('rsi-wait-tf-close', 'Wait for timeframe closes', cfg.waitForTfClose)}`;
+      }
+      if (tab === 'style') {
+        return `
+          ${_rsiToggleRow('rsi-show-line', cfg.showLine, 'RSI', _rsiLineCombo('rsi-combo-line', cfg.color, cfg.width, cfg.lineStyle))}
+          ${_rsiToggleRow('rsi-show-ma', cfg.showMA, 'RSI-based MA', _rsiLineCombo('rsi-combo-ma', cfg.maColor, cfg.maWidth, cfg.maStyle))}
+          ${_rsiToggleRow('rsi-show-bull', cfg.showDivBullish, 'Regular Bullish', _rsiLineCombo('rsi-combo-bull', cfg.bullColor, cfg.bullWidth, cfg.bullStyle))}
+          ${_rsiToggleRow('rsi-show-bear', cfg.showDivBearish, 'Regular Bearish', _rsiLineCombo('rsi-combo-bear', cfg.bearColor, cfg.bearWidth, cfg.bearStyle))}
+          ${_rsiBandRow('rsi-band-toggle-upper', cfg.showBandLines, 'RSI Upper Band', 'rsi-band-combo-upper', cfg.upperBandColor, cfg.upperBandWidth, cfg.upperBandStyle, 'rsi-upper', cfg.upperBand)}
+          ${_rsiBandRow('rsi-band-toggle-middle', cfg.showBandLines, 'RSI Middle Band', 'rsi-band-combo-middle', cfg.middleBandColor, cfg.middleBandWidth, cfg.middleBandStyle, 'rsi-middle', cfg.middleBand)}
+          ${_rsiBandRow('rsi-band-toggle-lower', cfg.showBandLines, 'RSI Lower Band', 'rsi-band-combo-lower', cfg.lowerBandColor, cfg.lowerBandWidth, cfg.lowerBandStyle, 'rsi-lower', cfg.lowerBand)}
+          ${_rsiToggleRow('rsi-show-fill', cfg.showFill, 'Background fill', _rsiSwatch('rsi-fill-color', cfg.fillColor))}
+          ${_rsiToggleRow('rsi-show-ob', cfg.showOB, 'Overbought fill', _rsiSwatch('rsi-ob-color', cfg.obColor))}
+          ${_rsiToggleRow('rsi-show-os', cfg.showOS, 'Oversold fill', _rsiSwatch('rsi-os-color', cfg.osColor))}
+          ${_rsiRow('Crosshair marker', `<input type="number" class="dsd-input" id="rsi-marker-radius" min="0" max="10" step="1" value="${cfg.markerRadius}" style="max-width:52px; flex:0 0 52px;"/>` + _rsiSwatch('rsi-marker-color', cfg.markerColor || cfg.color))}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Output values</div>
+          ${_rsiRow('Precision', _rsiSelect('rsi-precision', RSI_PRECISION_OPTIONS, cfg.precision == null ? '' : String(cfg.precision)))}
+          ${_rsiCheck('rsi-price-labels', 'Labels on price scale', cfg.showPriceLabels)}
+          ${_rsiCheck('rsi-status-values', 'Values in status line', cfg.showValuesInStatusLine)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Input values</div>
+          ${_rsiCheck('rsi-status-inputs', 'Inputs in status line', cfg.showInputsInStatusLine)}`;
+      }
+      // visibility
+      return `
+        ${_rsiCheck('rsi-vis-band', 'Band lines (30/70)', cfg.showBandLines)}
+        ${_rsiCheck('rsi-vis-fill', 'Background fill', cfg.showFill)}
+        ${_rsiCheck('rsi-vis-ob', 'Overbought fill', cfg.showOB)}
+        ${_rsiCheck('rsi-vis-os', 'Oversold fill', cfg.showOS)}`;
+    }
+
+    function _openRsiSettings(pane, cfg, indicatorId) {
+      document.getElementById('dsd-overlay')?.remove();
+      _rsiActiveTab = 'inputs';
+      const overlay = document.createElement('div');
+      overlay.id = 'dsd-overlay';
+      overlay.className = 'dsd-overlay';
+
+      const tabsHtml = () => RSI_TABS.map(t => `<button class="dsd-tab ${t === _rsiActiveTab ? 'active' : ''}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('');
+
+      overlay.innerHTML = `
+        <div class="dsd-dialog" id="dsd-dialog" style="width:340px;">
+          <div class="dsd-header">
+            <span class="dsd-title">RSI</span>
+            <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>
           </div>
-          <div class="modal-footer" style="justify-content:space-between;">
-            <button class="btn" id="ind-settings-remove" style="color:#e05c5c;">Remove</button>
-            <div style="display:flex; gap:8px;">
-              <button class="btn" id="ind-settings-cancel">Cancel</button>
-              <button class="btn" id="ind-settings-apply" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">Apply</button>
+          <div class="dsd-tabs" id="dsd-rsi-tabs">${tabsHtml()}</div>
+          <div class="dsd-body" id="dsd-rsi-body">${_rsiRenderTab(_rsiActiveTab, cfg)}</div>
+          <div class="dsd-footer">
+            <div class="dsd-footer-left">
+              <button class="dsd-tmpl-btn" id="dsd-btn-remove">Remove</button>
+            </div>
+            <div class="dsd-footer-right">
+              <button class="dsd-btn-cancel" id="dsd-btn-cancel">Cancel</button>
+              <button class="dsd-btn-ok" id="dsd-btn-ok">Ok</button>
             </div>
           </div>
         </div>`;
-      document.body.appendChild(backdrop);
-      const close = () => backdrop.remove();
-      backdrop.addEventListener('click', (e2) => { if (e2.target === backdrop) close(); });
-      document.getElementById('ind-settings-close')?.addEventListener('click', close);
-      document.getElementById('ind-settings-cancel')?.addEventListener('click', close);
-      document.getElementById('ind-settings-remove')?.addEventListener('click', () => {
-        close();
-        pane.removeIndicator(indicatorId);
+      document.body.appendChild(overlay);
+
+      // Sekme geçişi — o anki formdaki DEĞİŞMEMİŞ değerleri cfg'ye
+      // KOPYALAMADAN sekme değiştiriyoruz (Apply/Ok'a basılana kadar hiçbir
+      // şey kalıcı olmaz) — bu yüzden sekme değişirken formun O ANA KADARKİ
+      // (henüz kaydedilmemiş) değerlerini önce _rsiReadForm ile oku, cfg
+      // taslağına yaz, sonra yeni sekmeyi o taslaktan render et.
+      const draft = { ...cfg };
+      // .dsd-reg-line-combo id → {color,width,style} draft alan adları.
+      // 2026-08-19 (kullanıcı isteği #6) — Upper/Middle/Lower band artık
+      // BAĞIMSIZ (önceden üçü tek `bandColor`'a yazıyordu).
+      const COMBO_KEY = {
+        'rsi-combo-line': { c: 'color',     w: 'width',     s: 'lineStyle' },
+        'rsi-combo-ma':   { c: 'maColor',   w: 'maWidth',   s: 'maStyle' },
+        'rsi-combo-bull': { c: 'bullColor', w: 'bullWidth', s: 'bullStyle' },
+        'rsi-combo-bear': { c: 'bearColor', w: 'bearWidth', s: 'bearStyle' },
+        'rsi-band-combo-upper':  { c: 'upperBandColor',  w: 'upperBandWidth',  s: 'upperBandStyle' },
+        'rsi-band-combo-middle': { c: 'middleBandColor', w: 'middleBandWidth', s: 'middleBandStyle' },
+        'rsi-band-combo-lower':  { c: 'lowerBandColor',  w: 'lowerBandWidth',  s: 'lowerBandStyle' },
+      };
+      function _rsiSyncDraftFromDom() {
+        const SWATCH_KEY = { 'rsi-fill-color':'fillColor', 'rsi-ob-color':'obColor', 'rsi-os-color':'osColor', 'rsi-marker-color':'markerColor' };
+        overlay.querySelectorAll('.dsd-color-swatch[id]').forEach(sw => {
+          const key = SWATCH_KEY[sw.id];
+          if (key) draft[key] = sw.dataset.color;
+        });
+        overlay.querySelectorAll('.dsd-reg-line-combo[id]').forEach(combo => {
+          const keys = COMBO_KEY[combo.id];
+          if (!keys) return;
+          draft[keys.c] = combo.dataset.color;
+          draft[keys.w] = parseInt(combo.dataset.width, 10) || draft[keys.w];
+          draft[keys.s] = combo.dataset.linestyle || draft[keys.s];
+        });
+        const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
+        if (document.getElementById('rsi-period')) draft.period = Math.max(1, Math.round(num('rsi-period') ?? draft.period));
+        if (document.getElementById('rsi-source')) draft.source = document.getElementById('rsi-source').value;
+        if (document.getElementById('rsi-ma-type')) draft.maType = document.getElementById('rsi-ma-type').value;
+        if (document.getElementById('rsi-ma-length')) draft.maLength = Math.max(1, Math.round(num('rsi-ma-length') ?? draft.maLength));
+        if (document.getElementById('rsi-calc-tf')) draft.calcTimeframe = document.getElementById('rsi-calc-tf').value;
+        if (document.getElementById('rsi-upper')) draft.upperBand = num('rsi-upper') ?? draft.upperBand;
+        if (document.getElementById('rsi-middle')) draft.middleBand = num('rsi-middle') ?? draft.middleBand;
+        if (document.getElementById('rsi-lower')) draft.lowerBand = num('rsi-lower') ?? draft.lowerBand;
+        if (document.getElementById('rsi-marker-radius')) draft.markerRadius = Math.max(0, Math.round(num('rsi-marker-radius') ?? draft.markerRadius));
+        if (document.getElementById('rsi-precision')) {
+          const raw = document.getElementById('rsi-precision').value;
+          draft.precision = raw === '' ? null : parseInt(raw, 10);
+        }
+        const chk = (id) => document.getElementById(id)?.checked;
+        if (document.getElementById('rsi-divergence')) draft.divergenceEnabled = chk('rsi-divergence');
+        if (document.getElementById('rsi-wait-tf-close')) draft.waitForTfClose = chk('rsi-wait-tf-close');
+        if (document.getElementById('rsi-show-line')) draft.showLine = chk('rsi-show-line');
+        if (document.getElementById('rsi-show-ma')) draft.showMA = chk('rsi-show-ma');
+        if (document.getElementById('rsi-show-bull')) draft.showDivBullish = chk('rsi-show-bull');
+        if (document.getElementById('rsi-show-bear')) draft.showDivBearish = chk('rsi-show-bear');
+        // Upper/Middle/Lower Band checkbox'ları da renkler gibi TEK cfg.showBandLines'a yazar.
+        const bandToggle = RSI_BAND_TOGGLE_IDS.map(id => document.getElementById(id)).find(Boolean);
+        if (bandToggle) draft.showBandLines = bandToggle.checked;
+        if (document.getElementById('rsi-show-fill')) draft.showFill = chk('rsi-show-fill');
+        if (document.getElementById('rsi-show-ob')) draft.showOB = chk('rsi-show-ob');
+        if (document.getElementById('rsi-show-os')) draft.showOS = chk('rsi-show-os');
+        if (document.getElementById('rsi-vis-band')) draft.showBandLines = chk('rsi-vis-band');
+        if (document.getElementById('rsi-vis-fill')) draft.showFill = chk('rsi-vis-fill');
+        if (document.getElementById('rsi-vis-ob')) draft.showOB = chk('rsi-vis-ob');
+        if (document.getElementById('rsi-vis-os')) draft.showOS = chk('rsi-vis-os');
+        if (document.getElementById('rsi-price-labels')) draft.showPriceLabels = chk('rsi-price-labels');
+        if (document.getElementById('rsi-status-values')) draft.showValuesInStatusLine = chk('rsi-status-values');
+        if (document.getElementById('rsi-status-inputs')) draft.showInputsInStatusLine = chk('rsi-status-inputs');
+      }
+      function _rsiBindBody() {
+        // Fill/OB/OS/Marker — düz renk paleti (kalınlık/stil kavramı yok, dolgu).
+        overlay.querySelectorAll('.dsd-color-swatch').forEach(box => {
+          box.addEventListener('click', () => {
+            window.DSDColorPicker.showColorPalette(box, box.dataset.color, (newColor) => {
+              box.dataset.color = newColor;
+              box.style.background = newColor;
+            });
+          });
+        });
+        // RSI/MA/Bull/Bear/Band çizgileri — renk+kalınlık+stil combo'su
+        // (proje genelindeki AYNI DSDColorPicker.showCombinedLineSettings).
+        overlay.querySelectorAll('.dsd-reg-line-combo').forEach(combo => {
+          const swatch = combo.querySelector('.dsd-reg-swatch');
+          combo.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const curColor = combo.dataset.color;
+            const curW = parseInt(combo.dataset.width, 10) || 1;
+            const curS = combo.dataset.linestyle || 'solid';
+            window.DSDColorPicker.showCombinedLineSettings(combo, curColor, curW, curS, true, (res) => {
+              combo.dataset.color = res.color;
+              combo.dataset.width = res.width;
+              combo.dataset.linestyle = res.style;
+              swatch.style.background = res.color;
+            });
+          });
+        });
+        // Upper/Middle/Lower Band checkbox'ları da renkler gibi birbirine kilitli.
+        RSI_BAND_TOGGLE_IDS.forEach(id => {
+          document.getElementById(id)?.addEventListener('change', (e) => {
+            RSI_BAND_TOGGLE_IDS.forEach(otherId => {
+              const other = document.getElementById(otherId);
+              if (other && other !== e.target) other.checked = e.target.checked;
+            });
+          });
+        });
+      }
+      _rsiBindBody();
+
+      overlay.querySelectorAll('.dsd-tab').forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          _rsiSyncDraftFromDom();
+          _rsiActiveTab = tabBtn.dataset.tab;
+          overlay.querySelectorAll('.dsd-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === _rsiActiveTab));
+          overlay.querySelector('#dsd-rsi-body').innerHTML = _rsiRenderTab(_rsiActiveTab, draft);
+          _rsiBindBody();
+        });
       });
-      document.getElementById('ind-settings-apply')?.addEventListener('click', () => {
-        const num = (id, fallback) => {
-          const v = parseFloat(document.getElementById(id)?.value);
-          return Number.isFinite(v) ? v : fallback;
-        };
-        const col = (id, fallback) => document.getElementById(id)?.value || fallback;
-        const patch = {
-          period: Math.max(1, Math.round(num('rsi-period', cfg.period))),
-          upperBand: num('rsi-upper', cfg.upperBand),
-          lowerBand: num('rsi-lower', cfg.lowerBand),
-          color: col('rsi-color', cfg.color),
-          bandColor: _hexToRgba(col('rsi-band-color', cfg.bandColor), 0.5),
-          fillColor: _hexToRgba(col('rsi-fill-color', cfg.fillColor), 0.06),
-          obColor: _hexToRgba(col('rsi-ob-color', cfg.obColor), 0.35),
-          osColor: _hexToRgba(col('rsi-os-color', cfg.osColor), 0.35),
-          markerColor: col('rsi-marker-color', cfg.markerColor || cfg.color),
-          markerRadius: Math.max(0, Math.round(num('rsi-marker-radius', cfg.markerRadius))),
-        };
+
+      const close = () => overlay.remove();
+      document.getElementById('dsd-close-btn')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-cancel')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-remove')?.addEventListener('click', () => {
+        window.ConfirmModal.show('Remove RSI indicator? This cannot be undone.').then((ok) => {
+          if (!ok) return;
+          close();
+          pane.removeIndicator(indicatorId);
+        });
+      });
+      document.getElementById('dsd-btn-ok')?.addEventListener('click', () => {
+        _rsiSyncDraftFromDom();
         close();
-        pane.updateIndicatorSettings(indicatorId, patch);
+        pane.updateIndicatorSettings(indicatorId, {
+          period: draft.period, upperBand: draft.upperBand, middleBand: draft.middleBand, lowerBand: draft.lowerBand,
+          color: draft.color, fillColor: draft.fillColor,
+          upperBandColor: draft.upperBandColor, upperBandWidth: draft.upperBandWidth, upperBandStyle: draft.upperBandStyle,
+          middleBandColor: draft.middleBandColor, middleBandWidth: draft.middleBandWidth, middleBandStyle: draft.middleBandStyle,
+          lowerBandColor: draft.lowerBandColor, lowerBandWidth: draft.lowerBandWidth, lowerBandStyle: draft.lowerBandStyle,
+          obColor: draft.obColor, osColor: draft.osColor,
+          markerColor: draft.markerColor, markerRadius: draft.markerRadius,
+          showBandLines: draft.showBandLines, showFill: draft.showFill,
+          showOB: draft.showOB, showOS: draft.showOS,
+          source: draft.source, divergenceEnabled: draft.divergenceEnabled,
+          maType: draft.maType, maLength: draft.maLength, maColor: draft.maColor,
+          precision: draft.precision, showPriceLabels: draft.showPriceLabels,
+          showValuesInStatusLine: draft.showValuesInStatusLine,
+          showInputsInStatusLine: draft.showInputsInStatusLine,
+          showLine: draft.showLine, showMA: draft.showMA,
+          showDivBullish: draft.showDivBullish, showDivBearish: draft.showDivBearish,
+          bullColor: draft.bullColor, bearColor: draft.bearColor,
+          width: draft.width, lineStyle: draft.lineStyle,
+          maWidth: draft.maWidth, maStyle: draft.maStyle,
+          bullWidth: draft.bullWidth, bullStyle: draft.bullStyle,
+          bearWidth: draft.bearWidth, bearStyle: draft.bearStyle,
+          calcTimeframe: draft.calcTimeframe, waitForTfClose: draft.waitForTfClose,
+        });
       });
     }
 
-    // rgba(...)/hex renk stringlerini <input type=color>'ın anladığı #rrggbb'ye çevirir.
+    // rgba(...)/hex renk stringlerini swatch'ın başlangıç dolgusu için
+    // #rrggbb'ye çevirir (DSDColorPicker kendi opaklık kaydırıcısıyla
+    // rgba() üretiyor, biz sadece swatch'ın ilk gösterdiği düz rengi
+    // hesaplıyoruz — seçim sonrası gerçek renk zaten box.dataset.color'da).
     function _toHex(c) {
       if (!c) return '#808080';
       if (c.startsWith('#')) return c;
@@ -1490,14 +1723,6 @@ const App = {
       if (!m) return '#808080';
       const [r, g, b] = m[1].split(',').map(s => Math.round(parseFloat(s)));
       return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-    }
-
-    // #rrggbb + istenen alpha'yı rgba(...) string'ine çevirir (dolgular için
-    // saydamlık gerekiyor, düz #rrggbb tüm alt paneli kapatırdı).
-    function _hexToRgba(hex, alpha) {
-      const h = hex.replace('#', '');
-      const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
-      return `rgba(${r},${g},${b},${alpha})`;
     }
   },
 };

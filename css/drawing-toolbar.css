@@ -90,6 +90,11 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 15vh;
+  /* [DÜZELTME 2026-08-19] padding-bottom eklendi — aksi halde uzun içerikli
+     (RSI Style sekmesi gibi) dialog'lar altta nefes payı olmadan viewport
+     dışına taşıyordu. */
+  padding-bottom: 4vh;
+  box-sizing: border-box;
 }
 .dsd-dialog {
   pointer-events: auto;
@@ -98,6 +103,11 @@
   border-radius: 8px;
   width: 320px;
   max-width: 96vw;
+  /* [DÜZELTME 2026-08-19] Farklı çözünürlüklerde navbar ile zaman cetveli
+     arasına sığmayan uzun dialog'lar (ör. RSI Style sekmesi) artık viewport
+     ile sınırlı — taşan içerik .dsd-body içinde kaydırılıyor (aşağıda),
+     header/tabs/footer sabit kalıyor. */
+  max-height: calc(100vh - 19vh);
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 40px rgba(0,0,0,0.7);
@@ -167,8 +177,14 @@
 /* Body */
 .dsd-body {
   padding: 16px;
-  overflow: visible;
-  flex: 1;
+  /* [DÜZELTME 2026-08-19] "overflow:visible" + sabit yükseklik yokken uzun
+     içerik viewport dışına taşıyordu (kullanıcı bulgusu — RSI Style sekmesi
+     kısa monitörlerde/navbar-cetvel arasına sığmıyordu). min-height:0 flex
+     child'ın kendi içeriğine göre büyüyüp taşmasını (flexbox varsayılanı)
+     engelliyor, gerçek kaydırma bunun sayesinde çalışıyor. */
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Rows */

@@ -264,6 +264,121 @@ const IndicatorEngine = (() => {
     return out;
   }
 
+  function _pureSmaSeries(arr, period) {
+    const out = new Array(arr.length).fill(null);
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) {
+      sum += arr[i];
+      if (i >= period) sum -= arr[i - period];
+      if (i >= period - 1) out[i] = sum / period;
+    }
+    return out;
+  }
+
+  /** SMMA/RMA (Wilder smoothing) — ilk değer SMA seed, sonrası Wilder ortalaması. */
+  function _rmaSeries(arr, period) {
+    const out = new Array(arr.length).fill(null);
+    if (arr.length < period) return out;
+    let sum = 0;
+    for (let i = 0; i < period; i++) sum += arr[i];
+    let prev = sum / period;
+    out[period - 1] = prev;
+    for (let i = period; i < arr.length; i++) {
+      prev = (prev * (period - 1) + arr[i]) / period;
+      out[i] = prev;
+    }
+    return out;
+  }
+
+  function _wmaSeries(arr, period) {
+    const out = new Array(arr.length).fill(null);
+    const denom = period * (period + 1) / 2;
+    for (let i = period - 1; i < arr.length; i++) {
+      let sum = 0;
+      for (let j = 0; j < period; j++) sum += arr[i - j] * (period - j);
+      out[i] = sum / denom;
+    }
+    return out;
+  }
+
+  /** Başka bir indikatör serisinin (ör. RSI) üzerine hareketli ortalama —
+   *  TV'nin "RSI-based MA" alanı. `series` baştan null'lu (RSI period'una
+   *  kadar) gelebilir, ilk geçerli değerden itibaren hesaplanır. */
+  function calcMAOfSeries(series, period, type = 'sma') {
+    const firstValid = series.findIndex(v => v != null);
+    const out = new Array(series.length).fill(null);
+    if (firstValid === -1) return out;
+    const valid = series.slice(firstValid);
+    let maValid;
+    if (type === 'ema') maValid = _smaSeedEmaSeries(valid, period);
+    else if (type === 'smma') maValid = _rmaSeries(valid, period);
+    else if (type === 'wma') maValid = _wmaSeries(valid, period);
+    else maValid = _pureSmaSeries(valid, period); // 'sma'
+    for (let i = 0; i < maValid.length; i++) {
+      if (maValid[i] != null) out[firstValid + i] = maValid[i];
+    }
+    return out;
+  }
+
+  const DIV_PIVOT_LEFT  = 5;  // TV'nin RSI script'indeki lbL
+  const DIV_PIVOT_RIGHT = 5;  // TV'nin RSI script'indeki lbR
+  const DIV_RANGE_MIN   = 5;  // rangeLower
+  const DIV_RANGE_MAX   = 60; // rangeUpper
+
+  /** i barı [i-left, i+right] penceresinde en düşük/yüksek mi (ties'a izin
+   *  verir — TV'nin ta.pivotlow/ta.pivothigh mantığı). null komşular atlanır. */
+  function _pivotLow(arr, i, left, right) {
+    if (arr[i] == null) return false;
+    for (let j = Math.max(0, i - left); j <= Math.min(arr.length - 1, i + right); j++) {
+      if (j === i || arr[j] == null) continue;
+      if (arr[j] < arr[i]) return false;
+    }
+    return true;
+  }
+  function _pivotHigh(arr, i, left, right) {
+    if (arr[i] == null) return false;
+    for (let j = Math.max(0, i - left); j <= Math.min(arr.length - 1, i + right); j++) {
+      if (j === i || arr[j] == null) continue;
+      if (arr[j] > arr[i]) return false;
+    }
+    return true;
+  }
+
+  /** TV'nin RSI script'indeki "Calculate Divergence" ile AYNI mantık:
+   *  ardışık iki RSI pivot-low'u arasında RSI yükselirken FİYATIN (low)
+   *  düşmesi = Regular Bullish; ardışık iki pivot-high arasında RSI
+   *  düşerken FİYATIN (high) yükselmesi = Regular Bearish. Pivot'lar
+   *  arası bar sayısı [rangeMin, rangeMax] dışındaysa sinyal sayılmaz.
+   *  `rsiArr`/`lowArr`/`highArr` aynı uzunlukta, zaman-hizalı olmalı. */
+  function calcRegularDivergence(rsiArr, lowArr, highArr, opts = {}) {
+    const left = opts.left ?? DIV_PIVOT_LEFT;
+    const right = opts.right ?? DIV_PIVOT_RIGHT;
+    const rangeMin = opts.rangeMin ?? DIV_RANGE_MIN;
+    const rangeMax = opts.rangeMax ?? DIV_RANGE_MAX;
+    const lows = [], highs = [];
+    for (let i = 0; i < rsiArr.length; i++) {
+      if (_pivotLow(rsiArr, i, left, right)) lows.push(i);
+      if (_pivotHigh(rsiArr, i, left, right)) highs.push(i);
+    }
+    const bullish = [];
+    for (let k = 1; k < lows.length; k++) {
+      const a = lows[k - 1], b = lows[k];
+      const gap = b - a;
+      if (gap < rangeMin || gap > rangeMax) continue;
+      if (rsiArr[a] == null || rsiArr[b] == null || lowArr[a] == null || lowArr[b] == null) continue;
+      if (rsiArr[b] > rsiArr[a] && lowArr[b] < lowArr[a]) bullish.push({ aIdx: a, bIdx: b });
+    }
+    const bearish = [];
+    for (let k = 1; k < highs.length; k++) {
+      const a = highs[k - 1], b = highs[k];
+      const gap = b - a;
+      if (gap < rangeMin || gap > rangeMax) continue;
+      if (rsiArr[a] == null || rsiArr[b] == null || highArr[a] == null || highArr[b] == null) continue;
+      if (rsiArr[b] < rsiArr[a] && highArr[b] > highArr[a]) bearish.push({ aIdx: a, bIdx: b });
+    }
+    return { bullish, bearish };
+  }
+
   return {
     calcRSI,
     calcSRSI,
@@ -274,6 +389,8 @@ const IndicatorEngine = (() => {
     calcEMAFull,
     calcDEMAFull,
     calcRSIFull,
+    calcMAOfSeries,
+    calcRegularDivergence,
   };
 })();
 

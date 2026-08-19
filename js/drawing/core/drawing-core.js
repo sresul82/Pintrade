@@ -19,6 +19,23 @@ window.DrawingManager = (() => {
   let _hoverHitType = null; // hit type of hovered drawing
   let _allHideStates = {}; // tracks hide_drawings, hide_indicators, etc.
   let _magnetMode = 'off'; // Authoritative value — updated via drawing:magnet EventBus
+  // [2026-08-19] Kullanıcı bulgusu: mıknatıs açıkken RSI (veya başka bir
+  // subpane) üzerinde çizim yapmaya çalışınca ana panelin mumlarına
+  // yapışıyordu — çünkü tüm y→fiyat dönüşümü HER YERDE `pane.series`
+  // (ana mum serisi) üzerinden yapılıyor, subpane'in kendi ölçeği hiç
+  // kullanılmıyor (mimari kısıt — drawing-core.js çizim araçları sadece
+  // ana panel için tasarlanmış). TAM düzeltme (subpane'in kendi fiyat
+  // ölçeğine göre doğru y→fiyat eşlemesi) kapsamlı bir refactor gerektirir;
+  // bu turda TV'nin asıl davranışı olan "subpane üzerindeyken mıknatıs
+  // devre dışı kalır" kısmı hedeflendi — `onMouseDown`/`onMouseMove`
+  // başında güncellenir, `_snapToCandle` bunu okur.
+  let _cursorOverSubpane = false;
+  function _updateSubpaneFlag(pane, y) {
+    try {
+      const mainPane = pane.chart.panes()[0];
+      _cursorOverSubpane = !!mainPane && y > mainPane.getHeight();
+    } catch (_) { _cursorOverSubpane = false; }
+  }
   // Tracks whether the last pointerdown was claimed by us.
   // Used in onMouseUp to claim (or not) the matching pointerup,
   // preventing LWC from receiving orphaned pointerup events that corrupt its pan state.
@@ -141,6 +158,7 @@ window.DrawingManager = (() => {
     const rect = pane.cvs.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    _updateSubpaneFlag(pane, y);
 
     const rawTime = pane.chart.timeScale().coordinateToTime(x);
     const rawPrice = series.coordinateToPrice(y);
@@ -454,6 +472,7 @@ window.DrawingManager = (() => {
     const rect = pane.cvs.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    _updateSubpaneFlag(pane, y);
 
     if (_activeTool === 'pointer' || _activeTool.startsWith('cursor-')) {
       _snapCrosshair = null;
@@ -2313,6 +2332,11 @@ window.DrawingManager = (() => {
   //   - Ctrl key temporarily inverts: if magnet off → temp strong, if on → temp off
   //
   function _snapToCandle(pane, rawTime, rawPrice) {
+    // TV: mıknatıs RSI/başka bir subpane üzerindeyken devre dışı kalır —
+    // ana panelin mumlarına yapışmaz, serbest çizim yapılabilir.
+    if (_cursorOverSubpane) {
+      return { time: rawTime, price: rawPrice };
+    }
     let mode = _getMagnetMode();
     if (!mode || mode === 'off') {
       return { time: rawTime, price: rawPrice };

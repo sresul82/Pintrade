@@ -124,6 +124,10 @@ class ChartPane {
     this._indAuxSeries = {};  // id -> {ob, os} BaselineSeries (overbought/oversold gradient dolgu)
     this._indFillEl = {};     // id -> HTML div (bant-arası sabit dolgu overlay'i)
     this._indPriceLines = {}; // id -> [priceLine,...] (30/70 referans çizgileri)
+    this._divSeries = {};        // id -> [LineSeries,...] (Regular Bullish/Bearish divergence bağlantı çizgileri)
+    this._divMarkersHandle = {}; // id -> LightweightCharts.createSeriesMarkers() handle ("Bull"/"Bear" etiketleri)
+    this._indTooltipEl = {};      // id -> HTML div (crosshair üzerindeyken değeri gösteren yüzen badge, OI/Volume panelindeki AYNI desen)
+    this._indTooltipHandler = {}; // id -> subscribeCrosshairMove callback (temizlik için referans)
 
     this._build();
     this._initChart();
@@ -407,6 +411,24 @@ class ChartPane {
       }
     });
     this.ro.observe(this.cvs);
+
+    // [DÜZELTME 2026-08-19] LWC v5'in KENDİ pane-yükseklik ayırıcısını (ana
+    // chart ile RSI alt paneli arasındaki bölücü çizgi) sürüklemek `this.cvs`'nin
+    // TOPLAM boyutunu değiştirmez — sadece pane'ler arası dikey oranı — bu yüzden
+    // yukarıdaki ResizeObserver HİÇ tetiklenmiyordu. Sonuç: RSI'nin bant-arası
+    // dolgu overlay div'i (bkz. _repositionIndicatorFills) eski/yanlış konumda
+    // kalıp pane'i kaplayan devasa bir bloğa dönüşebiliyordu (kullanıcı bulgusu).
+    // Bölücüyü tespit etmeye çalışmak yerine (kırılgan) — cvs üzerinde herhangi
+    // bir mouse-down sürdüğü sürece (RSI dahil pane sürükleme, çizim, vb.)
+    // dolguyu her karede yeniden konumla; ucuz bir işlem (birkaç priceToCoordinate).
+    this.cvs.addEventListener('mousedown', () => {
+      if (!this.indicators.some(i => ChartPane.SUBPANE_TYPES.has(i.type))) return;
+      let raf;
+      const loop = () => { this._repositionIndicatorFills(); raf = requestAnimationFrame(loop); };
+      raf = requestAnimationFrame(loop);
+      const stop = () => { cancelAnimationFrame(raf); document.removeEventListener('mouseup', stop); };
+      document.addEventListener('mouseup', stop);
+    });
 
     // [DENEYSEL — kullanıcı isteği 2026-08-15, kullanışsız bulunursa bu blok +
     // dblclick handler'ındaki autoScale:true satırı silinerek eski davranışa
@@ -696,6 +718,7 @@ class ChartPane {
   static RSI_DEFAULTS_APPLY(cfg) {
     if (cfg.type !== 'rsi') return cfg;
     cfg.upperBand ??= 70;
+    cfg.middleBand ??= 50;
     cfg.lowerBand ??= 30;
     cfg.bandColor ??= 'rgba(150,150,150,0.5)';
     cfg.fillColor ??= 'rgba(150,150,150,0.06)';
@@ -704,7 +727,96 @@ class ChartPane {
     cfg.markerColor ??= null;
     cfg.markerRadius ??= 2;
     cfg.divergenceEnabled ??= false;
+    // 2026-08-18 — Visibility sekmesi (kullanıcı isteği, Trendline
+    // ayar penceresindeki "Visibility" sekmesiyle aynı tasarım dili).
+    cfg.showBandLines ??= true;
+    cfg.showFill ??= true;
+    cfg.showOB ??= true;
+    cfg.showOS ??= true;
+    // TV Inputs sekmesi paritesi — Source + RSI-based MA (Smoothing).
+    cfg.source ??= 'close';
+    cfg.maType ??= 'none'; // 'none' | 'sma' | 'ema' | 'smma' | 'wma'
+    cfg.maLength ??= 14;
+    cfg.maColor ??= '#f7c948';
+    cfg.showMA ??= true;
+    // TV Style sekmesi — Output/Input values.
+    cfg.precision ??= null; // null = 'Default' (2 ondalık)
+    cfg.showPriceLabels ??= true;
+    cfg.showValuesInStatusLine ??= true;
+    cfg.showInputsInStatusLine ??= true;
+    // 2026-08-19 — TV Style sekmesinde HER satırın kendi göster/gizle
+    // checkbox'ı var (RSI line, RSI-based MA, Regular Bullish/Bearish).
+    // Band/Fill/OB/OS satırları BİLEREK ayrı bir alan açmıyor — Visibility
+    // sekmesindeki showBandLines/showFill/showOB/showOS'un AYNISINI kullanıyor
+    // (tek doğruluk kaynağı, iki giriş noktası — TV'nin kendi Visibility
+    // sekmesi farklı bir amaca hizmet ettiği için burada basitleştirildi).
+    cfg.showLine ??= true;
+    // Regular Bullish/Bearish divergence — çizgi + etiket TEK anahtarla
+    // (TV'deki ayrı "...Label" satırı BİLEREK birleştirildi, kapsam netleşti).
+    cfg.showDivBullish ??= true;
+    cfg.showDivBearish ??= true;
+    cfg.bullColor ??= '#26a69a';
+    cfg.bearColor ??= '#ef5350';
+    // 2026-08-19 — TV'deki gibi her çizgi türünün kendi kalınlık+stili var
+    // (proje genelinde kullanılan dsd-color-picker.js'in showCombinedLineSettings
+    // combo'suyla ayarlanıyor — bkz. app.js).
+    cfg.width ??= 2;         // RSI çizgisi
+    cfg.lineStyle ??= 'solid';
+    cfg.maWidth ??= 1;
+    cfg.maStyle ??= 'solid';
+    cfg.bullWidth ??= 1;
+    cfg.bullStyle ??= 'solid';
+    cfg.bearWidth ??= 1;
+    cfg.bearStyle ??= 'solid';
+    // 2026-08-19 (kullanıcı isteği #6) — Upper/Middle/Lower bandın rengi/
+    // kalınlığı/stili artık BAĞIMSIZ (önceki turda tek paylaşılan
+    // bandColor/bandWidth/bandStyle'a yazıyordu, kullanıcı ayrı ayrı
+    // ayarlanabilmesini istedi). Eski `bandColor`/`bandWidth`/`bandStyle`
+    // alanları (varsa) geriye dönük uyumluluk için İLK DEĞER olarak kullanılır.
+    cfg.upperBandColor ??= cfg.bandColor ?? 'rgba(150,150,150,0.5)';
+    cfg.upperBandWidth ??= cfg.bandWidth ?? 1;
+    cfg.upperBandStyle ??= cfg.bandStyle ?? 'dashed';
+    cfg.middleBandColor ??= cfg.bandColor ?? 'rgba(150,150,150,0.5)';
+    cfg.middleBandWidth ??= cfg.bandWidth ?? 1;
+    cfg.middleBandStyle ??= cfg.bandStyle ?? 'dashed';
+    cfg.lowerBandColor ??= cfg.bandColor ?? 'rgba(150,150,150,0.5)';
+    cfg.lowerBandWidth ??= cfg.bandWidth ?? 1;
+    cfg.lowerBandStyle ??= cfg.bandStyle ?? 'dashed';
+    // TV Inputs sekmesi — Calculation (Timeframe + Wait for timeframe closes).
+    // ŞİMDİLİK sadece 'chart' fonksiyonel — kullanıcı farklı bir TF seçerse o
+    // TF'in kendi mum akışını çekmek gerekir; bu, sunucunun paylaşılan Binance
+    // ağırlık bütçesini büyütür (bkz. CLAUDE.md "paylaşılan IP bütçesi" notu),
+    // o yüzden BİLEREK ayrı bir onaya bırakıldı — alan sadece saklanıyor.
+    cfg.calcTimeframe ??= 'chart';
+    cfg.waitForTfClose ??= true;
     return cfg;
+  }
+
+  /** cfg.precision (null=Default) → LWC priceFormat için ondalık sayısı. */
+  static RSI_PRECISION_DECIMALS(cfg) {
+    const p = parseInt(cfg.precision, 10);
+    return Number.isFinite(p) && p >= 0 ? p : 2;
+  }
+
+  /** dsd-color-picker.js'in 'solid'/'dashed'/'dotted' string'lerini LWC'nin
+   *  LineStyle enum'una çevirir. */
+  static LWC_LINE_STYLE(styleKey) {
+    return styleKey === 'dashed' ? LightweightCharts.LineStyle.Dashed
+      : styleKey === 'dotted' ? LightweightCharts.LineStyle.Dotted
+      : LightweightCharts.LineStyle.Solid;
+  }
+
+  /** cfg.source'a göre bar dizisinden RSI'nin çalışacağı kaynak diziyi üretir. */
+  static RSI_SOURCE_SERIES(candles, source) {
+    switch (source) {
+      case 'open':  return candles.map(d => d.open);
+      case 'high':  return candles.map(d => d.high);
+      case 'low':   return candles.map(d => d.low);
+      case 'hl2':   return candles.map(d => (d.high + d.low) / 2);
+      case 'hlc3':  return candles.map(d => (d.high + d.low + d.close) / 3);
+      case 'ohlc4': return candles.map(d => (d.open + d.high + d.low + d.close) / 4);
+      default:      return candles.map(d => d.close); // 'close'
+    }
   }
 
   /** Aktif `this.indicators`e göre series'leri (yeniden) kurar. */
@@ -717,6 +829,12 @@ class ChartPane {
     Object.keys(this._indSeries).forEach(id => {
       if (!wanted.has(id)) {
         const removedPaneIndex = this._indPaneIndex[id];
+        // Divergence bağlantı çizgileri + "Bull"/"Bear" marker primitive'i —
+        // ana RSI serisi silinmeden ÖNCE temizle (markers primitive o seriye tutunuyor).
+        (this._divSeries[id] || []).forEach(s => { try { this.chart.removeSeries(s); } catch (_) {} });
+        delete this._divSeries[id];
+        try { this._divMarkersHandle[id]?.detach?.(); } catch (_) {}
+        delete this._divMarkersHandle[id];
         try { this.chart.removeSeries(this._indSeries[id]); } catch (_) {}
         delete this._indSeries[id];
         delete this._indPaneIndex[id];
@@ -725,9 +843,12 @@ class ChartPane {
         if (aux) {
           try { this.chart.removeSeries(aux.ob); } catch (_) {}
           try { this.chart.removeSeries(aux.os); } catch (_) {}
+          if (aux.ma) { try { this.chart.removeSeries(aux.ma); } catch (_) {} }
           delete this._indAuxSeries[id];
         }
         if (this._indFillEl[id]) { this._indFillEl[id].remove(); delete this._indFillEl[id]; }
+        if (this._indTooltipHandler[id]) { try { this.chart.unsubscribeCrosshairMove(this._indTooltipHandler[id]); } catch (_) {} delete this._indTooltipHandler[id]; }
+        if (this._indTooltipEl[id]) { this._indTooltipEl[id].remove(); delete this._indTooltipEl[id]; }
         if (removedPaneIndex != null) {
           const stillUsed = Object.values(this._indPaneIndex).includes(removedPaneIndex);
           if (!stillUsed) {
@@ -744,24 +865,46 @@ class ChartPane {
       // Overlay türleri (ema/dema) bundan etkilenmez, hemen kurulabilirler.
       if (isSubpane && !this._chartReady) return;
       if (this._indSeries[cfg.id]) {
+        const decimals = isSubpane ? ChartPane.RSI_PRECISION_DECIMALS(cfg) : null;
+        // TV Style sekmesi — "RSI" satırının checkbox'ı kapalıysa çizgiyi
+        // saydam yap (band/fill/MA/divergence çizimleri etkilenmez).
+        const lineColor = (isSubpane && cfg.showLine === false) ? 'rgba(0,0,0,0)' : cfg.color;
         this._indSeries[cfg.id].applyOptions({
-          color: cfg.color,
+          color: lineColor,
           ...(isSubpane ? {
+            lineWidth: cfg.width,
+            lineStyle: ChartPane.LWC_LINE_STYLE(cfg.lineStyle),
             crosshairMarkerRadius: cfg.markerRadius,
             crosshairMarkerBackgroundColor: cfg.markerColor || cfg.color,
             crosshairMarkerBorderColor: cfg.markerColor || cfg.color,
+            lastValueVisible: cfg.showPriceLabels,
+            priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
           } : {}),
         });
-        if (isSubpane) this._rebuildSubpaneAux(cfg);
+        if (isSubpane) {
+          this._rebuildSubpaneAux(cfg);
+          // [DÜZELTME 2026-08-19] Stretch factor'ü SADECE ilk kurulumda değil,
+          // HER rebuild'de yeniden uygula — kullanıcı bulgusu: sayfa yenilenince
+          // (F5) RSI paneli bazen görünmez/yanlış boyutta kalıyor, sadece fiyat
+          // eksenine çift tıklayınca (autoScale reset) geri geliyordu. Kesin kök
+          // neden bu sandbox'ta (chart hiç compositing yapmıyor) doğrulanamadı —
+          // bu, LWC'nin pane stretch factor'ünü reload/resize sırasında sıfırlama
+          // ihtimaline karşı ucuz/zararsız bir savunma. Sorun devam ederse
+          // raporla, kök nedeni ayrıca araştırmak gerekecek.
+          const p = this.chart.panes()[this._indPaneIndex[cfg.id]];
+          if (p) p.setStretchFactor(0.3);
+        }
         return;
       }
       if (isSubpane) {
         const paneIndex = ChartPane.SUBPANE_INDEX[cfg.type];
+        const decimals = ChartPane.RSI_PRECISION_DECIMALS(cfg);
+        const lineColor = cfg.showLine === false ? 'rgba(0,0,0,0)' : cfg.color;
         const series = this.chart.addSeries(LightweightCharts.LineSeries, {
-          color: cfg.color, lineWidth: 2,
+          color: lineColor, lineWidth: cfg.width, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.lineStyle),
           priceScaleId: 'right', // OB/OS yardımcı serileriyle (bkz. _rebuildSubpaneAux) AYNI ölçek
-          priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
-          lastValueVisible: false, priceLineVisible: false,
+          priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
+          lastValueVisible: cfg.showPriceLabels, priceLineVisible: false,
           // 2026-08-18 (kullanıcı geri bildirimi) — varsayılan yarıçap (4)
           // büyük geliyordu, ayrıca rengi ayarlardan değiştirilebilir olmalı.
           crosshairMarkerRadius: cfg.markerRadius,
@@ -773,6 +916,7 @@ class ChartPane {
         this._indSeries[cfg.id] = series;
         this._indPaneIndex[cfg.id] = paneIndex;
         this._rebuildSubpaneAux(cfg);
+        this._attachRsiTooltip(cfg);
         // Ana panele göre küçük bir şerit — TV'deki RSI alt panelinin oranına yakın.
         const pane = this.chart.panes()[paneIndex];
         if (pane) pane.setStretchFactor(0.3);
@@ -809,15 +953,38 @@ class ChartPane {
     try { series.removePriceLine?.(); } catch (_) {}
     (this._indPriceLines?.[cfg.id] || []).forEach(l => { try { series.removePriceLine(l); } catch (_) {} });
     this._indPriceLines = this._indPriceLines || {};
-    this._indPriceLines[cfg.id] = [cfg.lowerBand, cfg.upperBand].map(level => series.createPriceLine({
-      price: level, color: cfg.bandColor, lineWidth: 1,
-      lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '',
-    }));
+    // Visibility sekmesi: "Show band lines" kapalıysa hiç çizme.
+    // TV paritesi (2026-08-18) — Middle Band (50) da Upper/Lower ile aynı yerde.
+    // 2026-08-19 (kullanıcı isteği #6) — üçü artık BAĞIMSIZ renk/kalınlık/stil.
+    this._indPriceLines[cfg.id] = cfg.showBandLines
+      ? [
+          [cfg.lowerBand, cfg.lowerBandColor, cfg.lowerBandWidth, cfg.lowerBandStyle],
+          [cfg.middleBand, cfg.middleBandColor, cfg.middleBandWidth, cfg.middleBandStyle],
+          [cfg.upperBand, cfg.upperBandColor, cfg.upperBandWidth, cfg.upperBandStyle],
+        ].map(([price, color, width, style]) => series.createPriceLine({
+          price, color, lineWidth: width,
+          lineStyle: ChartPane.LWC_LINE_STYLE(style), axisLabelVisible: true, title: '',
+        }))
+      : [];
+
+    // Visibility sekmesi: OB/OS kapalıysa dolgu renklerini tamamen saydam yap
+    // (seriyi silip pane'i yeniden düzenlemek yerine — daha ucuz/basit).
+    const obFillTop1 = cfg.showOB ? cfg.obColor : 'rgba(0,0,0,0)';
+    const obFillTop2 = cfg.showOB ? this._fadeColor(cfg.obColor) : 'rgba(0,0,0,0)';
+    const osFillBottom1 = cfg.showOS ? this._fadeColor(cfg.osColor) : 'rgba(0,0,0,0)';
+    const osFillBottom2 = cfg.showOS ? cfg.osColor : 'rgba(0,0,0,0)';
 
     const existingAux = this._indAuxSeries[cfg.id];
     if (existingAux) {
-      existingAux.ob.applyOptions({ topFillColor1: cfg.obColor, topFillColor2: this._fadeColor(cfg.obColor) });
-      existingAux.os.applyOptions({ bottomFillColor1: this._fadeColor(cfg.osColor), bottomFillColor2: cfg.osColor });
+      existingAux.ob.applyOptions({ topFillColor1: obFillTop1, topFillColor2: obFillTop2 });
+      existingAux.os.applyOptions({ bottomFillColor1: osFillBottom1, bottomFillColor2: osFillBottom2 });
+      if (existingAux.ma) {
+        const maVisible = cfg.maType !== 'none' && cfg.showMA;
+        existingAux.ma.applyOptions({
+          color: maVisible ? cfg.maColor : 'rgba(0,0,0,0)',
+          lineWidth: cfg.maWidth, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.maStyle),
+        });
+      }
     } else {
       const transparent = 'rgba(0,0,0,0)';
       // [2026-08-18 DÜZELTME] Ana RSI serisiyle AYNI price scale + sabit
@@ -835,7 +1002,7 @@ class ChartPane {
         priceScaleId: sharedScaleId,
         autoscaleInfoProvider: sharedAutoscale,
         topLineColor: transparent, bottomLineColor: transparent,
-        topFillColor1: cfg.obColor, topFillColor2: this._fadeColor(cfg.obColor),
+        topFillColor1: obFillTop1, topFillColor2: obFillTop2,
         bottomFillColor1: transparent, bottomFillColor2: transparent,
         lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
       }, paneIndex);
@@ -845,10 +1012,17 @@ class ChartPane {
         autoscaleInfoProvider: sharedAutoscale,
         topLineColor: transparent, bottomLineColor: transparent,
         topFillColor1: transparent, topFillColor2: transparent,
-        bottomFillColor1: this._fadeColor(cfg.osColor), bottomFillColor2: cfg.osColor,
+        bottomFillColor1: osFillBottom1, bottomFillColor2: osFillBottom2,
         lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
       }, paneIndex);
-      this._indAuxSeries[cfg.id] = { ob, os };
+      // TV paritesi (2026-08-18) — "RSI-based MA" çizgisi (Smoothing: SMA/EMA/SMMA/WMA).
+      const maVisible = cfg.maType !== 'none' && cfg.showMA;
+      const ma = this.chart.addSeries(LightweightCharts.LineSeries, {
+        color: maVisible ? cfg.maColor : 'rgba(0,0,0,0)', lineWidth: cfg.maWidth, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.maStyle),
+        priceScaleId: sharedScaleId, autoscaleInfoProvider: sharedAutoscale,
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+      }, paneIndex);
+      this._indAuxSeries[cfg.id] = { ob, os, ma };
     }
 
     // Bant-arası (lowerBand-upperBand) sabit dolgu — HTML overlay, cvs'nin
@@ -860,6 +1034,7 @@ class ChartPane {
       this._indFillEl[cfg.id] = el;
     }
     this._indFillEl[cfg.id].style.background = cfg.fillColor;
+    this._indFillEl[cfg.id].style.display = cfg.showFill ? '' : 'none';
     this._repositionIndicatorFills();
   }
 
@@ -871,6 +1046,48 @@ class ChartPane {
     if (!m) return rgba;
     const parts = m[1].split(',').map(s => s.trim());
     return `rgba(${parts[0]},${parts[1]},${parts[2]},0.02)`;
+  }
+
+  /** Kullanıcı isteği (2026-08-19, OI/Volume panelindeki AYNI desen —
+   *  `js/screener/oi-volume-panel.js` `_attachTooltip()`) — imleç RSI
+   *  çizgisinin üzerine geldiğinde, crosshair noktasının hemen üstünde o
+   *  anki RSI değerini gösteren yüzen bir badge. Eksen etiketinden BAĞIMSIZ,
+   *  fare imlecine yakın — chart'ın herhangi bir panelinde (ana panel dahil,
+   *  TV'nin diğer indikatörlerdeki davranışı da böyle) crosshair hareket
+   *  ettikçe güncellenir, sadece o zaman noktasında RSI değeri VARSA gösterilir.
+   *  Sadece ilk kurulumda ÇAĞRILIR (bkz. `_rebuildIndicatorOverlays`) — tek
+   *  bir `subscribeCrosshairMove` aboneliği yeter, ayar değişince yeniden
+   *  bağlamaya gerek yok (closure `cfg`'yi referans olarak tutuyor).
+   */
+  _attachRsiTooltip(cfg) {
+    if (this._indTooltipEl[cfg.id]) return; // zaten bağlı
+    const tip = document.createElement('div');
+    tip.style.cssText = 'position:absolute; display:none; pointer-events:none; background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:4px; padding:2px 6px; font-size:10px; font-family:"JetBrains Mono",monospace; color:var(--text-primary); z-index:6; white-space:nowrap;';
+    this.cvs.appendChild(tip);
+    this._indTooltipEl[cfg.id] = tip;
+    const handler = (param) => {
+      const series = this._indSeries[cfg.id];
+      if (!series || !param.point || !param.time) { tip.style.display = 'none'; return; }
+      const d = param.seriesData?.get(series);
+      if (!d || d.value == null) { tip.style.display = 'none'; return; }
+      const y = series.priceToCoordinate(d.value);
+      if (y == null) { tip.style.display = 'none'; return; }
+      const paneIndex = this._indPaneIndex[cfg.id];
+      let offsetY = 0;
+      for (let i = 0; i < paneIndex; i++) {
+        const p = this.chart.panes()[i];
+        if (p) offsetY += p.getHeight();
+      }
+      const decimals = ChartPane.RSI_PRECISION_DECIMALS(cfg);
+      tip.textContent = d.value.toFixed(decimals);
+      tip.style.display = 'block';
+      let left = param.point.x + 10;
+      left = Math.min(left, this.cvs.clientWidth - tip.offsetWidth - 4);
+      tip.style.left = Math.max(4, left) + 'px';
+      tip.style.top = (offsetY + y - tip.offsetHeight / 2) + 'px';
+    };
+    this._indTooltipHandler[cfg.id] = handler;
+    this.chart.subscribeCrosshairMove(handler);
   }
 
   /** Bant-arası dolgu div'lerini, ilgili RSI serisinin `priceToCoordinate()`
@@ -927,9 +1144,16 @@ class ChartPane {
     const lastTime = times[times.length - 1];
 
     this.indicators.forEach(cfg => {
+      // RSI'de 'close' dışı bir Source seçiliyse (Open/High/Low/HL2/HLC3/OHLC4)
+      // liveOverride'ı (sadece close taşır) UYGULAMADAN candlesData'dan üretir —
+      // canlı tick'te tek bar geç güncellenmesi (bir sonraki tam candle'da düzelir)
+      // yerinde bir basitleştirme, TV'nin çok küçük TF'lerdeki davranışına yakın.
+      const rsiSource = cfg.type === 'rsi' && cfg.source && cfg.source !== 'close'
+        ? ChartPane.RSI_SOURCE_SERIES(this.candlesData, cfg.source)
+        : closes;
       const arr = cfg.type === 'ema' ? IndicatorEngine.calcEMAFull(closes, cfg.period)
         : cfg.type === 'dema' ? IndicatorEngine.calcDEMAFull(closes, cfg.period)
-        : IndicatorEngine.calcRSIFull(closes, cfg.period); // 'rsi'
+        : IndicatorEngine.calcRSIFull(rsiSource, cfg.period); // 'rsi'
       const points = [];
       for (let i = 0; i < arr.length; i++) {
         if (arr[i] == null) continue;
@@ -949,22 +1173,109 @@ class ChartPane {
         const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
         if (tickOnly && lastPoint) { aux.ob.update(lastPoint); aux.os.update(lastPoint); }
         else { aux.ob.setData(points); aux.os.setData(points); }
+        // TV paritesi — RSI-based MA (Smoothing sekmesinde seçilen tip/uzunluk).
+        if (aux.ma) {
+          if (cfg.type === 'rsi' && cfg.maType !== 'none') {
+            const maArr = IndicatorEngine.calcMAOfSeries(arr, cfg.maLength, cfg.maType);
+            const maPoints = [];
+            for (let i = 0; i < maArr.length; i++) {
+              if (maArr[i] == null) continue;
+              maPoints.push({ time: times[i], value: maArr[i] });
+            }
+            const maLastPoint = maPoints.length && maPoints[maPoints.length - 1].time === lastTime ? maPoints[maPoints.length - 1] : null;
+            if (tickOnly && maLastPoint) aux.ma.update(maLastPoint);
+            else aux.ma.setData(maPoints);
+          } else if (!tickOnly) {
+            aux.ma.setData([]);
+          }
+        }
       }
       cfg._lastValue = points.length ? points[points.length - 1].value : null;
+
+      // TV paritesi — "Calculate Divergence" (Regular Bullish/Bearish).
+      // Sadece TAM veri geçişinde (tickOnly değil, liveOverride ile uzatılmamış
+      // seri) yeniden hesaplanır — pivot bulmak her tick'te gereksiz pahalı,
+      // ayrıca son barın pivotu zaten `right` bar sonrasına kadar netleşmez.
+      if (cfg.type === 'rsi') {
+        if (cfg.divergenceEnabled && !tickOnly && times.length === this.candlesData.length) {
+          const lows = this.candlesData.map(d => d.low);
+          const highs = this.candlesData.map(d => d.high);
+          const div = IndicatorEngine.calcRegularDivergence(arr, lows, highs);
+          this._renderRsiDivergence(cfg, div, arr, times);
+        } else if (!cfg.divergenceEnabled && !tickOnly) {
+          this._clearRsiDivergence(cfg);
+        }
+      }
     });
 
     this._repositionIndicatorFills();
     this._updateIndicatorLegend(tickOnly);
   }
 
+  /** Regular Bullish/Bearish divergence'ı RSI subpane'inde çizer: her pivot
+   *  çiftini bağlayan kısa bir LineSeries (2 nokta) + "Bull"/"Bear" metin
+   *  marker'ı (ana RSI serisine `createSeriesMarkers` ile iliştirilir).
+   *  Her çağrıda ÖNCEKİ segment serileri silinip yeniden kurulur — ucuz
+   *  (sadece tam veri geçişinde çalışır, bkz. çağrı noktası). */
+  _renderRsiDivergence(cfg, div, rsiArr, times) {
+    const series = this._indSeries[cfg.id];
+    const paneIndex = this._indPaneIndex[cfg.id];
+    if (!series || paneIndex == null) return;
+    (this._divSeries[cfg.id] || []).forEach(s => { try { this.chart.removeSeries(s); } catch (_) {} });
+    this._divSeries[cfg.id] = [];
+
+    const MAX_PER_SIDE = 30; // performans/görsel karmaşa — sadece en yeni sinyaller
+    const markers = [];
+    const addSegments = (pairs, color, width, style, show, isBull) => {
+      if (!show) return;
+      pairs.slice(-MAX_PER_SIDE).forEach(({ aIdx, bIdx }) => {
+        const ta = times[aIdx], tb = times[bIdx];
+        if (ta == null || tb == null) return;
+        const seg = this.chart.addSeries(LightweightCharts.LineSeries, {
+          color, lineWidth: width, lineStyle: ChartPane.LWC_LINE_STYLE(style), priceScaleId: 'right',
+          autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
+          lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+        }, paneIndex);
+        seg.setData([{ time: ta, value: rsiArr[aIdx] }, { time: tb, value: rsiArr[bIdx] }]);
+        this._divSeries[cfg.id].push(seg);
+        markers.push({
+          time: tb, position: isBull ? 'belowBar' : 'aboveBar', color,
+          shape: isBull ? 'arrowUp' : 'arrowDown', text: isBull ? 'Bull' : 'Bear',
+        });
+      });
+    };
+    addSegments(div.bullish, cfg.bullColor, cfg.bullWidth, cfg.bullStyle, cfg.showDivBullish, true);
+    addSegments(div.bearish, cfg.bearColor, cfg.bearWidth, cfg.bearStyle, cfg.showDivBearish, false);
+    markers.sort((a, b) => a.time - b.time);
+
+    if (this._divMarkersHandle[cfg.id]) {
+      this._divMarkersHandle[cfg.id].setMarkers(markers);
+    } else {
+      this._divMarkersHandle[cfg.id] = LightweightCharts.createSeriesMarkers(series, markers);
+    }
+  }
+
+  /** "Calculate Divergence" kapatıldığında çizgi+marker'ları temizler. */
+  _clearRsiDivergence(cfg) {
+    (this._divSeries[cfg.id] || []).forEach(s => { try { this.chart.removeSeries(s); } catch (_) {} });
+    this._divSeries[cfg.id] = [];
+    if (this._divMarkersHandle[cfg.id]) this._divMarkersHandle[cfg.id].setMarkers([]);
+  }
+
   /** TV tarzı, chart'ın sol-üst köşesindeki basit indikatör listesi (isim/değer + düzenle/kaldır).
    *  `valuesOnly`: canlı tick'lerde DOM'u (ve hover listener'larını) yeniden kurmadan sadece
    *  değer metnini günceller — her tick'te tüm satırı yeniden inşa etmek hover'ı bozar/gereksiz. */
   _updateIndicatorLegend(valuesOnly = false) {
+    const fmtValue = (cfg) => {
+      if (cfg._lastValue == null) return '—';
+      const decimals = cfg.type === 'rsi' ? ChartPane.RSI_PRECISION_DECIMALS(cfg) : 2;
+      const mul = Math.pow(10, decimals);
+      return (Math.round(cfg._lastValue * mul) / mul).toFixed(decimals);
+    };
     if (valuesOnly && this._indLegendEl) {
       this.indicators.forEach(cfg => {
         const row = this._indLegendEl.querySelector(`.pane-ind-row[data-ind-id="${cfg.id}"] .pane-ind-val`);
-        if (row) row.textContent = cfg._lastValue != null ? (Math.round(cfg._lastValue * 100) / 100) : '—';
+        if (row) row.textContent = (cfg.type !== 'rsi' || cfg.showValuesInStatusLine !== false) ? fmtValue(cfg) : '';
       });
       return;
     }
@@ -979,15 +1290,20 @@ class ChartPane {
       this.cvs.appendChild(this._indLegendEl);
     }
     const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
-    this._indLegendEl.innerHTML = this.indicators.map(cfg => `
+    // TV paritesi — "Inputs in status line" / "Values in status line" (RSI Style sekmesi).
+    this._indLegendEl.innerHTML = this.indicators.map(cfg => {
+      const showInputs = cfg.type !== 'rsi' || cfg.showInputsInStatusLine !== false;
+      const showValues = cfg.type !== 'rsi' || cfg.showValuesInStatusLine !== false;
+      return `
       <div class="pane-ind-row" data-ind-id="${cfg.id}" style="display:flex; align-items:center; gap:5px; padding:1px 0; color:${cfg.color};">
-        <span>${NAME[cfg.type]}(${cfg.period})</span>
-        <span class="pane-ind-val" style="color:var(--text-secondary);">${cfg._lastValue != null ? (Math.round(cfg._lastValue * 100) / 100) : '—'}</span>
+        <span>${NAME[cfg.type]}${showInputs ? `(${cfg.period})` : ''}</span>
+        <span class="pane-ind-val" style="color:var(--text-secondary);">${showValues ? fmtValue(cfg) : ''}</span>
         <span class="pane-ind-actions" style="display:none; gap:4px; margin-left:2px;">
           <button type="button" class="pane-ind-edit" title="Settings" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:0; font-size:11px; line-height:1;">⚙</button>
           <button type="button" class="pane-ind-remove" title="Remove" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:0; font-size:11px; line-height:1;">✕</button>
         </span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     this._indLegendEl.querySelectorAll('.pane-ind-row').forEach(row => {
       const actions = row.querySelector('.pane-ind-actions');
@@ -995,7 +1311,11 @@ class ChartPane {
       row.addEventListener('mouseleave', () => { actions.style.display = 'none'; });
       row.querySelector('.pane-ind-remove').addEventListener('click', (e) => {
         e.stopPropagation();
-        this.removeIndicator(row.dataset.indId);
+        const ind = this.indicators.find(i => i.id === row.dataset.indId);
+        const name = ind ? ind.type.toUpperCase() : 'this indicator';
+        window.ConfirmModal.show(`Remove ${name} indicator? This cannot be undone.`).then((ok) => {
+          if (ok) this.removeIndicator(row.dataset.indId);
+        });
       });
       row.querySelector('.pane-ind-edit').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1158,6 +1478,24 @@ class ChartPane {
     this._updateVisualLines(deduped);
     this._updateAlertLines();
     this._recomputeAllIndicators();
+    // [DÜZELTME 2026-08-19] Aşağıdaki fitContent/goToTime bloğu ile AYNI
+    // kök neden ailesi: RSI paneli veri henüz yokken (constructor →
+    // ResizeObserver → `_rebuildIndicatorOverlays`) kuruluyor ve o anda
+    // `setStretchFactor(0.3)` uygulanıyor — ama LWC ilk GERÇEK veri
+    // setData'sından sonra kendi iç layout'unu yeniden hesaplıyor gibi
+    // görünüyor (kullanıcı bulgusu: F5 sonrası RSI paneli kaybolan/yanlış
+    // boyutlu kalıyor, sadece fiyat eksenine çift tıklayınca düzeliyordu —
+    // TAM olarak aşağıdaki phantom/fitContent hatasıyla aynı "ilk yüklemede
+    // çift tıklamayı beklemeden düzelt" deseni). İlk gerçek veri geldiğinde
+    // stretch factor'ü BİR KEZ DAHA uygula.
+    if (this.indicators.some(i => ChartPane.SUBPANE_TYPES.has(i.type))) {
+      requestAnimationFrame(() => {
+        Object.entries(this._indPaneIndex).forEach(([id, paneIndex]) => {
+          const p = this.chart.panes()[paneIndex];
+          if (p) p.setStretchFactor(0.3);
+        });
+      });
+    }
     requestAnimationFrame(() => this._positionCountdown());
 
     // [2026-08-15] Alarm kartından "zaman yolculuğu" bekleniyorsa (bkz.

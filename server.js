@@ -22,9 +22,23 @@ app.use(express.json());
 // (strateji parametrelerini içeren gorevler3.md dahil) tarayıcıdan doğrudan
 // indirilebiliyordu. Sadece frontend'in gerçekten ihtiyaç duyduğu index.html
 // + css/ + js/ servis ediliyor.
-app.use('/css', express.static(path.join(__dirname, 'css')));
-app.use('/js', express.static(path.join(__dirname, 'js')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// [DÜZELTME 2026-08-19] express.static varsayılanı Last-Modified/ETag
+// gönderir ama açık bir Cache-Control vermez — bazı tarayıcılar (Chrome'un
+// "heuristic freshness" mantığı) bunu normal F5'te SUNUCUYA HİÇ SORMADAN
+// önbellekten sunabiliyor. Bu proje hızlı iterasyon gerektiren bir dev
+// ortamı (JS/CSS aynı gün içinde defalarca değişiyor) — kullanıcı bir
+// düzeltmeyi test ettiğinde eski dosyayı görmesi ("hâlâ düzelmemiş" gibi
+// yanlış bug raporlarına yol açıyordu) kabul edilemez. `no-cache` tarayıcıyı
+// HER İSTEKTE sunucuya sormaya zorluyor (dosya değişmediyse ucuz bir 304
+// döner, ETag sayesinde bant genişliği kaybı yok) — "asla cache'leme" değil,
+// "asla doğrulamadan kullanma".
+const NO_CACHE_STATIC = { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') };
+app.use('/css', express.static(path.join(__dirname, 'css'), NO_CACHE_STATIC));
+app.use('/js', express.static(path.join(__dirname, 'js'), NO_CACHE_STATIC));
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 app.use((req, res, next) => {
   if (!req.url.startsWith('/api/history') && !req.url.startsWith('/api/signals')) { // Suppress noisy history logs
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);

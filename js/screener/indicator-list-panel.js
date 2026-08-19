@@ -114,7 +114,12 @@ const IndicatorListPanel = (() => {
 
       const deleteBtn = e.target.closest('.il-delete');
       if (deleteBtn) {
-        _activePane()?.removeIndicator(deleteBtn.dataset.id);
+        const pane = _activePane();
+        const cfg = pane?.indicators.find(i => i.id === deleteBtn.dataset.id);
+        const name = cfg ? (SHORT[cfg.type] || cfg.type) : 'this indicator';
+        window.ConfirmModal.show(`Remove ${name} indicator? This cannot be undone.`).then((ok) => {
+          if (ok) pane?.removeIndicator(deleteBtn.dataset.id);
+        });
         return;
       }
     });
