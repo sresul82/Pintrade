@@ -1494,6 +1494,17 @@ class ChartPane {
           const p = this.chart.panes()[paneIndex];
           if (p) p.setStretchFactor(0.3);
         });
+        // [DÜZELTME 2026-08-19, 2. tur] Sadece stretchFactor'ü YENİDEN
+        // AYARLAMAK yetmeyebilir — kullanıcı bulgusu hâlâ sürüyor. Fiyat
+        // eksenine çift tıklamanın neden düzelttiğine dair en olası açıklama:
+        // LWC'nin pane yüksekliklerini gerçekten YENİDEN HESAPLAMASI için
+        // kendi iç `resize()` yoluna girmesi gerekiyor — stretchFactor'ü
+        // API'den değiştirmek tek başına bunu TETİKLEMEYEBİLİR. Aynı
+        // width/height ile `chart.resize()`'ı TEKRAR çağırmak (boyut aynı
+        // olsa bile) LWC'yi tam bir layout geçişi yapmaya zorluyor — çift
+        // tıklamanın yaptığı "nudge"ın taklidi.
+        const w = this.cvs.clientWidth, h = this.cvs.clientHeight;
+        if (w > 0 && h > 0) { try { this.chart.resize(w, h); } catch (_) {} }
       });
     }
     requestAnimationFrame(() => this._positionCountdown());

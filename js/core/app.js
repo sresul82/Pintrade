@@ -1557,6 +1557,19 @@ const App = {
         </div>`;
       document.body.appendChild(overlay);
 
+      // 2026-08-19 (kullanıcı isteği — "kaydırmak" sürüklemekmiş, scroll değil)
+      // — diyalog başlığından (.dsd-header, zaten cursor:move) SÜRÜKLENEBİLİR
+      // olsun. Yeni bir mekanizma İCAT EDİLMEDİ — projedeki TÜM çizim aracı
+      // ayar pencerelerinin (drawing-settings-dialog.js) kullandığı AYNI
+      // `DSDUtils.makeDraggable` (js/drawing/ui/dsd-tabs/dsd-utils.js).
+      {
+        const dsdDialogEl = document.getElementById('dsd-dialog');
+        const dsdHeaderEl = overlay.querySelector('.dsd-header');
+        if (dsdDialogEl && dsdHeaderEl && window.DSDUtils) {
+          window.DSDUtils.makeDraggable(dsdDialogEl, dsdHeaderEl);
+        }
+      }
+
       // Sekme geçişi — o anki formdaki DEĞİŞMEMİŞ değerleri cfg'ye
       // KOPYALAMADAN sekme değiştiriyoruz (Apply/Ok'a basılana kadar hiçbir
       // şey kalıcı olmaz) — bu yüzden sekme değişirken formun O ANA KADARKİ
