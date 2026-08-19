@@ -1494,17 +1494,23 @@ class ChartPane {
           const p = this.chart.panes()[paneIndex];
           if (p) p.setStretchFactor(0.3);
         });
-        // [DÜZELTME 2026-08-19, 2. tur] Sadece stretchFactor'ü YENİDEN
-        // AYARLAMAK yetmeyebilir — kullanıcı bulgusu hâlâ sürüyor. Fiyat
-        // eksenine çift tıklamanın neden düzelttiğine dair en olası açıklama:
-        // LWC'nin pane yüksekliklerini gerçekten YENİDEN HESAPLAMASI için
-        // kendi iç `resize()` yoluna girmesi gerekiyor — stretchFactor'ü
-        // API'den değiştirmek tek başına bunu TETİKLEMEYEBİLİR. Aynı
-        // width/height ile `chart.resize()`'ı TEKRAR çağırmak (boyut aynı
-        // olsa bile) LWC'yi tam bir layout geçişi yapmaya zorluyor — çift
-        // tıklamanın yaptığı "nudge"ın taklidi.
-        const w = this.cvs.clientWidth, h = this.cvs.clientHeight;
-        if (w > 0 && h > 0) { try { this.chart.resize(w, h); } catch (_) {} }
+        // [DÜZELTME 2026-08-19, 3. tur] 2. turdaki `chart.resize(this.cvs.
+        // clientWidth, this.cvs.clientHeight)` çağrısı YENİ bir bug'a yol
+        // açtı: bu RAF, sayfanın geri kalanı (sidebar/watchlist/OI-LS paneli
+        // vb.) henüz son boyutuna YERLEŞMEDEN tetiklenebiliyor — o anki
+        // `cvs.clientHeight` GEÇİCİ/erken bir değer oluyor, chart o boyuta
+        // SABİTLENİYOR (kullanıcı doğrulaması: `chart.panes()` toplamı
+        // 837px iken konteynerin GERÇEK boyutu 867px'ti — 30px'lik kalıcı
+        // bir fark). Kendi elle yazdığım resize mantığını GÜVENMEK yerine,
+        // ZATEN doğru çalışan `ResizeObserver`'ı (bkz. constructor'daki
+        // `this.ro`) yeniden gözlemleterek onun GÜNCEL, doğru `contentRect`
+        // ile kendi (kanıtlanmış doğru) callback'ini tekrar çalıştırmasını
+        // sağlıyoruz — tarayıcı `.observe()` çağrıldığında callback'i HER
+        // ZAMAN mevcut boyutla bir kez daha tetikler.
+        if (this.ro && this.cvs) {
+          try { this.ro.unobserve(this.cvs); } catch (_) {}
+          this.ro.observe(this.cvs);
+        }
       });
     }
     requestAnimationFrame(() => this._positionCountdown());
