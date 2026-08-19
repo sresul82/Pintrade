@@ -89,10 +89,11 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
-  /* [DÜZELTME 2026-08-19] padding-bottom eklendi — aksi halde uzun içerikli
-     (RSI Style sekmesi gibi) dialog'lar altta nefes payı olmadan viewport
-     dışına taşıyordu. */
+  /* [DÜZELTME 2026-08-19, 2. tur] 15vh üstte BOŞA harcanan alandı — küçük
+     monitörlerde (özellikle 720p dizüstü) dialog gereksiz yere erken taşıp
+     kaydırmayı gerektiriyordu. 6vh'ye düşürüldü, gerçek taşma çok daha az
+     senaryoda oluşur. */
+  padding-top: 6vh;
   padding-bottom: 4vh;
   box-sizing: border-box;
 }
@@ -107,7 +108,7 @@
      arasına sığmayan uzun dialog'lar (ör. RSI Style sekmesi) artık viewport
      ile sınırlı — taşan içerik .dsd-body içinde kaydırılıyor (aşağıda),
      header/tabs/footer sabit kalıyor. */
-  max-height: calc(100vh - 19vh);
+  max-height: calc(100vh - 10vh); /* padding-top(6vh) + padding-bottom(4vh) */
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 40px rgba(0,0,0,0.7);
@@ -185,7 +186,17 @@
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
+  /* [DÜZELTME 2026-08-19, 2. tur] Windows'ta Chrome'un varsayılan ince/
+     overlay scrollbar'ı bazı sistem ayarlarında görünmez oluyor — kaydırma
+     ÇALIŞSA bile "kaydırılamıyor" izlenimi veriyordu. Kalın, hep görünür bir
+     scrollbar zorlanıyor — artık taşma varsa görsel olarak da belli olur. */
+  scrollbar-width: auto;         /* Firefox */
+  scrollbar-color: #7d808b #1e222d;
 }
+.dsd-body::-webkit-scrollbar { width: 10px; }
+.dsd-body::-webkit-scrollbar-track { background: #1e222d; }
+.dsd-body::-webkit-scrollbar-thumb { background: #4a4e5a; border-radius: 5px; }
+.dsd-body::-webkit-scrollbar-thumb:hover { background: #5d606b; }
 
 /* Rows */
 .dsd-row {
