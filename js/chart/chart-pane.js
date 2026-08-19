@@ -449,7 +449,27 @@ class ChartPane {
     // [FIX] Zaman cetveline çift tıklandığında fitContent() phantom'ın 500 barını
     // da ekrana sığdırır — mumlar sola kayar. Çift tıklamayı yakalayıp gerçek
     // mum aralığına geri döneriz.
-    this.cvs.addEventListener('dblclick', () => {
+    this.cvs.addEventListener('dblclick', (e) => {
+      // [2026-08-19, kullanıcı isteği] Bir subpane (RSI vb.) üzerine çift
+      // tıklanınca o indikatörün ayar penceresini aç — aşağıdaki "zaman
+      // eksenini fitContent'e sığdır" davranışı SADECE ana panel/zaman
+      // ekseni çift tıklaması için anlamlı, subpane'de tetiklenmesin.
+      const rect = this.cvs.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const panes = this.chart.panes();
+      if (panes[0] && y > panes[0].getHeight()) {
+        let offsetY = panes[0].getHeight();
+        for (let i = 1; i < panes.length; i++) {
+          const h = panes[i].getHeight();
+          if (y <= offsetY + h) {
+            const indId = Object.keys(this._indPaneIndex).find(id => this._indPaneIndex[id] === i);
+            if (indId) EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: indId });
+            return;
+          }
+          offsetY += h;
+        }
+        return; // subpane alanı ama eşleşen indikatör yok
+      }
       // Çift tıklama anında gerçek mumların logical range'ini hesapla
       const candles = this.candlesData;
       if (!candles || candles.length === 0) return;
