@@ -157,6 +157,52 @@ scaffold'lı (`KOM_BADGE_STYLE[3]`, "Combo 3", kesikli/soluk rozet).
 
 ---
 
+## Görev-10 — 2026-08-20: Screener'daki boş bot sekmelerinin doldurulması (M1-A/V3/4S + Kom3)
+
+**Durum: Kullanıcı isteği, henüz kapsam netleşmedi — bir sonraki oturumda
+kullanıcıyla konuşulmalı.** Kullanıcı: "Screener içinde botlarımız
+bulunmakta ama altı boş, doldurmamız lazım — botlar manuel sinyal
+yakalama için önemli."
+
+**Tespit edilen boş/placeholder bot sekmeleri:**
+- `js/screener/bot-signals-panel.js` `BOT_TABS`: **FR** ve **M1 Hammer**
+  gerçek/canlı (DOKUNULMAZ — bkz. `.claude/CLAUDE.md` bot-architecture
+  kuralı). **M1-A, V3, 4S** UI'da sekme/rozet olarak SCAFFOLD'LI ama
+  arkalarında gerçek sinyal mantığı/veri YOK (`_activeBot` state'inde
+  'm1a'/'v3'/'4s' değerleri var ama besleyen bir watcher/strateji yok).
+- Ayrıca **Kom3** (Görev-5, yukarıda) da aynı şekilde boş — muhtemelen
+  kullanıcı bu ikisini (M1-A/V3/4S rafı + Kom3) birlikte kastediyor,
+  netleştirilmeli.
+
+**⚠ ZORUNLU kısıt (kullanıcının kendi sözleriyle vurguladığı):** Bu
+botların veri çekme şekli, Binance BAN riskini göz önünde bulundurarak
+tasarlanmalı. Proje zaten bunun için mimari kurmuş durumda — YENİDEN
+İCAT EDİLMEMELİ:
+- `.claude/CLAUDE.md` "bot-architecture" bölümü: hiçbir bot doğrudan REST
+  isteği atamaz, HEPSİ `BotEngine.queueRestRequest()` (`js/screener/
+  bot-engine.js`) üzerinden geçmeli — tüm trafik tek IP'den çıkıyor,
+  Binance ağırlık limiti IP başına. Kline için de `MarketDataStore.
+  subscribeKlines()`/`unsubscribeKlines()` (`js/data/market-data-store.js`)
+  kullanılmalı, kendi WebSocket'ini AÇMAMALI.
+- Sunucu-taraflı yeni bir toplayıcı (Kom1/Kom2 gibi) eklenecekse,
+  `server.js`'teki `_staggeredStart()` ile MEVCUT tüm toplayıcıların
+  açılış gecikmelerine bakıp çakışmayacak bir pencere seçilmeli (2026-08-12
+  gecesi tam bu yüzden bir çakışma yaşanmıştı, bkz. CLAUDE.md).
+- **Taze/somut bir uyarı örneği:** 2026-08-17/18 gecesi Kom2'nin evren
+  taraması (~527 sembol) tekrar eden ban'lara ve CloudFront 403 blokuna
+  yol açmıştı (Görev-2, yukarıda) — HÂLÂ tam açılmadı (evren 84 sembolde
+  sıkışık kalmış durumda, 2026-08-20'de doğrulandı). Yeni bot(lar)ı
+  tasarlarken bu olay ders olarak alınmalı: küçük evren + kademeli
+  genişleme + paylaşılan ağırlık bütçesine saygı.
+
+**Not (kullanıcı isteği, 2026-08-20):** Bu görevin dokümantasyonu SADECE
+bu yerel `dokumentasyon/gorevler/` klasöründeki dosyalara işlenecek —
+kullanıcı SSD üzerinden çalışıyor ve dosyaları kendisiyle taşıyor, cloud
+tabanlı bir görev takibine (ör. bu oturumun kendi TaskCreate listesi)
+YAZILMAYACAK/eklenmeyecek.
+
+---
+
 ## Görev-6 — `gorevler2.md`'den kalan küçük iyileştirmeler (izleme listesi)
 
 Hiçbiri acil değil, birikmiş küçük borçlar:
