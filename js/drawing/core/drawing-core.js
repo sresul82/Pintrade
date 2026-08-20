@@ -36,6 +36,58 @@ window.DrawingManager = (() => {
       _cursorOverSubpane = !!mainPane && y > mainPane.getHeight();
     } catch (_) { _cursorOverSubpane = false; }
   }
+
+  // [2026-08-19] Subpane (RSI vb.) fiyat ölçeği düzeltmesi — bir çizim
+  // hangi panelde oluşturulduysa (d.paneKey: null=ana panel, indikatör id=
+  // subpane) render/hit-test/anchor kodu HEP o panelin kendi serisini
+  // kullanmalı, ana panelin `pane.series`'ini değil. `_pt2xy`/`_xy2pt`
+  // bunu merkezi olarak çözer; hangi çizimin işlendiğini bilmek için
+  // `_renderPaneKey` modül-seviyesi bayrağı kullanılır — _renderDrawing/
+  // _hitTest/_renderAnchors/_openTrendlineTextEditor girişinde d.paneKey'e
+  // ayarlanır (bkz. ilgili fonksiyonlar). Eski çizimlerde (veya ana panelde
+  // oluşturulanlarda) paneKey yok/null → davranış eskisiyle BİREBİR aynı
+  // (pane.series, offsetY 0).
+  let _renderPaneKey = null;
+
+  /** Verilen paneKey (indikatör id, null=ana panel) için render serisini ve
+   *  o panelin canvas'taki dikey ofsetini (önceki panellerin toplam
+   *  yüksekliği) döndürür. Seri bulunamazsa ana panele düşer. */
+  function _paneSeriesInfo(pane, key) {
+    if (key && pane && pane._indSeries && pane._indSeries[key]) {
+      const series = pane._indSeries[key];
+      const paneIndex = pane._indPaneIndex ? pane._indPaneIndex[key] : null;
+      let offsetY = 0;
+      if (paneIndex != null) {
+        try {
+          const panes = pane.chart.panes();
+          for (let i = 0; i < paneIndex; i++) {
+            if (panes[i]) offsetY += panes[i].getHeight();
+          }
+        } catch (_) { offsetY = 0; }
+      }
+      return { series, offsetY };
+    }
+    return { series: pane.series, offsetY: 0 };
+  }
+
+  /** Canvas'a göreli bir y koordinatının hangi subpane'e (indikatör id) denk
+   *  geldiğini bulur; ana paneldeyse null döner. Yeni bir çizim başlatılırken
+   *  (mousedown) hangi panelin serisinin kullanılacağını belirlemek için. */
+  function _detectPaneKeyAtY(pane, y) {
+    try {
+      if (!pane._indPaneIndex) return null;
+      const mainPane = pane.chart.panes()[0];
+      if (!mainPane || y <= mainPane.getHeight()) return null;
+      for (const key of Object.keys(pane._indPaneIndex)) {
+        const idx = pane._indPaneIndex[key];
+        const p = pane.chart.panes()[idx];
+        if (!p) continue;
+        const { offsetY } = _paneSeriesInfo(pane, key);
+        if (y >= offsetY && y <= offsetY + p.getHeight()) return key;
+      }
+    } catch (_) {}
+    return null;
+  }
   // Tracks whether the last pointerdown was claimed by us.
   // Used in onMouseUp to claim (or not) the matching pointerup,
   // preventing LWC from receiving orphaned pointerup events that corrupt its pan state.
@@ -160,8 +212,16 @@ window.DrawingManager = (() => {
     const y = e.clientY - rect.top;
     _updateSubpaneFlag(pane, y);
 
+    // Devam eden çok noktalı bir çizim varsa (ör. fib-channel'ın 2./3.
+    // tıklaması) yeni nokta İLK tıklamada belirlenen panele sadık kalır —
+    // imleç sınıra yakınsa bile aynı çizim yarı ana yarı subpane'de bölünmesin.
+    const activePaneKey = (_inProgress && _inProgress.symbol === pane.symbol && !_inProgress.finished)
+      ? (_inProgress.paneKey || null)
+      : _detectPaneKeyAtY(pane, y);
+    const { series: activeSeries, offsetY: activeOffsetY } = _paneSeriesInfo(pane, activePaneKey);
+
     const rawTime = pane.chart.timeScale().coordinateToTime(x);
-    const rawPrice = series.coordinateToPrice(y);
+    const rawPrice = activeSeries.coordinateToPrice(y - activeOffsetY);
 
     if (rawTime === null || rawPrice === null) {
       _lastPointerdownClaimed = false;
@@ -251,7 +311,7 @@ window.DrawingManager = (() => {
       }
 
       if (!_inProgress || _inProgress.tool !== 'measure') {
-        _inProgress = { tool: 'measure', symbol: pane.symbol, p1: pt, p2: { ...pt }, id: _uid() };
+        _inProgress = { tool: 'measure', symbol: pane.symbol, p1: pt, p2: { ...pt }, id: _uid(), paneKey: activePaneKey };
       
       } else {
         _inProgress.p2 = pt;
@@ -264,25 +324,25 @@ window.DrawingManager = (() => {
 
     if (_activeTool === 'hline') {
       if (price == null || !isFinite(price)) return false;
-      _finishDrawing(pane.symbol, { tool: 'hline', price, id: _uid(), style: _getToolStyle('hline') });
+      _finishDrawing(pane.symbol, { tool: 'hline', price, id: _uid(), style: _getToolStyle('hline'), paneKey: activePaneKey });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'vline') {
       if (time == null) return false;
-      _finishDrawing(pane.symbol, { tool: 'vline', time, id: _uid(), style: _getToolStyle('vline') });
+      _finishDrawing(pane.symbol, { tool: 'vline', time, id: _uid(), style: _getToolStyle('vline'), paneKey: activePaneKey });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'hray') {
       if (price == null || !isFinite(price) || time == null) return false;
-      _finishDrawing(pane.symbol, { tool: 'hray', price, time, p1: { time, price }, id: _uid(), style: _getToolStyle('hray') });
+      _finishDrawing(pane.symbol, { tool: 'hray', price, time, p1: { time, price }, id: _uid(), style: _getToolStyle('hray'), paneKey: activePaneKey });
       _lastPointerdownClaimed = true;
       return true;
     }
     if (_activeTool === 'crossline') {
       if (price == null || !isFinite(price) || time == null) return false;
-      _finishDrawing(pane.symbol, { tool: 'crossline', price, time, id: _uid(), style: _getToolStyle('crossline') });
+      _finishDrawing(pane.symbol, { tool: 'crossline', price, time, id: _uid(), style: _getToolStyle('crossline'), paneKey: activePaneKey });
       _lastPointerdownClaimed = true;
       return true;
     }
@@ -292,7 +352,8 @@ window.DrawingManager = (() => {
         p1: pt,
         id: _uid(),
         text: 'Text',
-        style: _getToolStyle('texttool') || { fontSize: 16, textColor: '#d1d4dc', fillColor: 'rgba(0,0,0,0)', bold: false, italic: false }
+        style: _getToolStyle('texttool') || { fontSize: 16, textColor: '#d1d4dc', fillColor: 'rgba(0,0,0,0)', bold: false, italic: false },
+        paneKey: activePaneKey
       };
       _finishDrawing(pane.symbol, d, pane);
       _selectedId = d.id;
@@ -316,7 +377,7 @@ window.DrawingManager = (() => {
 
     // ── Single-point Text annotation tools ───────────────────
     if (['pricelabel', 'flagmark', 'tableanno'].includes(_activeTool)) {
-      const d = { tool: _activeTool, p1: pt, id: _uid(), text: '', style: _getToolStyle(_activeTool) };
+      const d = { tool: _activeTool, p1: pt, id: _uid(), text: '', style: _getToolStyle(_activeTool), paneKey: activePaneKey };
       _finishDrawing(pane.symbol, d);
       _selectedId = d.id;
       EventBus.emit('drawing:selected', { id: d.id, symbol: pane.symbol, x: e.clientX, y: e.clientY });
@@ -326,7 +387,7 @@ window.DrawingManager = (() => {
 
     // ── Single-point Markers ────────────────────────────
     if (['arrowmarker', 'arrowup', 'arrowdown'].includes(_activeTool)) {
-      _finishDrawing(pane.symbol, { tool: _activeTool, p1: pt, id: _uid(), style: _getToolStyle(_activeTool) });
+      _finishDrawing(pane.symbol, { tool: _activeTool, p1: pt, id: _uid(), style: _getToolStyle(_activeTool), paneKey: activePaneKey });
       _lastPointerdownClaimed = true;
       return true;
     }
@@ -342,17 +403,17 @@ window.DrawingManager = (() => {
     ];
     if (TWO_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
-        _inProgress = { tool: _activeTool, symbol: pane.symbol, p1: pt, p2: pt, id: _uid(), style: _getToolStyle(_activeTool) };
+        _inProgress = { tool: _activeTool, symbol: pane.symbol, p1: pt, p2: pt, id: _uid(), style: _getToolStyle(_activeTool), paneKey: activePaneKey };
       } else if (!_inProgress.p3) {
         // Second click: finish drawing
         if (['note', 'callout', 'pricenote'].includes(_activeTool)) {
           _inProgress.p2 = { time: rawTime, price: rawPrice };
           } else if (e.shiftKey && ['trendline', 'ray', 'extended'].includes(_activeTool) && _inProgress.p1) {
           const p1x = _timeToX(pane, _inProgress.p1.time);
-          const p1y = pane.series.priceToCoordinate(_inProgress.p1.price);
+          const p1y = activeSeries.priceToCoordinate(_inProgress.p1.price);
           const rawX = pane.chart.timeScale().timeToCoordinate(pt.time);
           const dx = rawX - p1x;
-          const dy = pane.series.priceToCoordinate(pt.price) - p1y;
+          const dy = activeSeries.priceToCoordinate(pt.price) - p1y;
           if (Math.abs(dy) < Math.abs(dx)) {
             _inProgress.p2 = { time: pt.time, price: _inProgress.p1.price };
           } else {
@@ -389,7 +450,7 @@ window.DrawingManager = (() => {
     ];
     if (THREE_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
-        _inProgress = { tool: _activeTool, symbol: pane.symbol, p1: pt, p2: pt, p3: null, id: _uid(), style: _getToolStyle(_activeTool) };
+        _inProgress = { tool: _activeTool, symbol: pane.symbol, p1: pt, p2: pt, p3: null, id: _uid(), style: _getToolStyle(_activeTool), paneKey: activePaneKey };
       } else if (!_inProgress.p3) {
         _inProgress.p2 = pt;
         _inProgress.p3 = pt; // p3 will follow mouse until next click
@@ -408,11 +469,11 @@ window.DrawingManager = (() => {
     const MULTI_PT_TOOLS = ['pathtool'];
     if (MULTI_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
-        _inProgress = { tool: _activeTool, symbol: pane.symbol, points: [pt, pt], id: _uid(), style: _getToolStyle(_activeTool) };
+        _inProgress = { tool: _activeTool, symbol: pane.symbol, points: [pt, pt], id: _uid(), style: _getToolStyle(_activeTool), paneKey: activePaneKey };
       } else {
         const lastPt = _inProgress.points[_inProgress.points.length - 2];
         // If clicked on the exact same spot (double click), finish drawing
-        if (lastPt && Math.abs(x - _timeToX(pane, lastPt.time)) < 5 && Math.abs(y - series.priceToCoordinate(lastPt.price)) < 5) {
+        if (lastPt && Math.abs(x - _timeToX(pane, lastPt.time)) < 5 && Math.abs(y - (activeOffsetY + activeSeries.priceToCoordinate(lastPt.price))) < 5) {
           _inProgress.points.pop(); // remove the following cursor point
           if (_inProgress.points.length > 1) {
             const finished = { ..._inProgress };
@@ -455,7 +516,8 @@ window.DrawingManager = (() => {
         p2: { time: p2Time, price: targetP },
         p3: { time: p2Time, price: stopP },
         id: _uid(),
-        style: _getToolStyle(_activeTool)
+        style: _getToolStyle(_activeTool),
+        paneKey: activePaneKey
       };
       _finishDrawing(pane.symbol, finished);
       requestRedrawAll();
@@ -965,8 +1027,12 @@ window.DrawingManager = (() => {
     }
 
     // Drawing tool active
+    const inProgPaneKey = (_inProgress && _inProgress.symbol === pane.symbol && !_inProgress.finished)
+      ? (_inProgress.paneKey || null)
+      : _detectPaneKeyAtY(pane, y);
+    const { series: inProgSeries, offsetY: inProgOffsetY } = _paneSeriesInfo(pane, inProgPaneKey);
     const rawTime = pane.chart.timeScale().coordinateToTime(x);
-    const rawPrice = pane.series?.coordinateToPrice(y);
+    const rawPrice = inProgSeries?.coordinateToPrice(y - inProgOffsetY);
 
     if (rawTime !== null && rawPrice !== null) {
       const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
@@ -989,10 +1055,10 @@ window.DrawingManager = (() => {
             isNoMagnet = true;
           } else if (e.shiftKey && ['trendline', 'ray', 'extended'].includes(_inProgress.tool) && _inProgress.p1) {
             const p1x = _timeToX(pane, _inProgress.p1.time);
-            const p1y = pane.series.priceToCoordinate(_inProgress.p1.price);
+            const p1y = inProgSeries.priceToCoordinate(_inProgress.p1.price);
             const rawX = pane.chart.timeScale().timeToCoordinate(rawTime);
             const dx = rawX - p1x;
-            const dy = y - p1y;
+            const dy = (y - inProgOffsetY) - p1y;
             if (Math.abs(dy) < Math.abs(dx)) {
               _inProgress.p2 = { time, price: _inProgress.p1.price };
             } else {
@@ -1008,7 +1074,7 @@ window.DrawingManager = (() => {
       const magnetMode = _getMagnetMode();
       if (!isNoMagnet && magnetMode && magnetMode !== 'off' && pane.candlesData?.length) {
         const snapX = pane.chart.timeScale().timeToCoordinate(time);
-        const snapY = pane.series.priceToCoordinate(price);
+        const snapY = inProgOffsetY + inProgSeries.priceToCoordinate(price);
         if (snapX !== null && snapY !== null) {
           _snapCrosshair = { pane, x: snapX, y: snapY };
         }
@@ -1086,6 +1152,16 @@ window.DrawingManager = (() => {
 
   // ── TrendLine inline text editor ──────────────────────────────────────────
   function _openTrendlineTextEditor(d, pane, e) {
+    const _prevRenderPaneKey = _renderPaneKey;
+    _renderPaneKey = d.paneKey || null;
+    try {
+      return _openTrendlineTextEditorInner(d, pane, e);
+    } finally {
+      _renderPaneKey = _prevRenderPaneKey;
+    }
+  }
+
+  function _openTrendlineTextEditorInner(d, pane, e) {
     const existing = document.getElementById('trendline-text-editor');
     if (existing) existing.remove();
 
@@ -2043,6 +2119,9 @@ window.DrawingManager = (() => {
   }
 
   function _renderDrawing(ctx, d, pane, selected, inProgress) {
+    const _prevRenderPaneKey = _renderPaneKey;
+    _renderPaneKey = d.paneKey || null;
+    try {
     ctx.save();
     try {
       ctx.globalAlpha = inProgress ? 0.7 : ((d.style?.opacity ?? 100) / 100);
@@ -2131,6 +2210,9 @@ window.DrawingManager = (() => {
       _renderAnchors(ctx, d, pane);
       ctx.restore();
     }
+    } finally {
+      _renderPaneKey = _prevRenderPaneKey;
+    }
   }
 
   // ── TF Visibility Helper ────────────────────────────────────
@@ -2191,9 +2273,10 @@ window.DrawingManager = (() => {
   function _pt2xy(pt, pane) {
     if (!pt || pt.price === null || pt.time === null) return null;
     const x = _timeToX(pane, pt.time);
-    const y = pane.series.priceToCoordinate(pt.price);
-    if (x === null || y === null) return null;
-    return { x, y };
+    const { series, offsetY } = _paneSeriesInfo(pane, _renderPaneKey);
+    const yLocal = series.priceToCoordinate(pt.price);
+    if (x === null || yLocal === null) return null;
+    return { x, y: yLocal + offsetY };
   }
 
 
@@ -2415,6 +2498,16 @@ window.DrawingManager = (() => {
 
   // ── Hit Testing ────────────────────────────────────────────
   function _hitTest(x, y, d, pane) {
+    const _prevRenderPaneKey = _renderPaneKey;
+    _renderPaneKey = d.paneKey || null;
+    try {
+    return _hitTestInner(x, y, d, pane);
+    } finally {
+      _renderPaneKey = _prevRenderPaneKey;
+    }
+  }
+
+  function _hitTestInner(x, y, d, pane) {
     if (!_isDrawingVisible(d, pane)) return false;
 
     // BUG: fiyat/zaman cetveli şeridine yapılan tıklamalar burada
@@ -3330,8 +3423,9 @@ window.DrawingManager = (() => {
   function _xy2pt(xy, pane) {
     if (!xy || xy.x === undefined || xy.y === undefined) return null;
     if (!pane || !pane.chart || !pane.series) return null;
+    const { series, offsetY } = _paneSeriesInfo(pane, _renderPaneKey);
     const time = pane.chart.timeScale().coordinateToTime(xy.x);
-    const price = pane.series.coordinateToPrice(xy.y);
+    const price = series.coordinateToPrice(xy.y - offsetY);
     if (time === null || price === null) return null;
     return { time, price };
   }
