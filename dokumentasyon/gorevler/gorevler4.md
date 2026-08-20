@@ -7,20 +7,82 @@ DEĞİŞTİRİLMEDİ — bu sadece yeni işin başlayacağı güncel liste.
 
 ---
 
-## Görev-1 — Chart'ta RSI/WaveTrend/Regression Channel görselleştirmesi
+## Görev-1 — Chart'ta RSI görselleştirmesi
 
-**Durum: Başlanacak (şimdi).** Ön koşul (lightweight-charts v5 migrasyonu)
-2026-08-15'te tamamlandı ve doğrulandı — `js/chart/chart-pane.js`'te
-`addSeries(LightweightCharts.XSeries, ...)` birleşik API'si kullanılıyor.
-Fazlı bir plan daha önce yazılmıştı (RSI/WaveTrend alt-panel, Regression
-Channel overlay, TV-tarzı menü) — v4'te 3 kez denenip başarısız olmuştu,
-yeni plan v5'in native pane API'sini kullanıyor, o üç yöntemi tekrarlamıyor.
+**Durum: RSI kısmı TAMAMLANDI (2026-08-18/20, çok turlu bir oturum
+dizisinde).** WaveTrend/Regression Channel HENÜZ yapılmadı (bkz. Görev-1b
+aşağıda) — bu madde sadece RSI'ı kapsıyor.
+
+**Ne yapıldı (özet — detaylı rapor: `dokumentasyon/raporlar/
+2026-08-18-rsi-inputs-style-tv-paritesi.md`, 5 tur):**
+- RSI subpane, TV'nin Inputs/Style/Visibility sekmeleriyle BİREBİR eşleşen
+  gerçek bir ayar penceresi: Source, Smoothing (RSI-based MA: SMA/EMA/
+  SMMA/WMA), Calculate Divergence (gerçek pivot algoritması + Bull/Bear
+  ok+etiket), Middle Band, bağımsız Upper/Middle/Lower band renk+kalınlık+
+  stil, Output/Input values (precision, price-scale label, status line).
+- Calculation → Timeframe alanı UI'da var ve kaydediliyor ama SADECE
+  "Chart" (mevcut TF) fonksiyonel — kullanıcı onayıyla diğer TF'ler
+  bilinçli olarak yapılmadı (paylaşılan Binance ağırlık bütçesi riski).
+- Ayar penceresi artık başlığından sürüklenebilir (`DSDUtils.makeDraggable`,
+  projenin kendi çizim araçları deseni) VE taşan içerikte kaydırılabilir
+  (`.dsd-body` scroll + görünür scrollbar).
+- RSI çizgisine (SADECE çizgiye, birkaç piksel toleransla — subpane'in
+  geri kalanına değil) çift tıklayınca ayar penceresi açılıyor.
+- Checkbox'lar projenin kendi neon-olmayan `.dsd-checkbox-label` desenine
+  çevrildi (`.tv-checkbox` dolu `--accent-blue` neon arka fon kullanıyordu
+  — proje genelindeki "neon buton arka fon yasağı" kuralının ihlaliydi).
+- İndikatör silme (Remove + sidebar çöp kutusu) artık ortada açılan
+  `ConfirmModal` ile onay istiyor (`js/ui/confirm-modal.js`, yeni dosya).
+- Mıknatıs, RSI/subpane üzerindeyken devre dışı kalıyor (TV davranışı) —
+  daha önce ana panelin mumlarına yapışıyordu.
+- Crosshair RSI çizgisi üzerindeyken imlecin yanında yüzen bir değer
+  badge'i (OI/Volume panelindeki aynı desen).
+- **Kök neden bulunup düzeltilen kritik bug'lar:**
+  - Renk swatch'ları alfayı siliyordu (`_toHex`) → ayarlara her giriş/
+    çıkışta düşük-alfa dolgu renkleri opak griye dönüşüp RSI panelini
+    kaplıyordu. `data-color` artık HAM (alfa dahil) tutuluyor.
+  - F5 sonrası RSI paneli bozuk kalıyordu (defalarca yanlış teşhis edildi
+    — stretch factor, ResizeObserver, hepsi yanlış yönlendi) — GERÇEK kök
+    neden: RSI ana çizgi serisinde TEK BAŞINA `priceScale().applyOptions(
+    {autoScale:false})` vardı, OB/OS/MA serilerinde YOKTU. Kullanıcının
+    konsol çıktısıyla kanıtlandı (`priceToCoordinate` = 0, çift tıklayınca
+    ~49'a düzeliyordu). O satır kaldırıldı.
+  - `server.js` statik dosyaları (css/js/index.html) hiç `Cache-Control`
+    göndermiyordu → Chrome F5'te sunucuya sormadan eski dosyaları
+    sunabiliyordu (birçok "düzelttim ama hâlâ bozuk" raporunun kök nedeni
+    muhtemelen buydu). Artık `no-cache`.
+  - **RSI (ve genel olarak subpane) üzerine çizilen trendline/fibo vb.
+    çizimler, panel büyütülüp/panlanınca birlikte hareket etmiyordu** —
+    kök neden: `drawing-core.js`'teki `_pt2xy`/`_xy2pt` HER ZAMAN ana mum
+    serisini kullanıyordu, hangi panelde çizildiğine bakmadan. Düzeltme:
+    her çizime `d.paneKey` (null=ana panel, indikatör id=subpane) eklendi,
+    render/hit-test `_renderPaneKey` bayrağıyla doğru paneli/seriyi
+    kullanıyor. Geriye dönük uyumlu (eski çizimler ana panel gibi davranır).
+    **Kullanıcı henüz production'da TAM doğrulamadı — bir sonraki oturumda
+    ilk iş bu olmalı: RSI'ye trendline çiz, paneli büyüt/kaydır, birlikte
+    hareket ediyor mu kontrol et.**
+
+**Bilinçli ertelenen/basitleştirilen alt-madde:**
+- TV'nin "SMA + Bollinger Bands" smoothing seçeneği + BB StdDev — YOK,
+  kullanıcı onayıyla ("buna da gerek yok").
+- Divergence'ta TV'nin ayrı "...Label" satırı + Color0/Color1 gradyanı —
+  YOK, tek checkbox+tek renk yeterli bulundu (Bullish=yeşil yukarı ok,
+  Bearish=kırmızı aşağı ok zaten böyle).
+
+---
+
+## Görev-1b — Chart'ta WaveTrend/Regression Channel görselleştirmesi
+
+**Durum: Başlanacak, henüz hiç yapılmadı.** RSI'nin (Görev-1) altyapısını
+(subpane sistemi, `ChartPane.SUBPANE_TYPES`/`SUBPANE_INDEX`, ayar penceresi
+deseni) örnek al — RSI için kurulan mimari (Inputs/Style/Visibility
+sekmeleri, draggable+scrollable dialog, ConfirmModal, neon-olmayan
+checkbox deseni) buraya da BİREBİR uygulanmalı, sıfırdan icat edilmemeli.
 
 **⭐ Kabul kriteri (unutulmamalı):** Kullanıcı "maksimum şekilde TVdeki gibi
-olmalı" diyor — sadece "bir subpane var" yetmez, etiketli 0-100 ekseni,
-doğru gridline/referans çizgileri, TV'nin kendi görsel dilini birebir
-taklit eden bir sonuç şart. v4'te denenip REDDEDİLEN "yaklaşık/etiketsiz
-RSI" sonucu tekrarlanmayacak.
+olmalı" diyor — sadece "bir subpane var" yetmez, etiketli eksen, doğru
+gridline/referans çizgileri, TV'nin kendi görsel dilini birebir taklit
+eden bir sonuç şart.
 
 ---
 
@@ -40,6 +102,32 @@ CloudFront'tan 403 almaya başladı — tam detay: `dokumentasyon/raporlar/
 - 2.3 Bu gecenin dersini `.claude/CLAUDE.md` "bot-architecture" bölümüne
   eklemek (kullanıcı onayıyla) — "bir rate-limit sorununu düzeltmeye
   çalışırken sık redeploy etmek sorunu büyütebilir".
+
+**⚠ 2.4 — 2026-08-20'de canlıda DOĞRULANDI, hâlâ açık:** `GET https://
+pintrade-0sb6.onrender.com/api/kom2/status` çağrıldığında `universe.total:
+84` (normal ~500+ yerine) ve `lastError: {"message":"exchangeInfo/24hr
+ticker beklenmeyen yanıt"}` görüldü, `nextAttemptAt` çok ileri bir tarihe
+ayarlı (yeniden deneme uzun süre olmayacak). Yani evren taraması hâlâ
+kısıtlı/bozuk kalmış durumda — sinyal üretimi (PORTALUSDT/DODOXUSDT/
+MAGMAUSDT/HEMIUSDT üzerinde tekrar tekrar ateşleniyor, ama sadece 84
+sembollük dar bir evrende) çalışıyor ama muhtemelen çoğu sembolü hiç
+görmüyor. **Bir sonraki oturumda önce bu 84/exchangeInfo hatasını
+araştır** — 2.1/2.2 ile aynı kök nedene (CloudFront/rate-limit blok)
+bağlı olabilir ya da ayrı bir regresyon olabilir, `kom2-server-watcher.js`
+`_maybeRefreshUniverse()`/`fetchJson()` çağrılarından başla.
+
+**Görev-7'nin (bot sağlık/izleme) bir parçası artık KALICI çözüldü:**
+Kullanıcının "her gün 11'de Kom2 kontrol edilip raporlanacaktı" beklentisi
+daha önce `CronCreate` (session-only, oturum/makine değişince kayboluyor
+— tam bu yüzden sessizce durmuştu, bkz. `2026-08-14-kom1-uyku-kaybi-ve-
+sinyal-analizi.md`'deki AYNI bulgu) ile kurulmuştu. 2026-08-20'de bunun
+yerine **kalıcı bir cloud routine** kuruldu (`RemoteTrigger`/`/schedule`,
+oturuma bağlı değil): `trig_01VgVBbSCSctroyujARwGxR7`, her gün Tashkent
+saatiyle 11:00'de (`0 6 * * *` UTC) `/api/kom2/status`+`/signals`+`/health`
+kontrol edip Türkçe özet rapor üretiyor — universe.total düşükse veya
+lastError doluysa açıkça uyarıyor. Detay/düzenleme: https://claude.ai/
+code/routines/trig_01VgVBbSCSctroyujARwGxR7 (Kom1 için de aynısı istenirse
+aynı yöntemle ayrı bir routine kurulmalı — henüz kurulmadı).
 
 ---
 
@@ -110,3 +198,28 @@ zamanlanmış görevi bu ihtiyacın bir kısmını zaten karşılıyor.
   sadece gözlem sürüyor (bkz. `dokumentasyon/gorevler/gorevler3.md`).
 - Kom2'nin backtest/train-test/production kodu: tamamlandı, sadece Görev-2
   (blok sonrası) kalanı var.
+
+---
+
+## Görev-9 — 2026-08-20: MongoDB Atlas free tier (512MB) doluluk krizi — ÇÖZÜLDÜ
+
+**Durum: Acil kısmı kapandı, kalıcı bir aksiyon gerekmiyor (izleme
+dışında).** Atlas "Data Size 444MB/512MB (%87)" uyarısı verdi. İncelendi:
+- `candles` koleksiyonu (server.js `candleSchema`) TAMAMEN ölü/kullanılmayan
+  veriydi — onu YAZAN toplayıcı (`collectBinanceCandles`) zaten 2026-08-14'te
+  kaldırılmıştı ama koleksiyonun kendisi ve TTL'siz olan şeması hiç
+  silinmemişti. Kullanıcı Atlas UI'dan `candles` koleksiyonunu sildi.
+- `frsignals` ve `marketdatas` koleksiyonları BÜYÜK (169MB+137MB) ama
+  ÖLÜ DEĞİL — TTL'leri (48s/7g) gerçek endpoint'lerin (`/api/history/
+  market`, `/api/signals/fr`) maksimum sorgu penceresiyle (48s/7g)
+  BİREBİR eşleşiyor, yani bunlar TV'deki geçmiş grafik/sinyal listesi
+  özelliklerinin gerçek verisi — kısaltmak özellik kaybı demek, kullanıcı
+  bunu istemedi (`frsignals`'ı manuel sildi, TTL koda dokunulmadı).
+- Sonuç: `test` veritabanı 329MB → 191MB'a düştü, kriz geçti. **Yeniden
+  büyüyecek** (marketdatas/frsignals sürekli yazılıyor) — birkaç haftada
+  bir Atlas Data Explorer'dan tekrar kontrol edilmeli, kalıcı bir kod
+  çözümü (TTL kısaltma vb.) kullanıcı onayı olmadan YAPILMAMALI (özellik
+  kaybı riski).
+- **ÖNEMLİ kullanıcı kuralı, hafızaya kaydedildi:** proje satılmıyor,
+  kişisel geliştirme aşamasında — ücretli bir servise/yükseltmeye (Atlas
+  paid tier vb.) kullanıcı SORMADIKÇA ASLA önerilmeyecek.
