@@ -397,7 +397,7 @@ window.DrawingManager = (() => {
       'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
       'infoline', 'regression',
       'fib-ret', 'fib-timezone', 'fib-speedfan',
-      'cyclic-lines', 'fib-arcs',
+      'cyclic-lines',
       'circle', 'ellipse',
       'note', 'callout', 'pricenote'
     ];
@@ -2160,9 +2160,6 @@ window.DrawingManager = (() => {
     if (d.tool === 'fib-channel') window.DrawingFibo.drawFibChannel(ctx, d, pane);
     if (d.tool === 'fib-timezone') window.DrawingFibo.drawFibTimezone(ctx, d, pane, selected);
     if (d.tool === 'fib-speedfan') window.DrawingFibo.drawFibSpeedfan(ctx, d, pane);
-    if (d.tool === 'fib-arcs') window.DrawingFibo.drawFibArcs(ctx, d, pane);
-    if (d.tool === 'fib-wedge') window.DrawingFibo.drawFibWedge(ctx, d, pane);
-    if (d.tool === 'pitchfan') window.DrawingFibo.drawPitchfan(ctx, d, pane);
     // ── Geometric Shapes & Arrows ──
     if (d.tool === 'brush') window.DrawingShapes.drawBrush(ctx, d, pane);
     if (d.tool === 'highlighter') window.DrawingShapes.drawHighlighter(ctx, d, pane);
@@ -2531,7 +2528,7 @@ window.DrawingManager = (() => {
 
     const tolerance = 10;
 
-    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-speedfan', 'cyclic-lines', 'fib-arcs', 'fib-ext', 'fib-channel', 'triangle', 'arc'].includes(d.tool)) {
+    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-speedfan', 'cyclic-lines', 'fib-ext', 'fib-channel', 'triangle', 'arc'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && Math.hypot(x - a.x, y - a.y) <= tolerance) return 'p1';

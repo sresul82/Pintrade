@@ -489,17 +489,33 @@ Kullanıcı isteği: sidebar'daki çizim araçları arasında altı boş (render
 fonksiyonu boş VEYA tıklayınca hiçbir nokta toplanmadığı için hiçbir şey
 çizmeyen) araçları doldurmaya devam et.
 
-**Tam envanter (bu turda çıkarıldı):**
+**Düzeltme (aynı gün, ikinci tur):** Kullanıcı "Gann & Fibonacci" menüsünün
+ekran görüntüsünü paylaştı — Fib Arcs/Fib Wedge/Pitchfan **menüde zaten
+hiç yok** (kullanıcının önceki bir çizim araçları temizliğinde bilerek
+kaldırılmışlar, `js/ui/sidebar.js`'deki menü listesinde sadece 5 Fib aracı
+var: ret/ext/channel/timezone/speedfan). Yani bu üçü "boş placeholder"
+değil, **artık kullanıcıya hiç gösterilmeyen ölü kod** — bu turda önce
+Fib Arcs'ı doldurup sonra bunu fark edip GERİ ALDIM (render fonksiyonu +
+`drawing-core.js`'teki `TWO_PT_TOOLS`/hit-test/dispatch eklentileri
+tamamen silindi, `js`'de bu üç isme (`fib-arcs`/`fib-wedge`/`pitchfan`)
+sıfır referans kaldığı doğrulandı). Elliott Wave'lerin 5'i ve Cyclic
+Lines/Brush/Highlighter menüde HÂLÂ VAR (sidebar.js'de doğrulandı) —
+bunlar gerçekten "boş görünüp menüde duran" araçlar, aşağıdaki analiz
+onlar için geçerli.
+
+**Tam envanter (bu turda çıkarıldı, menüde GERÇEKTEN var olanlar):**
 
 | Araç | Kategori | Durum önce | Bu turda |
 |---|---|---|---|
 | Cyclic Lines | Patterns | Render boş, nokta toplama VARDI (`TWO_PT_TOOLS`) | ✅ Dolduruldu |
-| Fib Arcs | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ✅ Dolduruldu (render + `TWO_PT_TOOLS`'a eklendi + p1/p2 handle hit-test) |
-| Fib Wedge | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
-| Pitchfan (Andrews' Pitchfork) | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
 | Elliott Impulse/Correction/Triangle/Double/Triple (5 araç) | Patterns | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
 | Brush | Geometric Shapes | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
 | Highlighter | Geometric Shapes | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+
+**Menüde OLMAYAN, bu yüzden dokunulmaması gereken (ölü kod, temizlendi):**
+Fib Arcs, Fib Wedge, Pitchfan — `drawing-fibo.js`'den render fonksiyonları,
+`drawing-core.js`'den TÜM referansları (dispatch + `TWO_PT_TOOLS` +
+hit-test) silindi.
 
 **Yapılanlar:**
 - `js/drawing/tools/drawing-patterns.js` `_drawCyclicLines` — p1→p2 arası
@@ -507,25 +523,13 @@ fonksiyonu boş VEYA tıklayınca hiçbir nokta toplanmadığı için hiçbir ş
   dikey çizgiler olarak çiziliyor (TradingView'ın Cyclic Lines'ıyla aynı
   davranış). Nokta toplama zaten vardı (`drawing-core.js` `TWO_PT_TOOLS`
   içinde `cyclic-lines` mevcuttu), sadece render eksikti.
-- `js/drawing/tools/drawing-fibo.js` `_drawFibArcs` — p1 merkez, p1→p2
-  piksel mesafesi taban yarıçap, her aktif Fib seviyesinde (`_getFibLevels`
-  — diğer Fib araçlarıyla AYNI kaynak, kullanıcının seviye/renk
-  özelleştirmesini otomatik miras alır) bir daire (klasik "Fibonacci
-  Circles" tanımı). `drawing-core.js`'in `TWO_PT_TOOLS` ve p1/p2 handle
-  hit-test listelerine `fib-arcs` eklendi — önceden bu araç tıklanınca
-  HİÇBİR ŞEY olmuyordu (nokta toplama hiç kayıtlı değildi).
-- **Bilinçli sınırlama (hem Cyclic Lines hem Fib Arcs için):** çizginin/
-  dairenin gövdesine tıklayarak seçme henüz yok — sadece p1/p2 tutamaçları
-  (handle) tıklanıp sürüklenebiliyor. `fib-ret` gibi araçlarda olduğu gibi
-  tam bir hit-test eklemek ayrı, daha büyük bir iş; bu turda kapsam dışı
-  bırakıldı, mevcut çizimin silinmesi/taşınması hâlâ mümkün (handle'lardan).
+- **Bilinçli sınırlama:** çizginin gövdesine tıklayarak seçme henüz yok —
+  sadece p1/p2 tutamaçları (handle) tıklanıp sürüklenebiliyor. `fib-ret`
+  gibi araçlarda olduğu gibi tam bir hit-test eklemek ayrı, daha büyük bir
+  iş; bu turda kapsam dışı bırakıldı, mevcut çizimin silinmesi/taşınması
+  hâlâ mümkün (handle'lardan).
 
 **Neden geri kalanlar YAPILMADI (kasıtlı, kör ilerlemek riskli):**
-- **Fib Wedge, Pitchfan:** TradingView'de bunlar 3 noktalı araçlar
-  (fib-channel/fib-ext'e benzer mimari gerekir) AMA tam görsel kuralı
-  (kanat açıları, çizgi sayısı, varsayılan davranış) net bir referans
-  olmadan tahmin edilirse yanlış/tutarsız bir sonuç riski var — görsel
-  doğrulama yapılamayan bu ortamda güvenli değil.
 - **Elliott Wave araçları (5 tanesi):** TradingView'de her biri 3-13 nokta
   arası, dalga numaralandırma/etiketleme kuralları (1-2-3-4-5, A-B-C vb.)
   olan, bu projenin şimdiye kadar yaptığı hiçbir araçtan çok daha karmaşık
@@ -542,8 +546,7 @@ fonksiyonu boş VEYA tıklayınca hiçbir nokta toplanmadığı için hiçbir ş
   HER ARACI (trendline, fib, rect, hepsi) bozabilir. Görsel test
   yapılamayan bu ortamda bu riski almadım.
 
-**Sonraki oturumda ilk iş:** production'da Cyclic Lines ve Fib Arcs'ı
-gerçek fare ile çizip görsel olarak makul göründüğünü doğrulamak. Sonra
-kullanıcıyla Elliott Wave'lerin gerçekten isteniyor mu / hangi kapsamda
-isteniyor konuşulmalı — büyük bir iş, RSI gibi kendi fazlı planını
-hak ediyor.
+**Sonraki oturumda ilk iş:** production'da Cyclic Lines'ı gerçek fare ile
+çizip görsel olarak makul göründüğünü doğrulamak. Sonra kullanıcıyla
+Elliott Wave'lerin gerçekten isteniyor mu / hangi kapsamda isteniyor
+konuşulmalı — büyük bir iş, RSI gibi kendi fazlı planını hak ediyor.
