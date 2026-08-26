@@ -1211,10 +1211,22 @@ const DetailPanel = (() => {
     loadSymbol(defaultSym.replace(/USDT$/, ''), State.get('activeExchange') || 'binance');
 
     console.log('[DetailPanel] Initialized ✓');
+    // [2026-08-26, kullanıcı isteği/performans borcu] Önceden burada TÜM
+    // loadSymbol() (~12-15 istek) tekrar çağrılıyordu — sadece "FUNDING (Xh)"
+    // etiketindeki interval metnini tazelemek için. fundingIntervalManager'ın
+    // Binance tarafı zaten loadSymbol() içinde KENDİ ayrı fetch'inden
+    // (frHist) geliyor, bu event'e bağımlı değil — sadece Bybit tarafı
+    // ExchangeRouter.getFundingInterval üzerinden bu cache'i okuyor. Artık
+    // ekstra istek atmadan, sadece o cache'ten (zaten bellekte) label'ı
+    // güncelliyor. Panelin geri kalanı (fiyat/OI/L-S/RSI/fundamental)
+    // dokunulmadan kalıyor.
     EventBus.on('funding:loaded', () => {
-      const sym = State.get('activeSymbol') || 'BTC';
-      const exchange = State.get('activeExchange') || 'binance';
-      loadSymbol(sym.replace(/USDT$/, ''), exchange);
+      if (_currentExchange !== 'bybit') return; // Binance'in kendi hesabı bu cache'e bağımlı değil
+      const frLabelEl = document.getElementById('dp-funding-label');
+      if (!frLabelEl || !_currentSym) return;
+      const pairSym = _currentSym + 'USDT';
+      const intervalText = ExchangeRouter.getFundingInterval(pairSym, 'bybit');
+      frLabelEl.innerHTML = `Funding (<span style="color:var(--dp-amber)">${intervalText}</span>)`;
     });
 
     // ── Visibility API — arka plan / ön plan geçişi ──────────────────

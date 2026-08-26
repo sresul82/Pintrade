@@ -206,8 +206,18 @@ YAZILMAYACAK/eklenmeyecek.
 
 Hiçbiri acil değil, birikmiş küçük borçlar:
 
-- 6.1 `funding:loaded` event'i tüm Coin Detail panelini gereksiz yeniden
-  yüklüyor (performans borcu).
+- 6.1 ✅ (2026-08-26, kod tamamlandı — production'da henüz doğrulanmadı)
+  `funding:loaded` event'i artık tüm `loadSymbol()`'ü (~12-15 istek) tekrar
+  çağırmıyor. Kök neden: Binance'in `frIntervalText`'i zaten kendi ayrı
+  `frHist` fetch'inden geliyor (bu event'e bağımlı değil) — SADECE Bybit
+  tarafı `ExchangeRouter.getFundingInterval` ile bu cache'i okuyordu. Yeni
+  davranış: sadece aktif borsa Bybit ise, `#dp-funding-label` metnini
+  doğrudan cache'ten (sıfır ek istek) güncelliyor; Binance'te hiçbir şey
+  yapmıyor (zaten doğru). **Sonraki oturumda ilk iş:** production'da Bybit
+  bir coin açıp Network sekmesinden `funding:loaded` sonrası gerçekten
+  ekstra istek gitmediğini ve "(Xh)" etiketinin doğru güncellendiğini
+  doğrulamak (yerel sandbox'ta ekran görüntüsü/otomasyon araçları
+  yanıt vermedi, sadece kod/sözdizimi doğrulandı).
 - 6.2 Fib Extension/Channel/Time Zone araçları merkezi `_fibAxis`
   mimarisini kullanmıyor.
 - 6.3 ✅ (2026-08-26, kod tamamlandı — production'da henüz doğrulanmadı)
