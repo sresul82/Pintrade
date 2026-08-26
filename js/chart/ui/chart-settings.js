@@ -534,6 +534,14 @@ function initSettings() {
         const el = overlay.querySelector(`[data-key="${key}"]`);
         if (el && hex) { el.style.background = hex; el.dataset.color = hex; }
       };
+      // gorevler4.md Görev-6.5 (2026-08-26) — number input'lar (marginTop/
+      // marginBottom/marginRight) HİÇ pre-fill edilmiyordu, dialog her
+      // açılışta HTML'deki sabit değerleri (10/8/10) gösteriyordu, pane'in
+      // gerçek kayıtlı değerini değil.
+      const setNumber = (key, val) => {
+        const el = overlay.querySelector(`[data-key="${key}"]`);
+        if (el && val != null) el.value = val;
+      };
 
       // Checkboxes
       setCheck('showVolume',      s.showVolume);
@@ -587,6 +595,14 @@ function initSettings() {
       setCheck('symName', s.symName ?? true);
       setCheck('symValue',s.symValue?? true);
       setCheck('symLine', s.symLine ?? true);
+
+      // gorevler4.md Görev-6.5 (2026-08-26)
+      setNumber('marginTop',    s.marginTop);
+      setNumber('marginBottom', s.marginBottom);
+      setNumber('marginRight',  s.marginRight);
+      setCheck('dayOfWeekLabels', s.dayOfWeekLabels ?? true);
+      if (s.dateFormat) setSelect('dateFormat', s.dateFormat);
+      if (s.timeFormat) setSelect('timeFormat', s.timeFormat);
 
       // gorevler2.md Görev 11 (2026-08-10) — Alerts sekmesi pane'e değil
       // AlertStore'un global tercihlerine bağlı (bkz. alert-store.js başlığı),

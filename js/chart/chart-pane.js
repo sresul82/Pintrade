@@ -86,6 +86,11 @@ class ChartPane {
     // Timezone & Formatting (Issue: Timezone change)
     this.timezone  = s.timezone  ?? 'UTC';
     this.precision = s.precision ?? 'Default'; // fiyat ekseni hassasiyeti
+    // gorevler4.md Görev-6.5 (2026-08-26) — Scales sekmesi "TIME SCALE"
+    // grubunda arayüzde vardı ama _formatTimezone()'a hiç bağlı değildi.
+    this.dayOfWeekLabels = s.dayOfWeekLabels ?? true;
+    this.dateFormat = s.dateFormat ?? "Mon 29 Sep '97";
+    this.timeFormat = s.timeFormat ?? '24-hours';
 
     // gorevler2.md Görev 11 (2026-08-10) — bu grup applySettings()'te canlı
     // uygulanıyordu ama constructor'da hiç okunmuyor, getState()'te hiç
@@ -96,9 +101,20 @@ class ChartPane {
     this.pdValue = s.pdValue ?? false;   this.pdLine = s.pdLine ?? true;
     this.symName = s.symName ?? true;    this.symValue = s.symValue ?? true;    this.symLine = s.symLine ?? true;
     this.watermarkMode = s.watermarkMode ?? 'Ticker';
+    // gorevler4.md Görev-6.5 — null = kullanıcı hiç değiştirmedi, CSS'teki
+    // (css/chart.css .pane-wm) varsayılan rgba(255,255,255,0.03) geçerli
+    // kalsın (ayarlar penceresindeki #363c4e swatch'ı sadece bir öneri,
+    // gerçek varsayılan değil — kullanıcı OK'a basmadan görünüm değişmemeli).
+    this.watermarkColor = s.watermarkColor ?? null;
     // Varsayılanlar chart'ın kendi hardcoded scaleMargins'iyle (.05/.15) eşleşiyor
     // — böylece ayarı hiç değiştirmemiş kullanıcıların görünümü değişmez.
     this.marginTop = s.marginTop ?? 5;   this.marginBottom = s.marginBottom ?? 15;
+    // gorevler4.md Görev-6.5 (2026-08-26) — _initChart()'taki hardcoded
+    // `rightOffset: 12` ile eşleşen varsayılan (bkz. marginTop/marginBottom'un
+    // hemen üstündeki AYNI sınıf bug notu — restore edilen değer chart'ın
+    // gerçek hardcoded varsayılanıyla eşleşmezse "ayar sessizce sıfırlanıyor
+    // gibi görünür" sorunu tekrarlanır, burada baştan önlendi).
+    this.marginRight = s.marginRight ?? 12;
 
     // Dummy tracking variables for new features
     this._lastPrice = null;
@@ -165,6 +181,7 @@ class ChartPane {
     this.wm = document.createElement('div');
     this.wm.className = 'pane-wm';
     this.wm.textContent = this.watermarkMode === 'Interval' ? this.tf : this.symbol;
+    if (this.watermarkColor) this.wm.style.color = this.watermarkColor;
     this.cvs.appendChild(this.wm);
 
     // Gear button (axis intersection)
@@ -305,7 +322,11 @@ class ChartPane {
         borderColor: this.scaleLinesColor,
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 12,       
+        // gorevler4.md Görev-6.5 (2026-08-26) — restore edilen marginRight
+        // (kayıtlı ayar) burada hardcoded 12 tarafından sessizce eziliyordu
+        // (marginTop/marginBottom'da daha önce yaşanmış AYNI hata sınıfı,
+        // bkz. constructor'daki not).
+        rightOffset: this.marginRight,
         fixRightEdge: false,
         fixLeftEdge: false,
       },
@@ -2268,6 +2289,13 @@ class ChartPane {
 
     if (s.noOverlapLabels!= null) this.lblNoOverlap  = s.noOverlapLabels;
     if (s.lockPriceToBar != null) this.lockPriceToBar = s.lockPriceToBar;
+
+    // ── TIME SCALE FORMATTING (Scales tab) ────────────────────
+    // gorevler4.md Görev-6.5 — _formatTimezone() her render'da bunları
+    // canlı okuyor (closure), tekrar applyOptions çağırmaya gerek yok.
+    if (s.dayOfWeekLabels != null) this.dayOfWeekLabels = s.dayOfWeekLabels;
+    if (s.dateFormat != null) this.dateFormat = s.dateFormat;
+    if (s.timeFormat != null) this.timeFormat = s.timeFormat;
     
     // ── PRECISION (Data Modification Tab) ──────────────────────
     if (s.precision != null) {
@@ -2320,6 +2348,24 @@ class ChartPane {
                    : '';
       if (this.wm) this.wm.textContent = wmText;
     }
+    // gorevler4.md Görev-6.5 (2026-08-26) — renk seçici arayüzde vardı ama
+    // hiç okunmuyordu, watermark her zaman css/chart.css'teki sabit
+    // rgba(255,255,255,0.03) rengini kullanıyordu.
+    if (s.watermarkColor != null) {
+      this.watermarkColor = s.watermarkColor;
+      if (this.wm) this.wm.style.color = s.watermarkColor;
+    }
+
+    // ── MARGIN RIGHT (Canvas tab) ─────────────────────────────
+    // gorevler4.md Görev-6.5 (2026-08-26) — Top/Bottom marj (fiyat ekseni
+    // scaleMargins) zaten uygulanıyordu, "Right" (bar cinsinden — mumların
+    // sağında ne kadar boş alan bırakılacağı) hiç bağlı değildi. LWC'nin
+    // native karşılığı timeScale().rightOffset.
+    if (s.marginRight != null) {
+      this.marginRight = s.marginRight;
+      const n = parseInt(s.marginRight, 10);
+      if (!isNaN(n)) this.chart.timeScale().applyOptions({ rightOffset: n });
+    }
   }
 
   // ── Timezone Formatter ────────────────────────────────────
@@ -2345,41 +2391,62 @@ class ChartPane {
     const shiftedTimeMs = (numericTime + (offsetHours * 3600)) * 1000;
     const date = new Date(shiftedTimeMs);
     
+    // gorevler4.md Görev-6.5 (2026-08-26) — Scales > TIME SCALE > "Time
+    // hours format" (24-hours/12-hours) arayüzde vardı, hiç okunmuyordu.
+    // 24h saat/dakika çiftini seçili formata göre metne çevirir.
+    const _fmtHM = (h24, m) => {
+      if (this.timeFormat !== '12-hours') return `${String(h24).padStart(2, '0')}:${m}`;
+      const period = h24 < 12 ? 'am' : 'pm';
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      return `${h12}:${m}${period}`;
+    };
+
     if (isTickMark && tickMarkType != null) {
       const yyyy = date.getUTCFullYear();
       const dd   = String(date.getUTCDate()); // No leading zero
-      const h    = String(date.getUTCHours()).padStart(2, '0');
+      const h24  = date.getUTCHours();
       const m    = String(date.getUTCMinutes()).padStart(2, '0');
       const s    = String(date.getUTCSeconds()).padStart(2, '0');
+      const hm   = _fmtHM(h24, m);
+      // gorevler4.md Görev-6.5 — "Day of week on labels" işaretliyken
+      // gün/ay tick etiketine haftanın günü de ekleniyor (TV'deki gibi).
+      const dowShort = this.dayOfWeekLabels ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getUTCDay()] + ' ' : '';
 
       // TickMarkType:
       // Year = 0, Month = 1, DayOfMonth = 2, Time = 3, TimeWithSeconds = 4
       switch (tickMarkType) {
         case 0: return String(yyyy); // 2026
         case 1: return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }); // "Apr"
-        case 2: return dd; // "5", "12"
-        case 3: return `${h}:${m}`;  // "18:00", "03:00"
-        case 4: return `${h}:${m}:${s}`; 
-        default: return `${h}:${m}`;
+        case 2: return dowShort + dd; // "5", "Mon 5"
+        case 3: return hm;  // "18:00" / "6:00pm"
+        case 4: return `${hm}:${s}`;
+        default: return hm;
       }
     }
 
     // ── Crosshair (Tooltip) String Formatting (Mimic TradingView perfectly)
     const dowOptions = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    const dow = dowOptions[date.getUTCDay()];
+
+    const dow = this.dayOfWeekLabels ? dowOptions[date.getUTCDay()] + ' ' : '';
     const dd = String(date.getUTCDate()).padStart(2, '0');
     const mmm = monthOptions[date.getUTCMonth()];
-    const yy = String(date.getUTCFullYear()).slice(-2);
-    const hh = String(date.getUTCHours()).padStart(2, '0');
+    const yyyyFull = date.getUTCFullYear();
+    const yy = String(yyyyFull).slice(-2);
+    const h24 = date.getUTCHours();
     const mmFormat = String(date.getUTCMinutes()).padStart(2, '0');
     const ss = String(date.getUTCSeconds()).padStart(2, '0');
+    const hm = _fmtHM(h24, mmFormat);
+
+    // "Mon 29 Sep '97" (varsayılan, TV tarzı) vs "YYYY-MM-DD" (ISO)
+    const isIso = this.dateFormat === 'YYYY-MM-DD';
+    const mm2 = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dateStr = isIso ? `${yyyyFull}-${mm2}-${dd}` : `${dow}${dd} ${mmm} '${yy}`;
 
     const tfSecs = this._tfSeconds();
-    if (tfSecs < 60) return `${dow} ${dd} ${mmm} '${yy} ${hh}:${mmFormat}:${ss}`;  // Sub-minute includes seconds
-    if (tfSecs >= 86400) return `${dow} ${dd} ${mmm} '${yy}`;                  // Daily and above omits time
-    return `${dow} ${dd} ${mmm} '${yy} ${hh}:${mmFormat}`;                             // Normal intraday format
+    if (tfSecs < 60) return `${dateStr} ${hm}:${ss}`;  // Sub-minute includes seconds
+    if (tfSecs >= 86400) return dateStr;               // Daily and above omits time
+    return `${dateStr} ${hm}`;                          // Normal intraday format
   }
 
   // ── Countdown to bar close ────────────────────────────────
@@ -2588,8 +2655,11 @@ class ChartPane {
       baValue: this.baValue, baLine: this.baLine,
       pdValue: this.pdValue, pdLine: this.pdLine,
       symName: this.symName, symValue: this.symValue, symLine: this.symLine,
-      watermarkMode: this.watermarkMode,
-      marginTop: this.marginTop, marginBottom: this.marginBottom,
+      watermarkMode: this.watermarkMode, watermarkColor: this.watermarkColor,
+      marginTop: this.marginTop, marginBottom: this.marginBottom, marginRight: this.marginRight,
+      // gorevler4.md Görev-6.5 (2026-08-26) — Scales/Canvas'ın kalan
+      // kozmetik kontrolleri (bkz. constructor'daki notlar).
+      dayOfWeekLabels: this.dayOfWeekLabels, dateFormat: this.dateFormat, timeFormat: this.timeFormat,
       // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
       indicators: this.indicators.map(({ _lastValue, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
     };
