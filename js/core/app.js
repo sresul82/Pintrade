@@ -1291,6 +1291,12 @@ const App = {
       { type: 'ema',  name: 'Moving Average Exponential', short: 'EMA',  desc: 'Overlay — ana chart üzerinde' },
       { type: 'dema', name: 'Double EMA',                 short: 'DEMA', desc: 'Overlay — ana chart üzerinde' },
       { type: 'rsi',  name: 'Relative Strength Index',    short: 'RSI',  desc: 'Subpane — ayrı alt panelde' },
+      // [2026-08-26, kullanıcı isteği] Volume gerçek bir indikatör DEĞİL —
+      // hâlâ Settings > Canvas'taki showVolume checkbox'ına bağlı, burası
+      // ve sidebar (IndicatorListPanel) sadece o tek doğruluk kaynağına
+      // giden bir kısayol. Tıklanınca addIndicator() DEĞİL, setVolume(true)
+      // çağrılır (bkz. aşağıdaki click handler'daki özel durum).
+      { type: 'volume', name: 'Volume', short: 'VOL', desc: 'Ana chart altında, Settings > Canvas checkbox\'ıyla senkron' },
     ];
 
     const btn = document.getElementById('btn-indicators');
@@ -1332,6 +1338,12 @@ const App = {
           row.addEventListener('click', () => {
             const pane = window.LayoutManager?.getActivePane?.();
             if (!pane) return;
+            if (row.dataset.type === 'volume') {
+              pane.setVolume(true);
+              if (window.Toast) Toast.show(`Volume added — ${pane.symbol}`, 'success');
+              close();
+              return;
+            }
             const cfg = pane.addIndicator(row.dataset.type);
             if (window.Toast) Toast.show(`${cfg.type.toUpperCase()} added — ${pane.symbol}`, 'success');
             close();

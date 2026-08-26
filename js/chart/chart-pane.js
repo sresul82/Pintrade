@@ -2136,6 +2136,12 @@ class ChartPane {
     this.showVolume = show;
     this._buildSeries();
     this.loaded = false; this._loadData(); this.loaded = true;
+    // Kullanıcı isteği (2026-08-26) — Volume, gerçek indikatörler
+    // (this.indicators[]) listesine taşınmadı ama Indicators sidebar'ında
+    // "kısayol" olarak görünmesi/kaldırılabilmesi için aynı event'i
+    // yayınlıyor (bkz. IndicatorListPanel — showVolume'u sentetik bir
+    // satır olarak render ediyor).
+    if (typeof EventBus !== 'undefined') EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
   }
 
   setInvert(invert) {

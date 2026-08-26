@@ -273,6 +273,19 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   sekmesine (`CHART BASIC STYLES` altına, Watermark'ın hemen altına)
   taşındı, kaybolmadı. `TABS` dizisinden, render satırından, `tabStatusline()`
   fonksiyonundan tamamen silindi — RSI'nin kendi ayrı "status line"
+  özelliğiyle (Values/Inputs in status line) karıştırılmasın, ona
+  dokunulmadı. **Ek (aynı gün, kullanıcı takibi):** "Volume'u indikatörler
+  içine taşısak doğru olmaz mı" sorusuna — gerçek indikatör mimarisine
+  (`this.indicators[]`, `addIndicator`/`removeIndicator`) taşımak
+  `_buildSeries()`'e derinlemesine bağlı olduğu için orta-büyüklükte bir
+  refactor olurdu (geriye dönük uyumluluk + görsel doğrulama gerektirir).
+  Kullanıcı bunun yerine **"kısayol" yaklaşımını** istedi: checkbox tek
+  doğruluk kaynağı olarak KALDI, ama artık Indicators arama modalında
+  ("Volume" arayıp tıklayınca `setVolume(true)`) VE sağ sidebar'daki
+  indikatör listesinde (showVolume açıkken sentetik bir satır, çöp
+  kutusuna tıklayınca `setVolume(false)`) de görünüyor/kaldırılabiliyor —
+  üçü de (checkbox/modal/sidebar) aynı `pane.showVolume`/`setVolume()`'a
+  yazıp okuyor, ayrı bir veri modeli YOK.
   (Values/Inputs in status line) özelliğiyle karıştırılmasın, o ayrı ve
   dokunulmadı.
 

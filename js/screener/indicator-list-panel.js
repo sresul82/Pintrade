@@ -66,18 +66,44 @@ const IndicatorListPanel = (() => {
       </div>`;
   }
 
+  // [2026-08-26, kullanıcı isteği] Volume, gerçek indikatör mimarisine
+  // (this.indicators[]) TAŞINMADI — hâlâ Settings > Canvas'taki checkbox'a
+  // (pane.showVolume/setVolume()) bağlı, tek doğruluk kaynağı o. Burası
+  // sadece bir "kısayol": showVolume açıkken listede sentetik bir satır
+  // gösterir, çöp kutusuna tıklanınca gerçek indikatör gibi silinmez,
+  // setVolume(false) çağrılıp checkbox'ı da otomatik kapatır.
+  function _buildVolumeRowHTML() {
+    return `
+      <div class="il-row" data-id="__volume__" style="
+        display:flex; align-items:center; gap:8px; padding:8px 10px;
+        border-radius:6px; position:relative;
+      ">
+        <span style="flex-shrink:0; width:8px; height:8px; border-radius:50%; background:rgba(70,130,100,.9);"></span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:12px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Volume</div>
+        </div>
+        <div class="il-row-actions" style="flex-shrink:0; display:flex; align-items:center; gap:1px;">
+          <button type="button" class="il-delete-volume" title="Remove" style="
+            background:transparent; border:none; color:var(--text-secondary); cursor:pointer;
+            padding:4px; border-radius:4px; display:flex; align-items:center;
+          ">${ICON_DELETE}</button>
+        </div>
+      </div>`;
+  }
+
   function _buildListHTML(pane) {
     if (!pane) {
       return `<div style="padding:40px 16px; text-align:center; color:var(--text-secondary); font-size:12px;">No active chart</div>`;
     }
-    if (!pane.indicators.length) {
+    const volumeRow = pane.showVolume ? _buildVolumeRowHTML() : '';
+    if (!pane.indicators.length && !pane.showVolume) {
       return `
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:40px 16px; color:var(--text-secondary);">
           ${ICON_EMPTY}
           <div style="font-size:12px; text-align:center;">No indicators on this chart yet.<br>Click + above to add one.</div>
         </div>`;
     }
-    return pane.indicators.map(_buildRowHTML).join('');
+    return volumeRow + pane.indicators.map(_buildRowHTML).join('');
   }
 
   function _renderHeader() {
@@ -100,6 +126,15 @@ const IndicatorListPanel = (() => {
       const addBtn = e.target.closest('#il-add-btn');
       if (addBtn) {
         document.getElementById('btn-indicators')?.click();
+        return;
+      }
+
+      const deleteVolBtn = e.target.closest('.il-delete-volume');
+      if (deleteVolBtn) {
+        const pane = _activePane();
+        window.ConfirmModal.show('Remove Volume from chart? This cannot be undone.').then((ok) => {
+          if (ok) pane?.setVolume(false);
+        });
         return;
       }
 
