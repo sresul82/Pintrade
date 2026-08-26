@@ -3055,8 +3055,10 @@ window.DrawingManager = (() => {
           if (c) {
             const px3 = c.x - a.x;
             const py3 = c.y - a.y;
-            const effPx3 = reverse ? -px3 : px3;
-            const effPy3 = reverse ? -py3 : py3;
+            // Tek doğruluk kaynağı (bkz. drawing-fibo.js _reverseSpan) — bu
+            // dosyada ayrı bir "reverse ? -x : x" kopyası artık yazılmıyor.
+            const effPx3 = window.DrawingFibo.reverseSpan(px3, reverse);
+            const effPy3 = window.DrawingFibo.reverseSpan(py3, reverse);
             for (const lvl of activeLevels) {
               let lx1 = a.x + effPx3 * lvl.v;
               let ly1 = a.y + effPy3 * lvl.v;
@@ -3074,17 +3076,25 @@ window.DrawingManager = (() => {
           const c = _pt2xy(d.p3, pane);
           if (c) {
             const yDiff = b.y - a.y;
-            const effYDiff = reverse ? -yDiff : yDiff;
+            // [2026-08-26, Görev-6.2 bulgusu] Burada çapa (c.y) reverse=true
+            // iken hiç kaydırılmıyordu, ama çizim (drawing-fibo.js _drawFibExt)
+            // `effP3Y = reverse ? p3.y + yDiff : p3.y` ile kaydırıyordu —
+            // "Reverse" işaretliyken seviye çizgileri GÖRÜNDÜĞÜ yerde değil,
+            // eski (kaydırılmamış) konumda tıklanabiliyordu. Artık BİREBİR
+            // aynı hesap (render'daki gibi, tek doğruluk kaynağı: render'ın
+            // kendisi — kullanıcı ne görüyorsa hit-test onu arar).
+            const effYDiff = window.DrawingFibo.reverseSpan(yDiff, reverse);
+            const effP3Y = reverse ? c.y + yDiff : c.y;
             if (_distToSegment(x, y, a.x, a.y, b.x, b.y) <= tolerance) return 'line';
             if (_distToSegment(x, y, b.x, b.y, c.x, c.y) <= tolerance) return 'line';
-            
+
             const extendLeft = !!s.extendLeft;
             const extendRight = !!s.extendRight;
             const leftX = extendLeft ? -100 : Math.min(a.x, b.x, c.x);
             const rightX = extendRight ? W + 100 : Math.max(a.x, b.x, c.x) + 150;
 
             for (const lvl of activeLevels) {
-              const ly = c.y + effYDiff * lvl.v;
+              const ly = effP3Y + effYDiff * lvl.v;
               if (_distToSegment(x, y, leftX, ly, rightX, ly) <= tolerance) return 'line';
             }
           }
@@ -3114,9 +3124,15 @@ window.DrawingManager = (() => {
 
         if (d.tool === 'fib-timezone') {
           const dx = b.x - a.x;
-          const effDX = reverse ? -dx : dx;
+          // [2026-08-26, Görev-6.2 bulgusu] Aynı sınıf hata (yukarıdaki
+          // fib-ext'e bkz.): çapa reverse=true iken hep a.x kalıyordu, ama
+          // çizim (`_drawFibTimezone`) `effP1X = reverse ? p2.x : p1.x` ile
+          // b.x'e kaydırıyordu — "Reverse" işaretliyken çizgiler göründüğü
+          // yerde tıklanamıyordu. Artık render'la birebir aynı.
+          const effDX = window.DrawingFibo.reverseSpan(dx, reverse);
+          const effP1X = reverse ? b.x : a.x;
           for (const lvl of activeLevels) {
-            const lx = a.x + effDX * lvl.v;
+            const lx = effP1X + effDX * lvl.v;
             if (Math.abs(x - lx) <= tolerance) return 'line';
           }
           return false;

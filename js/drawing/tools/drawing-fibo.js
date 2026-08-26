@@ -68,6 +68,16 @@ window.DrawingFibo = (() => {
       : { base: bVal, span: aVal - bVal };  // varsayılan: a=1, b=0
   }
 
+  // fib-ext/fib-channel/fib-timezone iki-nokta değil, ÜÇÜNCÜ bir çapa
+  // noktasından (p3, vektör vb.) projekte ediyor — _fibAxis'in iki-değerli
+  // imzasına birebir sığmıyor, o yüzden bu üçü kendi "reverse ? -x : x"
+  // formüllerini kullanıyordu. Bu ortak parçayı (fark değerinin işaretini
+  // çevirme) tek yere taşıyoruz — çapa kaymasının kendisi (varsa) her
+  // araca özgü kalır, aşağıdaki her kullanım yerinde ayrıca belirtilir.
+  function _reverseSpan(diffVal, reverse) {
+    return reverse ? -diffVal : diffVal;
+  }
+
   // Seviye satırındaki renk düğmesine tıklanınca açılan popup (bkz.
   // drawing-settings-dialog.js js-fib-color handler) her seviye için
   // `lvl.width`/`lvl.style` kaydediyordu, ama çizim fonksiyonları (Fib
@@ -265,12 +275,9 @@ window.DrawingFibo = (() => {
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
-      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
-      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
-      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
-      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
-      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
-      // önce bulunanla AYNI hata sınıfı).
+      // "Reverse" kutusu varsayılan KAPALI (bkz. dosya başındaki _fibAxis/
+      // _reverseSpan açıklaması — dsd-fibo-tabs.js ve drawing-core.js
+      // hit-test'iyle aynı varsayılan olmalı).
       const reverse = !!s.fibReverse;
 
       const extendLeft  = !!s.extendLeft;
@@ -308,10 +315,10 @@ window.DrawingFibo = (() => {
 
       const yDiff = p2.y - p1.y;
       const priceDiff = d.p2.price - d.p1.price;
+      const effYDiff = _reverseSpan(yDiff, reverse);
       const effP3Y = reverse ? p3.y + yDiff : p3.y;
-      const effYDiff = reverse ? -yDiff : yDiff;
+      const effPriceDiff = _reverseSpan(priceDiff, reverse);
       const effP3Price = reverse ? d.p3.price + priceDiff : d.p3.price;
-      const effPriceDiff = reverse ? -priceDiff : priceDiff;
   
       if (fibBg && sorted.length > 1) {
         for (let i = 1; i < sorted.length; i++) {
@@ -376,12 +383,9 @@ window.DrawingFibo = (() => {
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
-      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
-      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
-      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
-      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
-      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
-      // önce bulunanla AYNI hata sınıfı).
+      // "Reverse" kutusu varsayılan KAPALI (bkz. dosya başındaki _fibAxis/
+      // _reverseSpan açıklaması — dsd-fibo-tabs.js ve drawing-core.js
+      // hit-test'iyle aynı varsayılan olmalı).
       const reverse = !!s.fibReverse;
 
       const fibBg    = s.fibBg !== false;
@@ -415,8 +419,8 @@ window.DrawingFibo = (() => {
       const px3 = p3.x - p1.x;
       const py3 = p3.y - p1.y;
 
-      const effPx3 = reverse ? -px3 : px3;
-      const effPy3 = reverse ? -py3 : py3;
+      const effPx3 = _reverseSpan(px3, reverse);
+      const effPy3 = _reverseSpan(py3, reverse);
 
       if (fibBg && sorted.length > 1) {
         for (let i = 1; i < sorted.length; i++) {
@@ -526,12 +530,9 @@ window.DrawingFibo = (() => {
       const allLevels = _getFibLevels(s);
       const activeLevels = allLevels.filter(l => l.active !== false);
       const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
-      // "Reverse" kutusu varsayılan KAPALI (dsd-fibo-tabs.js ve
-      // drawing-core.js hit-test'iyle aynı varsayılan). Eskiden burada
-      // varsayılan true idi: kutu işaretsizken bile çizim "reversed"
-      // pozisyonda çiziliyor, hit-test ise "reversed olmayan" pozisyonu
-      // arıyordu — seviye çizgileri hiç tıklanamıyordu (fib-ret'te daha
-      // önce bulunanla AYNI hata sınıfı).
+      // "Reverse" kutusu varsayılan KAPALI (bkz. dosya başındaki _fibAxis/
+      // _reverseSpan açıklaması — dsd-fibo-tabs.js ve drawing-core.js
+      // hit-test'iyle aynı varsayılan olmalı).
       const reverse = !!s.fibReverse;
 
       const showLabels = s.fibLevelsType !== false;
@@ -547,8 +548,8 @@ window.DrawingFibo = (() => {
       const yBottom = H;
 
       const dx = p2.x - p1.x;
+      const effDX = _reverseSpan(dx, reverse);
       const effP1X = reverse ? p2.x : p1.x;
-      const effDX = reverse ? -dx : dx;
 
       ctx.save();
 
@@ -816,5 +817,8 @@ window.DrawingFibo = (() => {
     // Tek doğruluk kaynağı — drawing-core.js'in hit-test'i de BUNU çağırır,
     // kendi kopyasını hesaplamaz (bkz. yukarıdaki _fibAxis açıklaması).
     fibAxis: _fibAxis,
+    // fib-ext/fib-channel/fib-timezone için aynı prensip (bkz. _reverseSpan
+    // yukarıdaki açıklama) — Görev-6.2, 2026-08-26.
+    reverseSpan: _reverseSpan,
   };
 })();

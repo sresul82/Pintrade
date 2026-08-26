@@ -218,8 +218,24 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   ekstra istek gitmediğini ve "(Xh)" etiketinin doğru güncellendiğini
   doğrulamak (yerel sandbox'ta ekran görüntüsü/otomasyon araçları
   yanıt vermedi, sadece kod/sözdizimi doğrulandı).
-- 6.2 Fib Extension/Channel/Time Zone araçları merkezi `_fibAxis`
-  mimarisini kullanmıyor.
+- 6.2 ✅ (2026-08-26, kod tamamlandı — production'da henüz doğrulanmadı)
+  fib-ext/fib-channel/fib-timezone iki nokta değil üçüncü bir çapa
+  noktasından (p3/vektör) projekte ettiği için `_fibAxis`'in iki-değerli
+  imzasına birebir sığmıyordu — bu üçü kendi `reverse ? -x : x`
+  kopyalarını kullanıyordu (drawing-fibo.js render VE drawing-core.js
+  hit-test'te AYRI AYRI). Ortak parça (`_reverseSpan`) tek yere taşındı,
+  hem render hem hit-test artık aynı fonksiyonu çağırıyor.
+  **Bu incelemede gerçek bir bug bulundu:** fib-ext ve fib-timezone'da
+  "Reverse" işaretliyken render çapayı kaydırıyordu
+  (`effP3Y = reverse ? p3.y+yDiff : p3.y`) ama hit-test kaydırmıyordu
+  (`c.y` sabit kullanıyordu) — yani Reverse açıkken seviye çizgileri
+  GÖRÜNDÜĞÜ yerde tıklanamıyordu (fib-channel'da bu sorun yoktu, ikisi
+  zaten eşleşiyordu). Düzeltme: hit-test artık render'la BİREBİR aynı
+  çapa hesabını kullanıyor — çizim hiç değişmedi, sadece tıklama kutusu
+  çizimle eşleşti, mevcut kayıtlı çizimlerin görünümü etkilenmez.
+  **Sonraki oturumda ilk iş:** production'da bir Fib Extension VE bir Fib
+  Time Zone çiz, "Reverse" işaretle, seviye çizgilerine tıklayıp
+  seçilebildiğini doğrula (öncesinde muhtemelen seçilemiyordu).
 - 6.3 ✅ (2026-08-26, kod tamamlandı — production'da henüz doğrulanmadı)
   Sütun menüsü "1D Open" artık işlevsel. Kullanıcının önerisiyle EKSTRA
   BINANCE İSTEĞİ YOK: `server.js`'in zaten her 1dk'da çektiği ticker
@@ -243,7 +259,46 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   **Sonraki oturumda ilk iş:** production'da OI popup'ı açıp TF değiştirip
   hem 12 nokta sabit kalıyor mu hem zaman etiketleri görünüyor mu doğrulamak
   (yerel sandbox'ın bilinen ağ kısıtı yüzünden bu turda test edilemedi).
-- 6.5 Görev 11.3'ün kozmetik kalanı (Status line/Scales/Canvas kontrolleri).
+- 6.5 ⏳ (2026-08-26, kısmen tamamlandı — production'da henüz doğrulanmadı)
+  Kapsam araştırıldığında ilk göründüğünden büyük çıktı: **Status Line
+  sekmesi (Logo/Title/Market status/Chart values/Bar change/Volume/
+  Background) bu projede HİÇ VAR OLMAYAN bir arayüz özelliğine karşılık
+  geliyor** — TV'nin ana chart üzerindeki sol-üst OHLC bindirmesi bu
+  projede hiç inşa edilmemiş (mevcut `.pane-hdr`/`.ohlcv-row` kısmen
+  benzer ama birebir değil). Bu "bağlamak" değil sıfırdan yeni bir UI
+  özelliği inşa etmek demek — görsel doğrulama yapılamayan bu oturumda
+  riskli, YAPILMADI. Ayrıca Scales/Canvas'taki bazı kontrollerin
+  (Lock price to bar ratio, No overlapping labels, Plus button, Currency/
+  Unit visibility, Scale mode visibility, Navigation/Pane button
+  visibility, Save left edge, Symbol label style) lightweight-charts'ta
+  net bir native karşılığı bulunamadı veya projede karşılık gelen bir UI
+  elemanı yok — bunlar da YAPILMADI, ayrı bir araştırma gerektiriyor.
+
+  **Güvenle bağlanan, net 1:1 kütüphane/UI karşılığı olan kısım:**
+  - Canvas: `watermarkColor` (renk seçici vardı, hiç okunmuyordu — artık
+    `this.wm.style.color`'a uygulanıyor, varsayılan `null` = CSS'in
+    kendi rengi (`rgba(255,255,255,0.03)`) korunuyor, kullanıcı hiç
+    dokunmadıysa görünüm DEĞİŞMEZ).
+  - Canvas: `marginRight` ("bar cinsinden sağ boşluk" — LWC'nin native
+    `timeScale().rightOffset`'ine bağlandı). **Yan bulgu:** `_initChart()`
+    bunu hardcoded `12` ile ayarlıyordu, restore edilen bir değer sessizce
+    eziliyordu — marginTop/marginBottom'da 2026-08-10'da düzeltilen AYNI
+    hata sınıfı, önlendi.
+  - Scales > TIME SCALE: `dayOfWeekLabels`/`dateFormat`/`timeFormat` artık
+    merkezi `_formatTimezone()`'a bağlı (hem crosshair tooltip hem eksen
+    tick etiketleri).
+  - **Yan düzeltme:** `marginTop`/`marginBottom`/`marginRight` number
+    input'ları ayarlar penceresi her açılışta HTML'deki sabit değerleri
+    (10/8/10) gösteriyordu, pane'in gerçek kayıtlı değerini DEĞİL — küçük
+    bir `setNumber` pre-fill helper'ı eklenerek düzeltildi.
+
+  **Sonraki oturumda ilk iş:** production'da watermark rengini değiştirip
+  görünüp görünmediğini, marj-sağ değerini değiştirip mumların sağındaki
+  boşluğun değiştiğini, ve Scales > Time hours format'ı 12-hours yapıp
+  crosshair/eksen saatlerinin "6:00pm" gibi göründüğünü doğrulamak (yerel
+  sandbox'ta görsel test yapılamadı). Status Line'ın gerçek bir özellik
+  olarak inşa edilip edilmeyeceği kullanıcıya sorulmalı — büyük, ayrı bir
+  iş (RSI'nin aldığı gibi fazlı bir oturum gerekebilir).
 
 ---
 
