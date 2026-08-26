@@ -82,6 +82,14 @@ class ChartPane {
     this.linePrevDayClose = s.linePrevDayClose ?? false; // Issue #5
     this.lineHighLow = s.lineHighLow ?? false; // Issue #6
     this.lineBidAsk = s.lineBidAsk ?? false; // Issue #7
+    // [2026-08-27, kullanıcı bulgusu] Ayarlar penceresindeki renk seçiciler
+    // (prevDayColor/hlColor/bidColor/askColor) vardı ama _updateVisualLines()
+    // HİÇBİRİNİ okumuyordu, her zaman hardcoded '#787b86'/'#f23645'/'#2962ff'
+    // kullanıyordu — kullanıcı OK'a bassa da çizgi rengi hiç değişmiyordu.
+    this.prevDayColor = s.prevDayColor ?? '#787b86';
+    this.hlColor      = s.hlColor      ?? '#f23645';
+    this.bidColor     = s.bidColor     ?? '#2962ff';
+    this.askColor     = s.askColor     ?? '#f23645';
     
     // Timezone & Formatting (Issue: Timezone change)
     this.timezone  = s.timezone  ?? 'UTC';
@@ -1463,6 +1471,16 @@ class ChartPane {
     this._loadTimer = setTimeout(() => {
       // Reset the initial-load flag so fitContent() fires for this new symbol/TF
       this._initialDataLoaded = false;
+      // [2026-08-27, kullanıcı bulgusu] DataFeed.load() (chart-data.js
+      // _fetchAndEmit) tek bir yükleme için 'feed:candles'ı İKİ KEZ
+      // yayınlar (önce IndexedDB önbelleğinden anında varsa, sonra taze ağ
+      // verisiyle tekrar) — 8 saniyelik bir pencere açıyoruz ki
+      // _onFeedCandles İKİSİNDE de görünümü "son 150 gerçek bar" olarak
+      // düzeltsin (bkz. oradaki not). Bu pencerenin DIŞINDA gelen
+      // 'feed:candles' (ör. sekme arka plandayken biriken mumları
+      // tamamlayan "gap fill", chart-data.js:630) görünümü SIFIRLAMAMALI —
+      // kullanıcı o an geçmişte bir yere bakıyor olabilir.
+      this._pendingRangeFixUntil = Date.now() + 8000;
       // Request real data from DataFeedManager
       // DataFeed will emit 'feed:candles' which we handle below
       DataFeed.load(`pane_${this.idx}`, this.symbol, this.tf, this.exchange);
@@ -1606,7 +1624,21 @@ class ChartPane {
       this.goToTime(this._pendingGoToTime);
       this._pendingGoToTime = null;
       this._initialDataLoaded = true;
-    } else if ((exchange === 'binance' || exchange === 'bybit') && !this._initialDataLoaded) {
+    } else if ((exchange === 'binance' || exchange === 'bybit') && Date.now() < (this._pendingRangeFixUntil || 0)) {
+      // [2026-08-27, kullanıcı bulgusu] Eskiden `!this._initialDataLoaded`
+      // (bir kerelik) şartına bağlıydı — DataFeed.load() (chart-data.js
+      // _fetchAndEmit) tek bir yükleme için 'feed:candles'ı İKİ KEZ
+      // yayınlıyor: önce IndexedDB önbelleğinden anında (varsa), sonra taze
+      // ağ verisiyle tekrar. Bu düzeltme SADECE ilk gelişte (genelde
+      // önbellek, farklı/daha az bar sayısı) çalışıyordu — ikinci (asıl,
+      // taze) veri gelip bar sayısı değiştiğinde görünüm hiç
+      // düzeltilmiyordu (Settings > OK sonrası setVolume() gibi zaten-yüklü
+      // bir sembolü yeniden isteyen her akışta mumlar solda/phantom'ın
+      // içinde kalıyordu). Artık `_loadData()`'nın açtığı 8sn'lik pencere
+      // içindeki HER 'feed:candles' gelişinde (cache + taze, ikisinde de)
+      // yeniden uygulanıyor. Pencere DIŞINDA gelen 'feed:candles' (ör.
+      // arka planda "gap fill", chart-data.js:630) görünümü SIFIRLAMAZ —
+      // kullanıcı o an geçmişte bir yere bakıyor olabilir.
       this._initialDataLoaded = true;
       // [FIX] fitContent() phantom'ın (ChartPhantom.update, yukarıda) sağa
       // uzattığı 1000 barlık görünmez seriyi de ekrana sığdırmaya çalışır —
@@ -1859,7 +1891,7 @@ class ChartPane {
     if (this.linePrevDayClose && this._lastPrice) {
       const showLine = this.pdLine !== false;
       const showVal  = this.pdValue !== false;
-      addLine('prev', this._lastPrice * 0.995, 'Prev Close', showLine ? '#787b86' : 'transparent', LightweightCharts.LineStyle.Dotted, showVal);
+      addLine('prev', this._lastPrice * 0.995, 'Prev Close', showLine ? this.prevDayColor : 'transparent', LightweightCharts.LineStyle.Dotted, showVal);
     } else removeLine('prev');
 
     // gorevler2.md Görev 11.1 (2026-08-10) — iki hata düzeltildi:
@@ -1876,16 +1908,16 @@ class ChartPane {
         const showVal  = this.hlValue !== false;
         const high = Math.max(...visible.map(d => d.high ?? d.close));
         const low  = Math.min(...visible.map(d => d.low ?? d.close));
-        addLine('high', high, 'High', showLine ? '#f23645' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
-        addLine('low', low, 'Low', showLine ? '#2962ff' : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
+        addLine('high', high, 'High', showLine ? this.hlColor : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
+        addLine('low', low, 'Low', showLine ? this.hlColor : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
       } else { removeLine('high'); removeLine('low'); }
     } else { removeLine('high'); removeLine('low'); }
-    
+
     if (this.lineBidAsk && this._lastPrice) {
       const showLine = this.baLine !== false;
       const showVal  = this.baValue !== false;
-      addLine('ask', this._lastPrice + 0.5, 'Ask', showLine ? '#f23645' : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
-      addLine('bid', this._lastPrice - 0.5, 'Bid', showLine ? '#2962ff' : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
+      addLine('ask', this._lastPrice + 0.5, 'Ask', showLine ? this.askColor : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
+      addLine('bid', this._lastPrice - 0.5, 'Bid', showLine ? this.bidColor : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
     } else { removeLine('ask'); removeLine('bid'); }
   }
 
@@ -2282,9 +2314,17 @@ class ChartPane {
     }
     
     // Fix Issue 3: Update visual price lines WITHOUT reloading data (which would reset scroll)
-    if (s.prevDayClose != null) { this.linePrevDayClose = s.prevDayClose; this._updateVisualLines(this.candlesData || []); }
-    if (s.highLow != null)      { this.lineHighLow = s.highLow;           this._updateVisualLines(this.candlesData || []); }
-    if (s.bidAsk != null)       { this.lineBidAsk = s.bidAsk;             this._updateVisualLines(this.candlesData || []); }
+    let _linesDirty = false;
+    if (s.prevDayClose != null) { this.linePrevDayClose = s.prevDayClose; _linesDirty = true; }
+    if (s.highLow != null)      { this.lineHighLow = s.highLow;           _linesDirty = true; }
+    if (s.bidAsk != null)       { this.lineBidAsk = s.bidAsk;             _linesDirty = true; }
+    // [2026-08-27, kullanıcı bulgusu] Renk seçiciler değişince de çizgiler
+    // yeniden çizilmeli — bkz. constructor'daki not.
+    if (s.prevDayColor != null) { this.prevDayColor = s.prevDayColor; _linesDirty = true; }
+    if (s.hlColor != null)      { this.hlColor      = s.hlColor;      _linesDirty = true; }
+    if (s.bidColor != null)     { this.bidColor     = s.bidColor;     _linesDirty = true; }
+    if (s.askColor != null)     { this.askColor     = s.askColor;     _linesDirty = true; }
+    if (_linesDirty) this._updateVisualLines(this.candlesData || []);
     
     if (s.timezone != null) {
       this.timezone = s.timezone;
@@ -2654,6 +2694,9 @@ class ChartPane {
       priceLine: this.priceLine, linePrevDayClose: this.linePrevDayClose,
       linePrePost: this.linePrePost, lineHighLow: this.lineHighLow,
       lineBidAsk: this.lineBidAsk, plusButton: this.plusButton,
+      // [2026-08-27, kullanıcı bulgusu] bkz. constructor'daki not.
+      prevDayColor: this.prevDayColor, hlColor: this.hlColor,
+      bidColor: this.bidColor, askColor: this.askColor,
       // gorevler2.md Görev 11 (2026-08-10) — eskiden canlı uygulanıp hiç
       // kaydedilmeyen ayarlar (bkz. constructor'daki not).
       timezone: this.timezone,

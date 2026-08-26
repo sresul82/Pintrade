@@ -557,6 +557,14 @@ function initSettings() {
       // Line tools
       setLineTool('sessionBreaks', s.sessionBreaksColor, s.sessionBreaksThick, s.sessionBreaksStyle);
       setLineTool('eventsBreaks', s.eventsBreaksColor, s.eventsBreaksThick, s.eventsBreaksStyle);
+      // [2026-08-27, kullanıcı bulgusu] Bunlar da buildLineToolBtn ile
+      // kuruluyor (setColor DEĞİL, setLineTool gerekiyor — setColor dış
+      // sarmalayıcıyı boyuyor ama görünen renk iç `.tv-linetool-color-preview`
+      // div'inden geliyor, setColor'ın etkisi görünmüyordu).
+      setLineTool('prevDayColor', s.prevDayColor);
+      setLineTool('hlColor', s.hlColor);
+      setLineTool('bidColor', s.bidColor);
+      setLineTool('askColor', s.askColor);
 
       // Selects
       if (s.bgType)          setSelect('bgType',          s.bgType);

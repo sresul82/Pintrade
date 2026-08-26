@@ -550,3 +550,53 @@ hit-test) silindi.
 çizip görsel olarak makul göründüğünü doğrulamak. Sonra kullanıcıyla
 Elliott Wave'lerin gerçekten isteniyor mu / hangi kapsamda isteniyor
 konuşulmalı — büyük bir iş, RSI gibi kendi fazlı planını hak ediyor.
+
+---
+
+## Görev-13 — 2026-08-27: Chart Settings'te iki gerçek bug (kullanıcı bulgusu)
+
+**Durum: ✅ Kod tamamlandı — production'da henüz doğrulanmadı.**
+
+**13.1 — Scales sekmesindeki renk seçiciler (High/Low, Bid/Ask, Previous
+day close) hiç uygulanmıyordu.** `chart-settings.js`'te renk swatch'ları
+(`hlColor`/`bidColor`/`askColor`/`prevDayColor`) vardı ama `chart-pane.js`
+`_updateVisualLines()` bunları HİÇ okumuyordu — High/Low çizgisi her zaman
+hardcoded kırmızı(high)/mavi(low), Bid her zaman mavi, Ask her zaman
+kırmızı, Prev Close her zaman gri çiziliyordu. Kullanıcı OK'a bassa da
+renk değişmiyordu, ayarlara geri dönünce de swatch hep varsayılana
+dönüyordu (ÇİFT hata — hem uygulama hem pre-fill eksikti). Düzeltildi:
+- `chart-pane.js`: `prevDayColor`/`hlColor`/`bidColor`/`askColor` artık
+  constructor'da okunuyor, `applySettings()`'te güncelleniyor,
+  `getState()`'te kalıcı hale geliyor, `_updateVisualLines()` hardcoded
+  hex'ler yerine bunları kullanıyor. (Not: `hlColor` TEK bir swatch —
+  hem High hem Low AYNI rengi kullanıyor, ayarlar penceresindeki tasarımla
+  birebir eşleşiyor; eskiden High/Low farklı hardcoded renklerdeydi ki bu
+  zaten UI'da hiç seçilebilir değildi.)
+- `chart-settings.js`: pre-fill'de `setColor()` yerine `setLineTool()`
+  kullanılmaya başlandı — bu dört swatch `buildLineToolBtn()` ile
+  kuruluyor (`setColor`'ın hedeflediği dış sarmalayıcı değil, iç
+  `.tv-linetool-color-preview` div'i asıl görünen rengi taşıyor,
+  `setColor` onu hiç güncellemiyordu).
+
+**13.2 — Settings > OK sonrası mumlar solda/phantom içinde kalıyordu.**
+Kök neden: `chart-data.js` `_fetchAndEmit()` tek bir `DataFeed.load()`
+çağrısı için `'feed:candles'`ı İKİ KEZ yayınlıyor (önce IndexedDB
+önbelleğinden anında varsa, sonra taze ağ verisiyle tekrar) ama
+`chart-pane.js`'teki phantom-kaçırma görünüm düzeltmesi (`_onFeedCandles`,
+"son 150 gerçek bar + 12 rightOffset") `!this._initialDataLoaded` (bir
+kerelik) şartına bağlıydı — SADECE ilk (genelde önbellek, farklı bar
+sayılı) gelişte çalışıyordu, ikinci (asıl, taze, farklı bar sayılı) veri
+gelince görünüm bir daha hiç düzeltilmiyordu. `setVolume()` gibi
+zaten-yüklü bir sembolü yeniden isteyen HER ayar değişikliğinde (Settings
+OK) bu iki-emisyon deseni tetikleniyordu. Düzeltildi: `_loadData()` artık
+8 saniyelik bir `_pendingRangeFixUntil` penceresi açıyor,
+`_onFeedCandles` bu pencere içindeki HER `'feed:candles'` gelişinde
+(cache + taze, ikisi de) düzeltmeyi yeniden uyguluyor. Pencere dışında
+gelen `'feed:candles'` (ör. sekme arka planda uzun süre kaldıysa eksik
+mumları tamamlayan "gap fill", `chart-data.js:630`) görünümü SIFIRLAMIYOR
+— kullanıcı o an geçmişte bir yere bakıyor olabilir, bilerek korundu.
+
+**Sonraki oturumda ilk iş:** production'da (1) High/Low rengini gri/beyaz
+yapıp OK'a basıp hem grafikte hem ayarlara geri dönünce doğru göründüğünü,
+(2) herhangi bir Settings ayarını değiştirip OK'a basınca mumların
+ekranın sağında kalıp phantom'a kaymadığını doğrulamak.
