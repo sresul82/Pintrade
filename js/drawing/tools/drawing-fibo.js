@@ -793,8 +793,51 @@ window.DrawingFibo = (() => {
       ctx.restore();
     }
 
+  // [2026-08-26] p1 merkez, p1→p2 piksel mesafesi taban yarıçap — her aktif
+  // Fib seviyesinde (_getFibLevels, diğer Fib araçlarıyla AYNI kaynak) o
+  // oranda bir daire çizilir (klasik "Fibonacci Circles/Arcs" tanımı).
+  // Renk/kalınlık zaten _renderDrawing() tarafından ctx'e uygulanmış
+  // oluyor — burada sadece geometri + her dairenin üstüne küçük bir
+  // seviye etiketi.
   function _drawFibArcs(ctx, d, pane) {
-    // Placeholder for Fib speed resistance arcs
+    if (!d.p1 || !d.p2) return;
+    const p1 = _pt2xy(d.p1, pane);
+    const p2 = _pt2xy(d.p2, pane);
+    if (!p1 || !p2) return;
+
+    const baseR = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (baseR < 1) return;
+
+    const s = d.style || {};
+    const allLevels = _getFibLevels(s);
+    const activeLevels = allLevels.filter(l => l.active !== false && l.v > 0);
+    const sorted = [...activeLevels].sort((a, b) => a.v - b.v);
+    const showLabels = s.fibLevelsType !== false;
+    const fontSize = s.fibFontSize || 11;
+
+    ctx.save();
+    ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
+    for (const lvl of sorted) {
+      const r = baseR * lvl.v;
+      if (r < 1) continue;
+      const { width: lvlWidth, dash: lvlDash } = _levelLineStyle(s, lvl);
+      ctx.strokeStyle = (s.useOneColor && s.useOneColor !== false ? s.useOneColor : lvl.color) || '#787b86';
+      ctx.lineWidth = lvlWidth;
+      ctx.setLineDash(lvlDash);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(p1.x, p1.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (showLabels) {
+        ctx.setLineDash([]);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(lvl.v.toFixed(3), p1.x, p1.y - r - 2);
+      }
+    }
+    ctx.restore();
   }
 
   function _drawFibWedge(ctx, d, pane) {

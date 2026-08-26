@@ -479,3 +479,71 @@ dışında).** Atlas "Data Size 444MB/512MB (%87)" uyarısı verdi. İncelendi:
 - **ÖNEMLİ kullanıcı kuralı, hafızaya kaydedildi:** proje satılmıyor,
   kişisel geliştirme aşamasında — ücretli bir servise/yükseltmeye (Atlas
   paid tier vb.) kullanıcı SORMADIKÇA ASLA önerilmeyecek.
+
+---
+
+## Görev-12 — 2026-08-26: Çizim araçları — boş/placeholder olanların doldurulması
+
+**Durum: ⏳ Kısmen ilerledi — production'da henüz doğrulanmadı.**
+Kullanıcı isteği: sidebar'daki çizim araçları arasında altı boş (render
+fonksiyonu boş VEYA tıklayınca hiçbir nokta toplanmadığı için hiçbir şey
+çizmeyen) araçları doldurmaya devam et.
+
+**Tam envanter (bu turda çıkarıldı):**
+
+| Araç | Kategori | Durum önce | Bu turda |
+|---|---|---|---|
+| Cyclic Lines | Patterns | Render boş, nokta toplama VARDI (`TWO_PT_TOOLS`) | ✅ Dolduruldu |
+| Fib Arcs | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ✅ Dolduruldu (render + `TWO_PT_TOOLS`'a eklendi + p1/p2 handle hit-test) |
+| Fib Wedge | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+| Pitchfan (Andrews' Pitchfork) | Gann & Fibonacci | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+| Elliott Impulse/Correction/Triangle/Double/Triple (5 araç) | Patterns | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+| Brush | Geometric Shapes | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+| Highlighter | Geometric Shapes | Render boş, nokta toplama YOKTU | ❌ Yapılmadı |
+
+**Yapılanlar:**
+- `js/drawing/tools/drawing-patterns.js` `_drawCyclicLines` — p1→p2 arası
+  x-eksenindeki aralık, görünür alanın tamamına (sağa VE sola) tekrarlanan
+  dikey çizgiler olarak çiziliyor (TradingView'ın Cyclic Lines'ıyla aynı
+  davranış). Nokta toplama zaten vardı (`drawing-core.js` `TWO_PT_TOOLS`
+  içinde `cyclic-lines` mevcuttu), sadece render eksikti.
+- `js/drawing/tools/drawing-fibo.js` `_drawFibArcs` — p1 merkez, p1→p2
+  piksel mesafesi taban yarıçap, her aktif Fib seviyesinde (`_getFibLevels`
+  — diğer Fib araçlarıyla AYNI kaynak, kullanıcının seviye/renk
+  özelleştirmesini otomatik miras alır) bir daire (klasik "Fibonacci
+  Circles" tanımı). `drawing-core.js`'in `TWO_PT_TOOLS` ve p1/p2 handle
+  hit-test listelerine `fib-arcs` eklendi — önceden bu araç tıklanınca
+  HİÇBİR ŞEY olmuyordu (nokta toplama hiç kayıtlı değildi).
+- **Bilinçli sınırlama (hem Cyclic Lines hem Fib Arcs için):** çizginin/
+  dairenin gövdesine tıklayarak seçme henüz yok — sadece p1/p2 tutamaçları
+  (handle) tıklanıp sürüklenebiliyor. `fib-ret` gibi araçlarda olduğu gibi
+  tam bir hit-test eklemek ayrı, daha büyük bir iş; bu turda kapsam dışı
+  bırakıldı, mevcut çizimin silinmesi/taşınması hâlâ mümkün (handle'lardan).
+
+**Neden geri kalanlar YAPILMADI (kasıtlı, kör ilerlemek riskli):**
+- **Fib Wedge, Pitchfan:** TradingView'de bunlar 3 noktalı araçlar
+  (fib-channel/fib-ext'e benzer mimari gerekir) AMA tam görsel kuralı
+  (kanat açıları, çizgi sayısı, varsayılan davranış) net bir referans
+  olmadan tahmin edilirse yanlış/tutarsız bir sonuç riski var — görsel
+  doğrulama yapılamayan bu ortamda güvenli değil.
+- **Elliott Wave araçları (5 tanesi):** TradingView'de her biri 3-13 nokta
+  arası, dalga numaralandırma/etiketleme kuralları (1-2-3-4-5, A-B-C vb.)
+  olan, bu projenin şimdiye kadar yaptığı hiçbir araçtan çok daha karmaşık
+  bir kategori — RSI'nin bile 5 tur sürdüğü düşünülürse, bu 5 aracın
+  hepsi muhtemelen kendi başına ayrı, fazlı bir oturum gerektirir. Kör
+  ilerlemek yerine kullanıcıyla önce kapsam (kaç tanesi gerçekten
+  isteniyor, hangi TV davranışı referans alınacak) netleştirilmeli.
+- **Brush, Highlighter:** Bu ikisi TEK bir sürükleme hareketiyle (mousedown
+  → mousemove'da SÜREKLİ nokta ekleme → mouseup'ta bitirme) çizilen gerçek
+  serbest-el araçları — mevcut `pathtool`'un "tıkla-tıkla-tıkla" çoklu-nokta
+  mekanizmasından (`MULTI_PT_TOOLS`) TAMAMEN FARKLI, YENİ bir girdi modu
+  gerektiriyor. Bu, TÜM çizim araçlarının paylaştığı ortak mouse event
+  state machine'ine (`drawing-core.js`) dokunmak demek — buradaki bir hata
+  HER ARACI (trendline, fib, rect, hepsi) bozabilir. Görsel test
+  yapılamayan bu ortamda bu riski almadım.
+
+**Sonraki oturumda ilk iş:** production'da Cyclic Lines ve Fib Arcs'ı
+gerçek fare ile çizip görsel olarak makul göründüğünü doğrulamak. Sonra
+kullanıcıyla Elliott Wave'lerin gerçekten isteniyor mu / hangi kapsamda
+isteniyor konuşulmalı — büyük bir iş, RSI gibi kendi fazlı planını
+hak ediyor.

@@ -397,7 +397,7 @@ window.DrawingManager = (() => {
       'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
       'infoline', 'regression',
       'fib-ret', 'fib-timezone', 'fib-speedfan',
-      'cyclic-lines',
+      'cyclic-lines', 'fib-arcs',
       'circle', 'ellipse',
       'note', 'callout', 'pricenote'
     ];
@@ -2531,7 +2531,7 @@ window.DrawingManager = (() => {
 
     const tolerance = 10;
 
-    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-speedfan', 'cyclic-lines', 'fib-ext', 'fib-channel', 'triangle', 'arc'].includes(d.tool)) {
+    if (d.p1 && d.p2 && ['trendline', 'ray', 'extended', 'arrowdraw', 'trendangle', 'infoline', 'fib-ret', 'fib-timezone', 'fib-speedfan', 'cyclic-lines', 'fib-arcs', 'fib-ext', 'fib-channel', 'triangle', 'arc'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && Math.hypot(x - a.x, y - a.y) <= tolerance) return 'p1';
