@@ -312,6 +312,35 @@ const dayOpenPriceSchema = new mongoose.Schema({
 });
 const DayOpenPrice = mongoose.model('DayOpenPrice', dayOpenPriceSchema);
 
+// ── Fiyat Alarmları — Faz 1 (2026-08-26, gorevler4.md Görev-3, kullanıcı
+// onaylı kapsam) ─────────────────────────────────────────────────────
+// SADECE manuel (sabit fiyatlı) alarmlar — eğik çizgi kaynaklı alarmlar
+// (State.getDrawings() sadece tarayıcıda yaşıyor, sunucunun erişimi yok)
+// BİLİNÇLİ olarak kapsam dışı, ayrı bir Faz 2 gerektiriyor. İstemci
+// (alert-store.js) hâlâ senkron/localStorage — bu koleksiyon sadece bir
+// AYNA: tarayıcı kapalıyken de tetiklenip Telegram'a düşebilsinler diye.
+// Bu proje tek kullanıcılı/kişisel (bkz. hafıza notu) — Kom1/Kom2 gibi
+// kullanıcı bazlı bir scoping (syncKey vb.) BİLEREK eklenmedi.
+const alertSchema = new mongoose.Schema({
+  clientId: { type: String, required: true, unique: true }, // alert-store.js'in kendi ürettiği id (al_...)
+  symbol: { type: String, required: true },
+  exchange: { type: String, default: 'binance' },
+  price: Number,
+  condition: { type: String, default: 'crossing' }, // 'above' | 'below' | 'crossing'
+  triggerMode: String,
+  expiresAt: Number, // epoch ms | null
+  message: String,
+  notifyTelegram: { type: Boolean, default: false },
+  tf: String,
+  name: String,
+  triggered: { type: Boolean, default: false },
+  active: { type: Boolean, default: true },
+  lastKnownPrice: Number,
+  createdAt: { type: Number, default: () => Date.now() },
+  triggeredAt: Number,
+});
+const Alert = mongoose.model('Alert', alertSchema);
+
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
 // ==========================================
@@ -322,6 +351,15 @@ const FR_SIGNAL_THRESHOLD = 0.001; // % — bu değeri aşan değişim sinyal ü
 // Önceki FR değerlerini bellekte tut (değişim tespiti için)
 const _prevFR = {
   binance: new Map(), // symbol → fr değeri
+  bybit:   new Map(),
+};
+
+// gorevler4.md Görev-3 (2026-08-26) — fiyat alarmları için EKSTRA istek
+// YOK: collectBinanceData/collectBybitData zaten her 1dk'da tüm sembollerin
+// güncel fiyatını çekiyor, bu iki satır o veriyi bir kerelik bellekte
+// paylaşılan bir haritaya kopyalıyor. checkAlerts() sadece bunu okuyor.
+const _latestPrices = {
+  binance: new Map(), // symbol → fiyat
   bybit:   new Map(),
 };
 
@@ -386,7 +424,11 @@ async function collectBinanceData() {
     if (!Array.isArray(frResp) || !Array.isArray(tkResp)) return;
 
     const tkMap = {};
-    tkResp.forEach(t => { tkMap[t.symbol] = t; });
+    tkResp.forEach(t => {
+      tkMap[t.symbol] = t;
+      const p = parseFloat(t.lastPrice);
+      if (!isNaN(p)) _latestPrices.binance.set(t.symbol, p);
+    });
 
     await _maybeCaptureDayOpen(tkMap);
 
@@ -480,6 +522,12 @@ async function collectBybitData() {
     list
       .filter(t => t.symbol.endsWith('USDT'))
       .forEach(t => {
+        // gorevler4.md Görev-3 — FR değişmemiş olsa bile (aşağıdaki erken
+        // return'den ÖNCE) fiyat her turda güncellensin, alarm kontrolcüsü
+        // taze veri bulsun.
+        const lp = parseFloat(t.lastPrice);
+        if (!isNaN(lp)) _latestPrices.bybit.set(t.symbol, lp);
+
         const fr     = parseFloat(t.fundingRate) * 100;
         const prevFR = _prevFR.bybit.get(t.symbol);
         const changed = prevFR === undefined || fr !== prevFR;
@@ -799,6 +847,53 @@ async function collectSymbolStatusChanges() {
   }
 }
 
+// ── Fiyat Alarmları — sunucu taraflı kontrol (Faz 1, 2026-08-26) ─────
+// gorevler4.md Görev-3: `_latestPrices`'ı (zaten çekilen ticker verisinden,
+// EKSTRA istek YOK) alert-store.js'in checkPrice()'ıyla AYNI mantıkla
+// (crossing/above/below) değerlendirir. Sadece manuel alarmlar burada —
+// eğik çizgi alarmları hâlâ sadece tarayıcıda (bkz. Alert şeması notu).
+async function checkAlerts() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    const alerts = await Alert.find({ active: true, triggered: false });
+    if (!alerts.length) return;
+    const now = Date.now();
+    for (const a of alerts) {
+      if (a.expiresAt && now > a.expiresAt) {
+        a.active = false;
+        await a.save().catch(() => {});
+        continue;
+      }
+      const price = _latestPrices[a.exchange]?.get(a.symbol);
+      if (price == null) continue; // bu sembol için henüz fiyat gelmemiş
+
+      if (a.lastKnownPrice == null) {
+        a.lastKnownPrice = price;
+        await a.save().catch(() => {});
+        continue;
+      }
+      const crossedUp   = a.lastKnownPrice < a.price && price >= a.price;
+      const crossedDown = a.lastKnownPrice > a.price && price <= a.price;
+      const fires = a.condition === 'above' ? crossedUp
+                  : a.condition === 'below' ? crossedDown
+                  : (crossedUp || crossedDown);
+      if (fires) {
+        a.triggered = true;
+        a.triggeredAt = now;
+        if (a.notifyTelegram) {
+          const msg = a.message ? a.message : `🔔 <b>${a.symbol}</b> ${a.price}'ı geçti (şu an: ${price})`;
+          sendTelegramMessage(msg);
+        }
+      } else {
+        a.lastKnownPrice = price;
+      }
+      await a.save().catch(() => {});
+    }
+  } catch (e) {
+    console.error('[Collector] Alarm kontrolü hatası:', e.message);
+  }
+}
+
 // ── Zamanlayıcılar ──────────────────────────────────────────────────
 // DB bağlandıktan sonra başlat
 // Tüm toplayıcılar açılışta aynı anda ateşlenirse (hepsi tek Binance IP'sinden
@@ -832,6 +927,13 @@ mongoose.connection.once('open', () => {
   _staggeredStart(collectLSData,         10000,  5 * 60 * 1000);  // Binance L/S — sabit 8 coinlik liste
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
+
+  // gorevler4.md Görev-3 (2026-08-26) — fiyat alarmları kontrolcüsü. Sıfır
+  // Binance/Bybit isteği (sadece bellekteki _latestPrices'ı okur), bu yüzden
+  // diğer toplayıcılarla zamanlama çakışması kaygısı yok. 25000ms: collectBinanceData
+  // (delay=0) ve collectBybitData (delay=5000) ilk turlarını bitirip
+  // _latestPrices'ı doldurmuş olsun diye küçük bir pay.
+  _staggeredStart(checkAlerts, 25000, 60 * 1000);
 
   // "1D Open" gün açılış fiyatı hangi güne kadar zaten kaydedilmiş —
   // restart sonrası o anki fiyatı yanlışlıkla "yeni gün açılışı" sanıp
@@ -1213,6 +1315,50 @@ app.get('/api/market/day-open', async (req, res) => {
     let day = null;
     docs.forEach(d => { prices[d.symbol] = d.price; day = d.day; });
     res.json({ day, prices });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Fiyat Alarmları — Faz 1 (2026-08-26, gorevler4.md Görev-3) ───────
+// alert-store.js'in "fire-and-forget" aynası — istemci akışını bloklamaz,
+// hata olursa alarm yerel (localStorage) olarak çalışmaya devam eder.
+app.post('/api/alerts', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.id || !b.symbol) return res.status(400).json({ error: 'id ve symbol gerekli' });
+    const doc = await Alert.create({
+      clientId: b.id, symbol: b.symbol, exchange: b.exchange || 'binance',
+      price: b.price, condition: b.condition, triggerMode: b.triggerMode,
+      expiresAt: b.expiresAt ?? null, message: b.message,
+      notifyTelegram: !!b.notifyTelegram, tf: b.tf, name: b.name,
+      triggered: !!b.triggered, active: b.active !== false,
+      lastKnownPrice: b.lastKnownPrice ?? null, createdAt: b.createdAt || Date.now(),
+    });
+    res.status(201).json({ _id: doc._id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/alerts/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const ALLOWED = ['price', 'condition', 'triggerMode', 'expiresAt', 'message',
+      'notifyTelegram', 'active', 'tf', 'name', 'triggered', 'triggeredAt', 'lastKnownPrice'];
+    const update = {};
+    ALLOWED.forEach(k => { if (b[k] !== undefined) update[k] = b[k]; });
+    await Alert.updateOne({ _id: req.params.id }, { $set: update });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/alerts/:id', async (req, res) => {
+  try {
+    await Alert.deleteOne({ _id: req.params.id });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

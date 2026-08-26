@@ -168,10 +168,50 @@ aynı yöntemle ayrı bir routine kurulmalı — henüz kurulmadı).
 
 ## Görev-3 — `gorevler3.md` Görev 7'nin kalanı: fiyat alarmları (AlertStore)
 
-**Durum: Açık, aktif iş bekliyor.** Kom1 sinyallerinin Telegram bildirimi
-tamamlandı (2026-08-15, production'da doğrulandı) — kalan tek parça
-`AlertStore`'un (fiyat alarmları, şu an localStorage-tabanlı) MongoDB'ye
-taşınması + kendi sunucu-taraflı izleme döngüsü.
+**Durum: ⏳ Faz 1 tamamlandı (2026-08-26) — production'da henüz
+doğrulanmadı.** Kapsam araştırıldığında tam migrasyonun (`createFromDrawing`/
+`createManual`/`updateAlert`/`removeAlert`'i asenkron yapıp TÜM çağıran
+UI kodunu değiştirmek + eğik çizgi alarmlarının canlı geometrisi için
+çizimleri de sunucuya senkronize etmek) çok büyük/riskli olduğu görüldü —
+kullanıcı onayıyla **kullanıcı-onaylı aşamalı kapsam** seçildi:
+
+**Faz 1 (bu turda yapıldı) — SADECE manuel (sabit fiyatlı) alarmlar:**
+- İstemci (`alert-store.js`) BİLEREK senkron/localStorage kalmaya devam
+  ediyor — hiçbir çağıran kod değişmedi, mevcut davranış/UI etkilenmedi.
+- Manuel alarmlar artık arka planda (fire-and-forget, hataya toleranslı)
+  sunucuya "aynalanıyor": yeni `Alert` Mongo şeması + `POST/PATCH/DELETE
+  /api/alerts` endpoint'leri.
+- Yeni `checkAlerts()` sunucu kontrolcüsü (`_staggeredStart`, 1dk'da bir,
+  **sıfır ek Binance/Bybit isteği** — zaten `collectBinanceData`/
+  `collectBybitData`'nın çektiği ticker verisinden paylaşılan
+  `_latestPrices` haritasını okuyor) tetiklenen alarmları Telegram'a
+  düşürüyor (`notifyTelegram` işaretliyse, `sendTelegramMessage` — Kom1
+  ile aynı fonksiyon).
+- Tarayıcı alarmı ÖNCE kendi yakalarsa (`checkPrice`), sunucuya "zaten
+  tetiklendi" diye PATCH atıyor — mükerrer Telegram bildirimi önlendi.
+- Eğik çizgi alarmları (trendline/ray/extended/trendangle/infoline)
+  BİLEREK kapsam dışı bırakıldı — tetik fiyatları `State.getDrawings()`'e
+  (sadece tarayıcıda) bağlı, sunucunun erişimi yok. Bunlar hâlâ SADECE
+  tarayıcı açıkken çalışıyor, önceki davranıştan regresyon YOK.
+
+**Yan bulgu:** `window.AppConfig` her zaman `undefined` — `app-config.js`
+`AppConfig`'i hiçbir yerde `window`'a atamıyor (sadece top-level `const`).
+Kod tabanındaki birçok dosya (`fr-tracker.js`, `oi-volume-panel.js`,
+`kom1-scanner.js`, `alarm-signal-history.js` vb.) `window.AppConfig?.X ||
+sabit_url` deseniyle bunu fark etmeden sessizce hep sabit fallback URL'e
+düşüyor — üretimde zararsız (fallback'ler gerçek URL'lerle eşleşiyor) ama
+"config-driven" görünen kod aslında hiç config okumuyor. Düzeltilmedi
+(geniş, ilgisiz bir refactor olurdu), sadece not düşüldü — yeni yazılan
+`alert-store.js` kodu bare `AppConfig` (doğru kapsam) + fallback kullanıyor.
+
+**Faz 2 (ayrı, gelecekte):** Çizimlerin sunucuya senkronizasyonu + eğik
+çizgi alarmlarının da sunucu tarafında izlenmesi.
+
+**Sonraki oturumda ilk iş:** production'da manuel bir alarm oluşturup
+(Telegram bildirimi işaretli), tarayıcıyı kapatıp fiyatın seviyeyi
+geçmesini bekleyip Telegram'a gerçekten düştüğünü doğrulamak (yerel
+sandbox'ta test edilemedi — hem MongoDB hem gerçek fiyat hareketi
+gerektiriyor).
 
 ---
 

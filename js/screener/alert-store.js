@@ -138,6 +138,44 @@ const AlertStore = (() => {
     return alert.price;
   }
 
+  // ── Sunucu aynası (Faz 1, 2026-08-26, kullanıcı onaylı kapsam) ──────
+  // gorevler4.md Görev-3: sadece MANUEL alarmlar (sourceDrawingId YOK)
+  // sunucuya arka planda kopyalanır — tarayıcı kapalıyken de tetiklenip
+  // Telegram'a düşebilsinler diye. Eğik çizgi alarmları (State.getDrawings()
+  // sadece tarayıcıda yaşıyor) BİLEREK kapsam dışı — sunucunun çizim
+  // geometrisine erişimi yok, o Faz 2'nin işi. Bu istemci tarafı BİLEREK
+  // senkron/localStorage kalıyor (mevcut tüm çağıranlar değişmeden çalışsın
+  // diye) — sunucu çağrıları sadece "fire-and-forget" bir ayna, hiçbir UI
+  // akışını bloklamaz/bekletmez.
+  // [2026-08-26 bulgusu] `window.AppConfig` her zaman undefined —
+  // app-config.js `const AppConfig` üstü kapsamda kalıyor, hiçbir yerde
+  // `window.AppConfig = AppConfig` YAPILMIYOR. Kod tabanındaki diğer birçok
+  // dosya (fr-tracker.js, oi-volume-panel.js vb.) bu yüzden zaten sabit bir
+  // fallback URL kullanıyor — aynı güvenli deseni burada da uyguluyoruz.
+  const _BACKEND = (typeof AppConfig !== 'undefined' && AppConfig.BACKEND_URL) || 'https://pintrade-uwg9.onrender.com';
+
+  function _mirrorCreate(alert) {
+    if (alert.sourceDrawingId) return;
+    fetch(`${_BACKEND}/api/alerts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(alert),
+    }).then(r => r.json()).then(saved => {
+      if (saved?._id) { alert.serverId = saved._id; _save(); }
+    }).catch(err => console.warn('[AlertStore] Sunucu aynası (create) başarısız, alarm yerel olarak çalışmaya devam ediyor:', err.message));
+  }
+  function _mirrorUpdate(alert) {
+    if (!alert.serverId) return;
+    fetch(`${_BACKEND}/api/alerts/${alert.serverId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(alert),
+    }).catch(err => console.warn('[AlertStore] Sunucu aynası (update) başarısız:', err.message));
+  }
+  function _mirrorDelete(serverId) {
+    if (!serverId) return;
+    fetch(`${_BACKEND}/api/alerts/${serverId}`, { method: 'DELETE' })
+      .catch(err => console.warn('[AlertStore] Sunucu aynası (delete) başarısız:', err.message));
+  }
+
   function _addAlert(fields) {
     const alert = {
       id: _uid(), createdAt: Date.now(), triggered: false, active: true,
@@ -147,6 +185,7 @@ const AlertStore = (() => {
     _alerts.push(alert);
     _save();
     _emit('alert:created', alert);
+    _mirrorCreate(alert);
     return alert;
   }
 
@@ -183,9 +222,10 @@ const AlertStore = (() => {
   function removeAlert(id) {
     const idx = _alerts.findIndex(a => a.id === id);
     if (idx === -1) return false;
-    _alerts.splice(idx, 1);
+    const [removed] = _alerts.splice(idx, 1);
     _save();
     _emit('alert:removed', { id });
+    _mirrorDelete(removed.serverId);
     return true;
   }
 
@@ -206,6 +246,7 @@ const AlertStore = (() => {
     alert.lastKnownPrice = null;
     _save();
     _emit('alert:updated', alert);
+    _mirrorUpdate(alert);
     return alert;
   }
 
@@ -269,8 +310,11 @@ const AlertStore = (() => {
           Toast.show(msg, 'info', dur);
         }
         if (_prefs.alertVolume !== false) _beep(_prefs.alertVolumeLevel);
-        // Telegram: henüz göndermiyor (sunucu taraflı bot entegrasyonu bekleniyor,
-        // bkz. gorevler3.md Görev 7) — tercih burada sadece işaretli kalıyor.
+        // [2026-08-26, Görev-3 Faz 1] Tarayıcı açıkken bu tetiklemeyi ÖNCE
+        // biz yakaladıysak, sunucuya "zaten tetiklendi" diye bildiriyoruz —
+        // aksi halde sunucunun kendi döngüsü de tetikleyip Telegram'a
+        // MÜKERRER bir bildirim düşürebilir.
+        _mirrorUpdate(a);
       } else {
         a.lastKnownPrice = price;
       }
