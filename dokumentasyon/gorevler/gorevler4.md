@@ -115,6 +115,42 @@ araştır** — 2.1/2.2 ile aynı kök nedene (CloudFront/rate-limit blok)
 bağlı olabilir ya da ayrı bir regresyon olabilir, `kom2-server-watcher.js`
 `_maybeRefreshUniverse()`/`fetchJson()` çağrılarından başla.
 
+**⚠ 2.5 — 2026-08-26'da canlıda DOĞRULANDI, hâlâ açık:** `GET https://
+pintrade-uwg9.onrender.com/api/kom2/status` (backend adresi artık bu,
+`0sb6` terk edildi — bkz. pintrade-yapisi.md) çağrıldığında `universe.total:
+87` (hâlâ ~500+ değil, tier1=87/tier2=0/tier3=0 — evren hâlâ tek katmanda
+sıkışık) ve `lastError: {"message":"BAN_SIGNAL_418","at":1787747466886}`
+(2026-08-26 12:31 UTC — bu OTURUM SIRASINDA, taze) görüldü, `nextAttemptAt`
+24 saat sonrası (2026-08-27 12:31 UTC). Bu sefer hata net (gerçek ban,
+2026-08-20'deki gizemli "beklenmeyen yanıt" değil) — sistem doğru teşhis
+edip doğru şekilde 24 saat geri çekildi, bu KISIM zaten doğru çalışıyor.
+
+Zamanlama incelendi (`server.js`'teki `_staggeredStart` gecikmeleri):
+Kom1=40000ms, Kom2 OI/LS=180000ms, Kom2 evren taraması=185000ms, hepsi
+5dk'lık interval'in katları olduğu için faz ilişkisi her turda SABİT.
+Kom2'nin evren taraması tek seferde ~500 sembolü değil, her tick'te
+sadece `UNIVERSE_SCAN_CHUNK_SIZE=40` sembollük bir parçayı (~20-35 saniye)
+işliyor (`kom2-server-watcher.js` `_advanceUniverseScan`) — bariz bir
+zamanlama çakışması bu incelemede bulunamadı. Pacing sabitlerini (`UNIVERSE_
+SCAN_GROUP_SIZE`/`_PACE_MS`/`_PAUSE_MS`) kanıt olmadan tahminle değiştirmek
+riskli (`.claude/CLAUDE.md` bot-architecture kuralı — "sık redeploy sorunu
+büyütebilir" dersi tam bu senaryo için yazılmıştı).
+
+**Yapılan tek güvenli iyileştirme:** `fetchJson()` artık 429/418 dışındaki
+HER hatada (CloudFront 403, farklı şekilli JSON hata gövdesi vb.) gerçek
+HTTP status kodunu + gövdenin ilk 200 karakterini hataya ekliyor —
+2026-08-20'deki gibi anlamsız "beklenmeyen yanıt" mesajları artık
+gelmeyecek, bir sonraki başarısız denemede (yarın veya sonrasında)
+`/api/kom2/status`'un `lastError` alanı gerçek sebebi gösterecek.
+
+**Sonraki oturumda ilk iş:** `nextAttemptAt` (2026-08-27 12:31 UTC)
+geçtikten sonra `/api/kom2/status`'a tekrar bak — eğer yine
+`BAN_SIGNAL_418` ise bu KALICI bir pacing sorunu demektir (pacing
+sabitleri gözden geçirilmeli); eğer farklı bir hata mesajı görünüyorsa
+(artık detaylı) yeni bir ipucu demektir; eğer başarılıysa ve
+`universe.total` gerçekten ~500'e çıkıyorsa sorun kendiliğinden çözülmüş
+olabilir (IP'nin genel ban geçmişi zamanla iyileşiyor olabilir).
+
 **Görev-7'nin (bot sağlık/izleme) bir parçası artık KALICI çözüldü:**
 Kullanıcının "her gün 11'de Kom2 kontrol edilip raporlanacaktı" beklentisi
 daha önce `CronCreate` (session-only, oturum/makine değişince kayboluyor

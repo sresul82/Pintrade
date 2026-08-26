@@ -102,7 +102,20 @@ function fetchJson(path) {
       res.on('data', d => body += d);
       res.on('end', () => {
         if (res.statusCode === 429 || res.statusCode === 418) { reject(new Error(`BAN_SIGNAL_${res.statusCode}`)); return; }
-        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        // [2026-08-26, gorevler4.md Görev-2.4 araştırması] Önceden 429/418
+        // dışındaki HER şey (CloudFront 403 blok sayfası, Binance'in kendi
+        // JSON hata gövdesi {code:-1003,...} vb.) sessizce yutulup dışarıya
+        // sadece anlamsız bir "beklenmeyen yanıt" mesajı sızıyordu —
+        // _lastError'a bakıp gerçek sebebi anlamak imkansızdı (bkz. 2026-08-20
+        // production bulgusu: universe 84'te sıkışmış, lastError bilgisiz).
+        // Artık gerçek status kodu + gövdenin ilk 200 karakteri hataya
+        // ekleniyor.
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+          return;
+        }
+        try { resolve(JSON.parse(body)); }
+        catch (e) { reject(new Error(`JSON parse hatası (HTTP ${res.statusCode}): ${body.slice(0, 200)}`)); }
       });
     });
     req.on('error', reject);
