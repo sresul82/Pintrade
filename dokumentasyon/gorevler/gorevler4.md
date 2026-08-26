@@ -223,7 +223,16 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   production'da menüden "1D Open" seçilip değerlerin makul göründüğünü
   ve `DayOpenPrice` koleksiyonunun UTC gece yarısında gerçekten
   yenilendiğini doğrulamak.
-- 6.4 `MiniFloatingWindow` OI Değişimi popout'u hâlâ boş.
+- 6.4 ✅ Aslında zaten 2026-08-15'te `OiVolumePanel` ile dolduruldu (bu
+  dosyadaki/`gorevler2.md`/`gorevler-durum-ozeti.md`'deki not 2026-08-01
+  tarihli ilk boş implementasyondan kalma, güncellenmemiş). 2026-08-26'da
+  ek iyileştirme: görünür nokta sayısı artık pencere genişliği/resize/TF'den
+  bağımsız SABİT 12 (`VISIBLE_POINTS`, önceki piksel-genişliğine-göre-
+  bar-sayısı yaklaşımı öngörülemez zaman pencerelerine yol açıyordu) +
+  zaman eksenine her noktanın saatini gösteren `tickMarkFormatter` eklendi.
+  **Sonraki oturumda ilk iş:** production'da OI popup'ı açıp TF değiştirip
+  hem 12 nokta sabit kalıyor mu hem zaman etiketleri görünüyor mu doğrulamak
+  (yerel sandbox'ın bilinen ağ kısıtı yüzünden bu turda test edilemedi).
 - 6.5 Görev 11.3'ün kozmetik kalanı (Status line/Scales/Canvas kontrolleri).
 
 ---
