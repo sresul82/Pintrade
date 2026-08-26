@@ -82,6 +82,7 @@ const WatchlistStore = (() => {
   let _market = _load(LS_MARKET, { type: 'futures', quote: 'USDT' });
   let _changeType = _load(LS_CHANGE_TYPE, 'rolling24h'); // 'rolling24h' | 'dayOpen'
   let _volumeType = _load(LS_VOLUME_TYPE, 'usd');        // 'usd' | 'standard'
+  if (_changeType === 'dayOpen') _ensureDayOpenPrices(); // önceki oturumdan kalmışsa snapshot'ı hemen çek
 
   if (!Array.isArray(_lists)) _lists = [];
   if (!Array.isArray(_hidden)) _hidden = [];
@@ -245,17 +246,41 @@ const WatchlistStore = (() => {
 
   /* ── Değişim (%) hesap tipi ───────────────────────────
      'rolling24h' → mevcut, çalışıyor (borsaların 24h ticker'ı).
-     'dayOpen'    → UTC gün başı fiyatına göre — henüz veri kaynağı yok
-     (500+ coin için günlük mum çekmek gerekiyor, ayrı bir iş).
-     Menüde görünür/seçilebilir ama seçilince "yakında" bildirimi çıkar,
-     screener'ın gösterdiği değer değişmez. */
+     'dayOpen'    → UTC gün başı fiyatına göre (2026-08-26). Ekstra Binance
+     isteği YOK: server.js zaten her 1dk'da çektiği ticker verisinden UTC
+     gün başına en yakın turda bir kerelik snapshot alıyor (bkz. server.js
+     DayOpenPrice/_maybeCaptureDayOpen). Tarayıcı bu snapshot'ı GET
+     /api/market/day-open'dan bir kez çeker, zaten akan canlı WS fiyatıyla
+     kendi hesaplar (bkz. screener-core.js _changePct). */
+  let _dayOpenPrices = null; // symbol (ör. 'BTCUSDT') -> fiyat, ilk fetch'e kadar null
+  let _dayOpenFetchPromise = null;
+
   function getChangeType() { return _changeType; }
 
+  /** Gerekirse snapshot'ı bir kez çeker (eş zamanlı çağrılarda tek istek). */
+  function _ensureDayOpenPrices() {
+    if (_dayOpenPrices || _dayOpenFetchPromise) return _dayOpenFetchPromise;
+    _dayOpenFetchPromise = fetch(`${AppConfig.BACKEND_URL}/api/market/day-open`)
+      .then(r => r.json())
+      .then(data => { _dayOpenPrices = data?.prices || {}; })
+      .catch(err => {
+        console.warn('[WatchlistStore] 1D Open snapshot alınamadı:', err.message);
+        _dayOpenPrices = {};
+      });
+    return _dayOpenFetchPromise;
+  }
+
+  /** ör. 'BTCUSDT' -> gün açılış fiyatı, snapshot henüz yoksa null. */
+  function getDayOpenPrice(symbol) {
+    return _dayOpenPrices ? (_dayOpenPrices[symbol] ?? null) : null;
+  }
+
   function setChangeType(type) {
-    if (type !== 'rolling24h') return false; // dayOpen henüz desteklenmiyor
+    if (type !== 'rolling24h' && type !== 'dayOpen') return false;
     if (_changeType === type) return true;
     _changeType = type;
     _save(LS_CHANGE_TYPE, _changeType);
+    if (type === 'dayOpen') _ensureDayOpenPrices();
     _emit('watchlist:changeTypeChanged', { type: _changeType });
     return true;
   }
@@ -286,7 +311,7 @@ const WatchlistStore = (() => {
     getActiveId, setActive,
     getAllColumns, getVisibleColumns, isColumnVisible, setColumnVisible, getGridTemplate,
     getMarket, setMarketType,
-    getChangeType, setChangeType,
+    getChangeType, setChangeType, getDayOpenPrice,
     getVolumeType, setVolumeType,
   };
 })();

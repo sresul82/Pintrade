@@ -299,6 +299,19 @@ const kom2ScanStateSchema = new mongoose.Schema({
 });
 const Kom2ScanState = mongoose.model('Kom2ScanState', kom2ScanStateSchema);
 
+// ── Watchlist "1D Open" değişim tipi (2026-08-26, kullanıcı onayıyla) ──
+// Ekstra Binance isteği YOK: collectBinanceData() zaten her 1 dakikada bir
+// TÜM sembollerin ticker'ını çekiyor (bot sinyalleri için) — bu koleksiyon
+// UTC gün başına en yakın turda o anki fiyatları bir kerelik kopyalıyor.
+// Tarayıcı bunu tek seferlik çekip, zaten akan canlı WS fiyatıyla
+// (`!miniTicker@arr`) kendi hesaplıyor — bkz. GET /api/market/day-open.
+const dayOpenPriceSchema = new mongoose.Schema({
+  symbol: { type: String, required: true, unique: true },
+  price:  Number,
+  day:    String, // UTC 'YYYY-MM-DD', bu fiyatın hangi gün için açılış olduğu
+});
+const DayOpenPrice = mongoose.model('DayOpenPrice', dayOpenPriceSchema);
+
 // ==========================================
 // 3. Arka Plan Veri Toplayıcı (Background Collector)
 // ==========================================
@@ -311,6 +324,33 @@ const _prevFR = {
   binance: new Map(), // symbol → fr değeri
   bybit:   new Map(),
 };
+
+// "1D Open" için UTC gün başı fiyatını hangi güne kadar zaten kaydettiğimiz
+// (server.js açılışında Mongo'dan yüklenir — restart'ta yanlışlıkla o anki
+// fiyatı "gün açılışı" sanıp üzerine yazmasın diye).
+let _dayOpenCapturedDay = null;
+
+/** UTC gün başı fiyatını, gün ilk kez görülüyorsa bir kerelik kaydeder. */
+async function _maybeCaptureDayOpen(tkMap) {
+  const today = new Date().toISOString().slice(0, 10); // UTC 'YYYY-MM-DD'
+  if (_dayOpenCapturedDay === today) return;
+  try {
+    const ops = Object.keys(tkMap)
+      .filter(symbol => symbol.endsWith('USDT'))
+      .map(symbol => ({
+        updateOne: {
+          filter: { symbol },
+          update: { $set: { price: parseFloat(tkMap[symbol].lastPrice) || 0, day: today } },
+          upsert: true,
+        },
+      }));
+    if (ops.length > 0) await DayOpenPrice.bulkWrite(ops);
+    _dayOpenCapturedDay = today;
+    console.log(`[DayOpenPrice] ${today} için ${ops.length} sembolün açılış fiyatı kaydedildi.`);
+  } catch (e) {
+    console.warn('[DayOpenPrice] Kayıt başarısız, bir sonraki turda tekrar denenecek:', e.message);
+  }
+}
 
 // ── Binance: FR + OI + Volume (her 1dk) ─────────────────────────────
 /**
@@ -347,6 +387,8 @@ async function collectBinanceData() {
 
     const tkMap = {};
     tkResp.forEach(t => { tkMap[t.symbol] = t; });
+
+    await _maybeCaptureDayOpen(tkMap);
 
     const now       = new Date();
     const histDocs  = []; // MarketData'ya yazılacaklar (FR değişenler)
@@ -791,6 +833,13 @@ mongoose.connection.once('open', () => {
   _staggeredStart(collectBybitLSData,    12000,  5 * 60 * 1000);  // Bybit L/S — aynı liste, ayrı borsa
   _staggeredStart(collectSymbolStatusChanges, 20000, 15 * 60 * 1000); // Delist/yeni-liste taraması — hafif (2 istek), sık gerekmez
 
+  // "1D Open" gün açılış fiyatı hangi güne kadar zaten kaydedilmiş —
+  // restart sonrası o anki fiyatı yanlışlıkla "yeni gün açılışı" sanıp
+  // gerçek açılış anındaki değerin üzerine yazmasın diye.
+  DayOpenPrice.findOne({}, { day: 1, _id: 0 }).lean()
+    .then(doc => { if (doc) _dayOpenCapturedDay = doc.day; })
+    .catch(err => console.warn('[DayOpenPrice] Kayıtlı gün bilgisi yüklenemedi (ilk çalıştırma olabilir):', err.message));
+
   // Kom1 sunucu gözlemi (gorevler3.md Görev 5, 2026-08-11 → Görev 6,
   // 2026-08-12): ~5 dakikada bir, o turda "sırası gelen" (katman aralığı
   // dolmuş) sembolleri tarar — artık sabit 11 değil, hacme göre 3 katmana
@@ -1144,6 +1193,21 @@ app.post('/api/kom1/signals', async (req, res) => {
 // çalıştığını görmek için (tarayıcı hiç açılmasa bile).
 app.get('/api/kom1/status', (req, res) => {
   res.json({ pending: Kom1ServerWatcher.getPending(), universe: Kom1ServerWatcher.getUniverseSummary() });
+});
+
+// GET /api/market/day-open — Watchlist "1D Open" değişim tipi için UTC gün
+// başı fiyat snapshot'ı (bkz. DayOpenPrice şeması yukarıda). Tarayıcı bunu
+// bir kez çekip, zaten akan canlı WS fiyatıyla kendi hesaplıyor.
+app.get('/api/market/day-open', async (req, res) => {
+  try {
+    const docs = await DayOpenPrice.find({}, { _id: 0, __v: 0 }).lean();
+    const prices = {};
+    let day = null;
+    docs.forEach(d => { prices[d.symbol] = d.price; day = d.day; });
+    res.json({ day, prices });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Kom2 Sunucu Gözlemi (2026-08-17, kullanıcı onayıyla) ─────────────

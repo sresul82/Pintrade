@@ -209,7 +209,7 @@ const WatchlistMenu = (() => {
   ══════════════════════════════════════════════════ */
   const CHANGE_TYPES = [
     { id: 'rolling24h', label: '24h Rolling' },
-    { id: 'dayOpen',    label: '1D Open', soon: true },
+    { id: 'dayOpen',    label: '1D Open' },
   ];
   const VOLUME_TYPES = [
     { id: 'usd',      label: 'USD' },
@@ -275,7 +275,7 @@ const WatchlistMenu = (() => {
       const id = radio.dataset.radioId;
       if (group === 'change') {
         if (!store.setChangeType(id)) {
-          if (window.Toast) Toast.show('1D Open coming soon — still showing 24h Rolling', 'info');
+          if (window.Toast) Toast.show('Change type not available yet', 'info');
           return;
         }
       } else if (group === 'volume') {

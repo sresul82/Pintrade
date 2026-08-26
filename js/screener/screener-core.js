@@ -473,6 +473,21 @@ const ScreenerCore = (() => {
     });
   }
 
+  /**
+   * "Chg%" değeri — WatchlistStore'un değişim tipine göre (2026-08-26):
+   * 'rolling24h' → borsanın kendi rolling24h yüzdesi (ücretsiz, zaten geliyor).
+   * 'dayOpen'    → UTC gün açılışına göre, DayOpenPrice snapshot'ından
+   * (bkz. watchlist-store.js getDayOpenPrice) canlı fiyatla hesaplanır.
+   * Sadece Binance FUTURES için (SPOT/Bybit kapsam dışı, bkz. gorevler2.md
+   * Görev 7 notu). Snapshot henüz gelmemiş/sembol yoksa rollingPct'e düşer.
+   */
+  function _changePct(symbolFull, price, rollingPct) {
+    if (window.WatchlistStore?.getChangeType() !== 'dayOpen') return rollingPct;
+    const dayOpen = window.WatchlistStore.getDayOpenPrice(symbolFull);
+    if (!dayOpen || !price) return rollingPct;
+    return ((price - dayOpen) / dayOpen) * 100;
+  }
+
   /* ── Binance — tüm USDT perpetual listesi ─────────── */
   // OI değerleri burada eagerly çekilmez: MarketDataStore zaten tüm market için
   // her 60sn'de bir batch halinde OI çekip 'mds:oi' event'iyle yayınlıyor
@@ -512,10 +527,12 @@ const ScreenerCore = (() => {
           const tk = tkMap[f.symbol] || {};
           const sym = f.symbol.replace(/USDT$/, '');
           const prev = prevRows.get(sym);
+          const price = parseFloat(f.markPrice) || null;
+          const rollingPct = tk.priceChangePercent ? parseFloat(tk.priceChangePercent) : null;
           return {
             sym,
-            price: parseFloat(f.markPrice) || null,
-            pct:   tk.priceChangePercent ? parseFloat(tk.priceChangePercent) : null,
+            price,
+            pct:   _changePct(f.symbol, price, rollingPct),
             fr:    parseFloat(f.lastFundingRate) || null,
             frh:   _frInterval(window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || f.nextFundingTime),
             nextFundingTime: window.fundingIntervalManager?.getNextFundingTime(f.symbol, 'binance') || parseInt(f.nextFundingTime) || 0,
@@ -718,7 +735,7 @@ const ScreenerCore = (() => {
       const row = _rows.find(r => r.sym === sym);
       if (row) {
         row.price   = price;
-        row.pct     = pct24h;
+        row.pct     = _changePct(symbol, price, pct24h);
         row.vol     = volume24h;
         row.volBase = volumeBase24h;
         _throttledRender();

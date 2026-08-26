@@ -210,7 +210,19 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   yüklüyor (performans borcu).
 - 6.2 Fib Extension/Channel/Time Zone araçları merkezi `_fibAxis`
   mimarisini kullanmıyor.
-- 6.3 Sütun menüsü "1D Open" işlevsiz (`dayOpen` veri kaynağı yok).
+- 6.3 ✅ (2026-08-26, kod tamamlandı — production'da henüz doğrulanmadı)
+  Sütun menüsü "1D Open" artık işlevsel. Kullanıcının önerisiyle EKSTRA
+  BINANCE İSTEĞİ YOK: `server.js`'in zaten her 1dk'da çektiği ticker
+  verisinden (`collectBinanceData`), UTC gün başına en yakın turda bir
+  kerelik `DayOpenPrice` koleksiyonuna snapshot alınıyor
+  (`_maybeCaptureDayOpen`). Yeni endpoint: `GET /api/market/day-open`.
+  Tarayıcı bunu bir kez çekip zaten akan canlı `!miniTicker@arr` WS
+  fiyatıyla kendi hesaplıyor (`watchlist-store.js getDayOpenPrice` +
+  `screener-core.js _changePct`, sadece Binance FUTURES — SPOT/Bybit
+  kapsam dışı, mevcut karar korundu). **Sonraki oturumda ilk iş:**
+  production'da menüden "1D Open" seçilip değerlerin makul göründüğünü
+  ve `DayOpenPrice` koleksiyonunun UTC gece yarısında gerçekten
+  yenilendiğini doğrulamak.
 - 6.4 `MiniFloatingWindow` OI Değişimi popout'u hâlâ boş.
 - 6.5 Görev 11.3'ün kozmetik kalanı (Status line/Scales/Canvas kontrolleri).
 
