@@ -297,6 +297,8 @@ function _tierScanAgeMs() {
   return ageMs;
 }
 
+function getLastTickAt() { return _lastTickAt; }
+
 function getUniverseSummary() {
   const counts = { 1: 0, 2: 0, 3: 0 };
   for (const s of _universe.values()) counts[s.tier] = (counts[s.tier] || 0) + 1;
@@ -394,10 +396,19 @@ function getPending() { return [..._pending.values()]; }
 // kilidi bunu engelliyor.
 let _ticking = false;
 
+// gorevler4.md Görev-7 (2026-08-26) — botun sessizce çökmesi/takılması ile
+// "çalışıyor ama yeni sinyal/veri yok" durumunu ayırt edebilmek için: her
+// tur BAŞLADIĞINDA (bitmesini beklemeden) damgalanır. Günlük zamanlanmış
+// kontrol bunu okuyup "son tur X dakika önceydi, beklenen ~5dk" diye
+// karşılaştırabilir — normalde hep taze kalması gerekir, çok eskiyse
+// (örn. >30dk) tick() döngüsünün bir yerde exception'la öldüğüne işarettir.
+let _lastTickAt = null;
+
 /** @param {(confirmed: object) => Promise<void>|void} onConfirmed */
 async function tick(onConfirmed) {
   if (_ticking) { console.warn('[Kom1ServerWatcher] Önceki tur hâlâ sürüyor, bu tur atlandı.'); return; }
   _ticking = true;
+  _lastTickAt = Date.now();
   try {
     await _tick(onConfirmed);
   } finally {
@@ -451,5 +462,5 @@ async function _tick(onConfirmed) {
 
 module.exports = {
   tick, getPending,
-  loadScanState, getScanStateForPersist, getUniverseSummary,
+  loadScanState, getScanStateForPersist, getUniverseSummary, getLastTickAt,
 };

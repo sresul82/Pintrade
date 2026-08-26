@@ -1192,7 +1192,15 @@ app.post('/api/kom1/signals', async (req, res) => {
 // + evren/katman özeti (gorevler3.md Görev 6), izleyicinin gerçekten
 // çalıştığını görmek için (tarayıcı hiç açılmasa bile).
 app.get('/api/kom1/status', (req, res) => {
-  res.json({ pending: Kom1ServerWatcher.getPending(), universe: Kom1ServerWatcher.getUniverseSummary() });
+  res.json({
+    pending: Kom1ServerWatcher.getPending(),
+    universe: Kom1ServerWatcher.getUniverseSummary(),
+    // gorevler4.md Görev-7 (2026-08-26) — botun sessizce çökmesi/takılması
+    // ile "çalışıyor ama yeni sinyal/veri yok" durumunu ayırt etmek için.
+    // Normal tick aralığı 5dk; bu değer belirgin şekilde daha eskiyse
+    // (ör. >30dk) tick() döngüsünün bir yerde exception'la öldüğüne işarettir.
+    lastTickAt: Kom1ServerWatcher.getLastTickAt(),
+  });
 });
 
 // GET /api/market/day-open — Watchlist "1D Open" değişim tipi için UTC gün
@@ -1228,7 +1236,12 @@ app.get('/api/kom2/signals', async (req, res) => {
 // GET /api/kom2/status — bekleyen adaylar + evren özeti (Kom1'in
 // /api/kom1/status'üyle aynı şekil).
 app.get('/api/kom2/status', (req, res) => {
-  res.json({ pending: Kom2ServerWatcher.getPending(), universe: Kom2ServerWatcher.getUniverseSummary() });
+  res.json({
+    pending: Kom2ServerWatcher.getPending(),
+    universe: Kom2ServerWatcher.getUniverseSummary(),
+    // gorevler4.md Görev-7 (2026-08-26) — bkz. /api/kom1/status'taki AYNI not.
+    lastTickAt: Kom2ServerWatcher.getLastTickAt(),
+  });
 });
 
 // ── Sağlık Kontrolü ─────────────────────────────────────────────────

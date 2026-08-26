@@ -545,6 +545,12 @@ function _sweepExpired() {
 function getPending() { return [..._pending.values()]; }
 
 let _ticking = false;
+// gorevler4.md Görev-7 (2026-08-26) — Kom1ServerWatcher'daki AYNI desen
+// (bkz. oradaki not): botun sessizce çökmesi/takılması ile "çalışıyor ama
+// yeni sinyal/veri yok" durumunu ayırt etmek için her tur başladığında
+// damgalanır.
+let _lastTickAt = null;
+function getLastTickAt() { return _lastTickAt; }
 
 /**
  * @param {(symbol:string, sinceMs:number) => Promise<{timestamp:number,value:number}[]>} queryOiHistory
@@ -554,6 +560,7 @@ let _ticking = false;
 async function tick(queryOiHistory, queryLsHistory, onConfirmed) {
   if (_ticking) { console.warn('[Kom2ServerWatcher] Önceki tur hâlâ sürüyor, bu tur atlandı.'); return; }
   _ticking = true;
+  _lastTickAt = Date.now();
   try {
     await _tick(queryOiHistory, queryLsHistory, onConfirmed);
   } finally {
@@ -602,6 +609,7 @@ module.exports = {
   loadScanState,
   getScanStateForPersist,
   getUniverseSummary,
+  getLastTickAt,
   volumeTier,
   fetchJson,
   fetchKlines,

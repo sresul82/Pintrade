@@ -362,11 +362,38 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
 
 ## Görev-7 — Bot sağlık/izleme mekanizması
 
-**Durum: Hiç başlanmadı.** Botların (Kom1/Kom2) gerçek zamanlı çalışır
-durumda tutulması için izleme/health-check katmanı — şu an sadece konsol
-logları var (ve Kom2 için 2026-08-18'de eklenen `lastError`/`scan`
-teşhis alanları, bkz. Görev-2). Kom1'in kendi `kom1-daily-signal-check`
-zamanlanmış görevi bu ihtiyacın bir kısmını zaten karşılıyor.
+**Durum: ⏳ Kısmen ilerledi (2026-08-26) — production'da henüz doğrulanmadı.**
+İlk incelemede bu maddenin "hiç başlanmadı" olmadığı, sanıldığından daha
+ileride olduğu ortaya çıktı:
+- **Kom1:** `kom1-daily-signal-check` zamanlanmış görevi (bu makinede,
+  `C:\Users\PC\.claude\scheduled-tasks\`) canlı olarak doğrulandı — her
+  gün 11:00'de çalışıyor, bir sonraki çalışma 2026-08-27T06:09 UTC.
+- **Kom2:** ayrı bir cloud routine var (`trig_01VgVBbSCSctroyujARwGxR7`,
+  bkz. Görev-2), her gün Tashkent 11:00'de `/api/kom2/status` kontrol
+  ediyor.
+
+Yani "günlük özet + anomali uyarısı" katmanı ikisi için de zaten mevcut.
+Gerçekten eksik olan tek şey: hiçbir yerde **"bot en son ne zaman
+gerçekten bir tur attı"** bilgisi tutulmuyordu — yani bot `tick()` içinde
+bir exception'la sessizce ölse (döngü bir daha hiç çalışmasa), bunu ancak
+ertesi günkü rapor (ve o da dolaylı olarak, "yeni sinyal yok" ile
+karıştırılarak) gösterebilirdi.
+
+**Eklenen (2026-08-26):** Hem `kom1-server-watcher.js` hem
+`kom2-server-watcher.js`'e `_lastTickAt` (her `tick()` BAŞLADIĞINDA
+damgalanır, bitmesini beklemez) + `getLastTickAt()` eklendi, `/api/kom1/
+status` ve `/api/kom2/status`'a `lastTickAt` (epoch ms) alanı olarak
+yansıtıldı. `kom1-daily-signal-check` görevinin talimatı güncellendi:
+artık `lastTickAt` şu andan **>20 dakika** eskiyse (normal tur aralığı
+~5dk) kullanıcıya hemen bildiriyor — botun tick döngüsünün sessizce
+öldüğünün en erken işareti bu olacak.
+
+**Sonraki oturumda ilk iş:**
+1. Production'da `/api/kom1/status` ve `/api/kom2/status`'un artık
+   `lastTickAt` döndürdüğünü doğrula.
+2. Kom2'nin cloud routine'ine (yukarıdaki link) AYNI heartbeat kontrolünü
+   elle eklemek gerekiyor — bu oturumda o routine'i düzenleyecek bir araç
+   yoktu, sadece Kom1'in yerel zamanlanmış görevi güncellenebildi.
 
 ---
 
