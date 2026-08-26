@@ -236,7 +236,6 @@ function initContextMenus() {
 // (gerçek bir order execution/broker terminali değiliz) — tamamen kaldırıldı.
 const TABS = [
   { id: 'symbol',     label: 'Symbol',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M6 3v12M12 5v10M4 6h4M10 8h4"/></svg>' },
-  { id: 'statusline', label: 'Status line',      icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M3 4h12v2H3zM3 8h12v2H3zM3 12h8v2H3z"/></svg>' },
   { id: 'scales',     label: 'Scales and lines', icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M4 2v14h12" stroke-width="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="13" cy="6" r="1.5"/><path d="M8 10l5-4"/></svg>' },
   { id: 'canvas',     label: 'Canvas',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><path d="M12 4l2 2-7 7-3 1 1-3 7-7zM11 5l2 2"/></svg>' },
   { id: 'alerts',     label: 'Alerts',           icon: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor"><circle cx="9" cy="9" r="6"/><path d="M9 5v4l2 2M1 1l3 3M17 1l-3 3"/></svg>' },
@@ -324,20 +323,6 @@ function tabSymbol() {
   `;
 }
 
-function tabStatusline() {
-  return `
-    ${buildSection('INSTRUMENT')}
-    ${buildRow(buildCheck('Logo', true, {key:'statusLogo'}), '')}
-    ${buildRow(buildCheck('Title', true, {key:'statusTitle'}), buildSelect(['Name', 'Symbol', 'Symbol and name'], 'Name', 'statusTitleFormat'))}
-    ${buildRow(buildCheck('Open market status', true, {key:'statusMarket'}), '')}
-    ${buildRow(buildCheck('Chart values', true, {key:'statusChartValues'}), '')}
-    ${buildRow(buildCheck('Bar change values', true, {key:'statusBarChange'}), '')}
-    ${buildRow(buildCheck('Volume', true, {key:'showVolume'}), '')}
-    ${buildRow(buildCheck('Last day change values', false, {key:'statusLastDayChange'}), '')}
-    ${buildRow(buildCheck('Background', true, {key:'statusBg'}), buildSlider(50))}
-  `;
-}
-
 function tabScales() {
   let symbolOpts = buildMultiSelect([{label:'Name', key:'symName', checked:true}, {label:'Value', key:'symValue', checked:true}, {label:'Line', key:'symLine', checked:true}]) + buildLineToolBtn('symbolLabelColor', '#f23645', 1, 'solid', false);
   return `
@@ -373,7 +358,8 @@ function tabCanvas() {
     ${buildRow('Grid lines', buildSelect(['Vert and horz', 'Vert only', 'Horz only', 'None'], 'Vert and horz', 'gridType') + buildLineToolBtn('gridVertColor', '#363c4e', 1, 'solid', false) + buildLineToolBtn('gridHorzColor', '#363c4e', 1, 'solid', false))}
     ${buildRow('Crosshair', buildLineToolBtn('crosshairColor', '#787b86', 1, 'solid', false))}
     ${buildRow('Watermark', buildSelect(['Ticker', 'Interval', 'Description'], 'Ticker', 'watermarkMode') + buildLineToolBtn('watermarkColor', '#363c4e', 1, 'solid', false))}
-    
+    ${buildRow(buildCheck('Volume', true, {key:'showVolume'}), '')}
+
     ${buildSection('SCALES')}
     ${buildRow('Text', buildLineToolBtn('scaleTextColor', '#d1d4dc', 1, 'solid', false) + buildSelect(['10', '12', '14', '16', '18', '20', '22', '24', '26', '28', '30', '32', '34', '36', '38', '40'], '12', 'scaleFontSize'))}
     ${buildRow('Lines', buildLineToolBtn('scaleLinesColor', '#363c4e', 1, 'solid', false))}
@@ -477,7 +463,6 @@ function initSettings() {
           </div>
           <div class="tv-content">
             <div class="tv-tab-pane" data-tab="symbol">${tabSymbol()}</div>
-            <div class="tv-tab-pane" data-tab="statusline">${tabStatusline()}</div>
             <div class="tv-tab-pane" data-tab="scales">${tabScales()}</div>
             <div class="tv-tab-pane" data-tab="canvas">${tabCanvas()}</div>
             <div class="tv-tab-pane" data-tab="alerts">${tabAlerts()}</div>

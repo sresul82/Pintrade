@@ -263,11 +263,20 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
   Kapsam araştırıldığında ilk göründüğünden büyük çıktı: **Status Line
   sekmesi (Logo/Title/Market status/Chart values/Bar change/Volume/
   Background) bu projede HİÇ VAR OLMAYAN bir arayüz özelliğine karşılık
-  geliyor** — TV'nin ana chart üzerindeki sol-üst OHLC bindirmesi bu
+  geliyordu** — TV'nin ana chart üzerindeki sol-üst OHLC bindirmesi bu
   projede hiç inşa edilmemiş (mevcut `.pane-hdr`/`.ohlcv-row` kısmen
-  benzer ama birebir değil). Bu "bağlamak" değil sıfırdan yeni bir UI
-  özelliği inşa etmek demek — görsel doğrulama yapılamayan bu oturumda
-  riskli, YAPILMADI. Ayrıca Scales/Canvas'taki bazı kontrollerin
+  benzer ama birebir değil). Bağlamak yerine sıfırdan yeni bir UI özelliği
+  inşa etmek gerekiyordu — görsel doğrulama yapılamayan bu oturumda riskli
+  bulundu, **kullanıcı kararıyla (2026-08-26) sekmenin tamamı kaldırıldı**
+  ("pek ihtiyaç duyulabilecek bir özellik değil şimdilik"). Tek gerçekten
+  çalışan kontrolü (`showVolume` — hacim histogramı aç/kapa) Canvas
+  sekmesine (`CHART BASIC STYLES` altına, Watermark'ın hemen altına)
+  taşındı, kaybolmadı. `TABS` dizisinden, render satırından, `tabStatusline()`
+  fonksiyonundan tamamen silindi — RSI'nin kendi ayrı "status line"
+  (Values/Inputs in status line) özelliğiyle karıştırılmasın, o ayrı ve
+  dokunulmadı.
+
+  Ayrıca Scales/Canvas'taki bazı kontrollerin
   (Lock price to bar ratio, No overlapping labels, Plus button, Currency/
   Unit visibility, Scale mode visibility, Navigation/Pane button
   visibility, Save left edge, Symbol label style) lightweight-charts'ta
@@ -294,11 +303,11 @@ Hiçbiri acil değil, birikmiş küçük borçlar:
 
   **Sonraki oturumda ilk iş:** production'da watermark rengini değiştirip
   görünüp görünmediğini, marj-sağ değerini değiştirip mumların sağındaki
-  boşluğun değiştiğini, ve Scales > Time hours format'ı 12-hours yapıp
-  crosshair/eksen saatlerinin "6:00pm" gibi göründüğünü doğrulamak (yerel
-  sandbox'ta görsel test yapılamadı). Status Line'ın gerçek bir özellik
-  olarak inşa edilip edilmeyeceği kullanıcıya sorulmalı — büyük, ayrı bir
-  iş (RSI'nin aldığı gibi fazlı bir oturum gerekebilir).
+  boşluğun değiştiğini, Scales > Time hours format'ı 12-hours yapıp
+  crosshair/eksen saatlerinin "6:00pm" gibi göründüğünü, ve ayarlar
+  penceresinde artık "Status line" sekmesinin hiç görünmediğini ama
+  "Volume" checkbox'ının Canvas sekmesinde çalışır durumda olduğunu
+  doğrulamak (yerel sandbox'ta görsel test yapılamadı).
 
 ---
 
