@@ -281,10 +281,31 @@ function getScanStateForPersist() {
   return out;
 }
 
+// Her tier için EN SON taranan sembolün ne kadar önce tarandığını (ms) döner
+// — rotasyonun fiilen çalıştığını (özellikle tier3'ün 3 saatlik aralığa
+// uyup uymadığını) log/gözlem beklemeden tek istekle doğrulamak için.
+function _tierScanAgeMs() {
+  const now = Date.now();
+  const mostRecent = { 1: 0, 2: 0, 3: 0 };
+  for (const s of _universe.values()) {
+    if (s.lastScannedAt > mostRecent[s.tier]) mostRecent[s.tier] = s.lastScannedAt;
+  }
+  const ageMs = {};
+  for (const tier of [1, 2, 3]) {
+    ageMs[tier] = mostRecent[tier] ? now - mostRecent[tier] : null; // null = bu tier'da hiç tarama olmamış
+  }
+  return ageMs;
+}
+
 function getUniverseSummary() {
   const counts = { 1: 0, 2: 0, 3: 0 };
   for (const s of _universe.values()) counts[s.tier] = (counts[s.tier] || 0) + 1;
-  return { total: _universe.size, tier1: counts[1], tier2: counts[2], tier3: counts[3], lastRefreshedAt: _lastUniverseRefresh || null };
+  const ageMs = _tierScanAgeMs();
+  return {
+    total: _universe.size, tier1: counts[1], tier2: counts[2], tier3: counts[3],
+    lastRefreshedAt: _lastUniverseRefresh || null,
+    tierLastScanAgoMs: ageMs,
+  };
 }
 
 // "SYM_tf" -> { symbol, bigTf, rcMid, wtVal, wtPrev, price, firedAt, expiresAt }
