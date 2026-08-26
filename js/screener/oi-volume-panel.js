@@ -24,20 +24,13 @@ const OiVolumePanel = (() => {
   const TF_SECONDS  = { '5m': 300, '15m': 900, '1H': 3600, '4H': 14400, '1D': 86400 };
   const BINANCE_TF  = { '5m': '5m', '15m': '15m', '1H': '1h', '4H': '4h', '1D': '1d' };
   const BYBIT_TF    = { '5m': '5', '15m': '15', '1H': '60', '4H': '240', '1D': 'D' };
-  // [2026-08-15, kullanıcı isteği] TF değiştikçe grafik "yakınlaşsın" — her
-  // TF'te sondan en fazla bu kadar bar görünür (setVisibleLogicalRange ile).
-  // Küçük TF'lerde bar süresi kısa olduğu için bu aynı bar sayısı otomatik
-  // olarak daha dar/güncel bir zaman penceresine denk gelir (5m: ~3.3s,
-  // 1D: veri tavanı 48s olduğu için zaten tamamı görünür).
-  const VISIBLE_BARS = 40;
-  // [2026-08-15, kullanıcı isteği] Popup resize edilebilir (hem dikey hem
-  // yatay) — genişletilince zaman ekseninde daha fazla bar/zaman görünsün
-  // (ana chart'ta olduğu gibi). Sabit bar sayısı yerine, mevcut piksel
-  // genişliğine göre "bu genişlikte kaç bar sığar" hesaplanıyor.
-  const BAR_PX = 6;
-  function _barsForWidth(w) {
-    return Math.max(15, Math.floor((w || 0) / BAR_PX)) || VISIBLE_BARS;
-  }
+  // [2026-08-26, kullanıcı isteği] Görünür nokta sayısı SABİT — pencere
+  // genişliği/resize/TF fark etmez, her zaman sondan tam VISIBLE_POINTS
+  // kadar nokta gösterilir. Zaman penceresi bu yüzden TF'e göre değişir
+  // (15m'de son 3 saat, 1H'de son 12 saat, 1D'de son 12 gün vb.) — önceki
+  // piksel-genişliğine-göre-bar-sayısı yaklaşımı (BAR_PX) resize'da/geniş
+  // panellerde öngörülemez bir zaman aralığına yol açıyordu.
+  const VISIBLE_POINTS = 12;
 
   let _oiChart = null, _oiSeries = null, _oiEl = null;
   let _volChart = null, _volSeries = null, _volEl = null;
@@ -74,7 +67,20 @@ const OiVolumePanel = (() => {
       layout: { background: { type: 'solid', color: 'transparent' }, textColor: _cssVar('--text-primary', '#d1d4dc'), fontSize: 10 },
       grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
       rightPriceScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)') },
-      timeScale: { borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)'), timeVisible: true },
+      // [2026-08-26, kullanıcı isteği] Sadece 12 nokta olduğu için HER birine
+      // etiket sığıyor — imleci noktaya götürmeden de hangi saat olduğu
+      // görünsün istendi. 1D TF'de saat:dakika anlamsız (hep 00:00) olacağı
+      // için o TF'te tarih (GG/AA) gösteriliyor, diğerlerinde saat:dakika.
+      timeScale: {
+        borderColor: _cssVar('--border-primary', 'rgba(255,255,255,0.1)'),
+        timeVisible: true,
+        tickMarkFormatter: (time) => {
+          const d = new Date(time * 1000);
+          return _tf === '1D'
+            ? d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })
+            : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        },
+      },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       // OI ve Volume'un sağ eksen etiketleri (7,037,729,788.00 gibi) uzun
       // olunca iki grafiğin çizim alanı hizasız duruyordu — K/M/B kısaltması
@@ -164,17 +170,16 @@ const OiVolumePanel = (() => {
     _attachTooltip(_oiChart, _oiSeries, _oiEl, _fmtVal);
     _attachTooltip(_volChart, _volSeries, _volEl, _fmtVal);
 
-    // [2026-08-15, kullanıcı isteği] Sadece piksel boyutunu değil, görünür
-    // bar sayısını da yeniden hesaplıyor — popup genişletildikçe zaman
-    // ekseninde daha fazla bar/zaman görünsün.
+    // Görünür nokta sayısı SABİT (VISIBLE_POINTS) — resize sadece piksel
+    // boyutunu günceller, zaman penceresi değişmez (kullanıcı isteği).
     _ro = new ResizeObserver(() => {
       if (_oiEl && _oiChart) {
         _oiChart.resize(_oiEl.clientWidth, _oiEl.clientHeight);
-        _applyZoom(_oiChart, _oiDataLen, _barsForWidth(_oiEl.clientWidth));
+        _applyZoom(_oiChart, _oiDataLen);
       }
       if (_volEl && _volChart) {
         _volChart.resize(_volEl.clientWidth, _volEl.clientHeight);
-        _applyZoom(_volChart, _volDataLen, _barsForWidth(_volEl.clientWidth));
+        _applyZoom(_volChart, _volDataLen);
       }
     });
     _ro.observe(_oiEl);
@@ -210,15 +215,13 @@ const OiVolumePanel = (() => {
     });
   }
 
-  /** setData() sonrası tüm veriyi (fitContent) değil, sondan VISIBLE_BARS
-   *  kadarını gösterir — TF küçüldükçe bar süresi kısaldığı için bu aynı bar
-   *  sayısı otomatik olarak daha dar/güncel bir zaman penceresi anlamına
-   *  gelir (kullanıcı isteği: "TF değiştikçe grafik çizgisi yakınlaşsın"). */
-  function _applyZoom(chart, barCount, barsVisible) {
+  /** setData() sonrası tüm veriyi (fitContent) değil, sondan tam
+   *  VISIBLE_POINTS kadarını gösterir — pencere genişliği/resize'dan
+   *  bağımsız, sabit nokta sayısı (kullanıcı isteği, 2026-08-26). */
+  function _applyZoom(chart, barCount) {
     if (!chart || !barCount) return;
-    const visible = barsVisible || VISIBLE_BARS;
     const to = barCount - 1 + 2; // sağda birkaç bar boşluk
-    const from = Math.max(0, barCount - visible);
+    const from = Math.max(0, barCount - VISIBLE_POINTS);
     chart.timeScale().setVisibleLogicalRange({ from, to });
   }
 
@@ -238,7 +241,7 @@ const OiVolumePanel = (() => {
     if (!data.length) return;
     _oiSeries.setData(data);
     _oiDataLen = data.length;
-    _applyZoom(_oiChart, _oiDataLen, _barsForWidth(_oiEl?.clientWidth));
+    _applyZoom(_oiChart, _oiDataLen);
   }
 
   async function _loadOi(symbol, exchange) {
@@ -276,11 +279,12 @@ const OiVolumePanel = (() => {
   async function _loadVolume() {
     if (!_volSeries || !_currentSymbol) return;
     try {
-      const data = await _fetchKlines(_currentSymbol, _currentExchange, _tf);
+      // Sadece son VISIBLE_POINTS gösterileceği için o kadarını (+küçük pay) çekmek yeterli.
+      const data = await _fetchKlines(_currentSymbol, _currentExchange, _tf, VISIBLE_POINTS + 5);
       if (!data.length) return;
       _volSeries.setData(data);
       _volDataLen = data.length;
-      _applyZoom(_volChart, _volDataLen, _barsForWidth(_volEl?.clientWidth));
+      _applyZoom(_volChart, _volDataLen);
     } catch (e) {
       console.warn('[OiVolumePanel] Volume geçmişi çekilemedi:', e.message);
     }
