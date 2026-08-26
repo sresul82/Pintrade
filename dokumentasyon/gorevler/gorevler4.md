@@ -58,9 +58,8 @@ aşağıda) — bu madde sadece RSI'ı kapsıyor.
     her çizime `d.paneKey` (null=ana panel, indikatör id=subpane) eklendi,
     render/hit-test `_renderPaneKey` bayrağıyla doğru paneli/seriyi
     kullanıyor. Geriye dönük uyumlu (eski çizimler ana panel gibi davranır).
-    **Kullanıcı henüz production'da TAM doğrulamadı — bir sonraki oturumda
-    ilk iş bu olmalı: RSI'ye trendline çiz, paneli büyüt/kaydır, birlikte
-    hareket ediyor mu kontrol et.**
+    **Kullanıcı tarafından production'da doğrulandı (2026-08-26) — RSI'ye
+    çizilen trendline, panel büyütülüp/panlanınca birlikte hareket ediyor.**
 
 **Bilinçli ertelenen/basitleştirilen alt-madde:**
 - TV'nin "SMA + Bollinger Bands" smoothing seçeneği + BB StdDev — YOK,

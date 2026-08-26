@@ -429,6 +429,14 @@ görülmedi).
 konsol logları (`ATR bandı dışı (...): aday elendi` satırları — eleme
 oranının makul olduğunu doğrulamak için).
 
+### Günlük otomatik takip notu (`kom1-daily-signal-check`)
+
+**Son bilinen kesinleşmiş sinyal sayısı: 50** (2026-08-26 kontrolünde de
+değişmedi — yeni sinyal yok). En son sinyal: GRVTUSDT, 4h, `confirmedAt`
+2026-08-24T08:55:24Z. Sistem sağlıklı (`/health` ok, db connected),
+`universe.total` 527 (tier1 103 / tier2 205 / tier3 219), `pending` boş.
+Bu satır günlük zamanlanmış görev tarafından her çalıştığında güncellenir.
+
 ---
 
 ## [~] Görev 7 — Sunucu taraflı izleme: Kom1 + fiyat alarmları + bildirim kanalları (2026-08-10, kullanıcı isteği — kısmen başladı)

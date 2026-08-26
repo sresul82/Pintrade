@@ -6,7 +6,7 @@ kod okumadan cevap verebilmek.
 
 - **Tarih:** 2026-07-31
 - **Kök dizin:** `F:\_Egitim ve Gelistirme\_Pintrade`
-- **Canlı adres:** pintrade.mooo.com · **Backend (prod):** `pintrade-0sb6.onrender.com`
+- **Canlı adres:** pintrade.mooo.com (GitHub Pages'te barınıyor) · **Backend (prod):** `pintrade-uwg9.onrender.com` (2026-08-08'de eski/terk edilmiş `pintrade-0sb6.onrender.com`'dan geçildi)
 - **Mimari özeti:** Build aracı YOK. Vanilla JS (ES5/ES6, modül sistemi yok —
   her dosya global bir isim tanımlar), `index.html` içinde sırayla `<script>`
   etiketleriyle yükleniyor. Backend tek dosya (`server.js`, Express + MongoDB).
