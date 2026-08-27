@@ -667,11 +667,35 @@ icat edilmedi):**
     Precision, Labels on price scale, Values/Inputs in status line.
 - Eski bare-bones "Length + Color" modal tamamen kaldırıldı.
 
+**Ortak davranışlar (kullanıcı takibi, aynı gün) — RSI'yla BİREBİR eşitlendi:**
+- **Sidebar (Indicators listesi) Edit/Delete + silme onayı:** zaten GENEL
+  yazılmıştı (`js/screener/indicator-list-panel.js` `_attachDelegation` —
+  `.il-edit`/`.il-delete` tüm türler için AYNI, `ConfirmModal` ile onay
+  isteniyor), RSI'ya özel bir kısıtlama yoktu — EMA/DEMA zaten baştan bu
+  davranışa sahipti, ek iş gerekmedi.
+- **Çizgiye çift tıklayınca ayar penceresi açma:** buldum ki bu **SADECE
+  RSI'nin subpane'i için** vardı (`chart-pane.js`'teki `dblclick` handler'ı,
+  `y > panes[0].getHeight()` şartıyla sadece alt-panelleri kontrol
+  ediyordu) — ana paneldeki EMA/DEMA çizgilerine çift tıklamanın HİÇBİR
+  etkisi yoktu, sadece sidebar'daki kalem ikonundan açılabiliyordu. RSI'nın
+  AYNI deseni (en yakın zamandaki değeri bul → koordinata çevir → 6px
+  toleransla karşılaştır) ana panel için de eklendi — bir çizgiye isabet
+  edince grafiğin normal çift-tık davranışına (fitContent sıfırlama) hiç
+  düşmeden erken çıkılıyor (RSI'daki AYNI early-return). "Fiyat/zaman
+  cetveli altındaki alanlar tıklanamasın" için AYRI bir kod gerekmedi —
+  tolerans+çizgi-yakınlığı kontrolü zaten sadece çizginin GERÇEKTEN
+  geçtiği pikselleri kabul ediyor, eksen bölgelerinde hiçbir çizgi verisi
+  olmadığı için doğal olarak tetiklenmiyor (RSI'da da aynı, ayrı bir eksen-
+  hariç-tutma kodu hiç yoktu).
+
 **Sonraki oturumda ilk iş:** production'da bir DEMA ekle, ayarlarını aç,
 Source'u değiştirip (ör. Open) çizginin gerçekten değiştiğini, Offset
 verip çizginin kaydığını, renk/kalınlık/stil combo'sunun çalıştığını,
-Precision'ı değiştirip ondalık sayısının değiştiğini doğrulamak (yerel
-sandbox'ta test edilemedi). Sonra kullanıcıyla birlikte **EMA**'ya geçilecek
+Precision'ı değiştirip ondalık sayısının değiştiğini, VE DEMA çizgisine
+ana panelde çift tıklayınca ayar penceresinin açıldığını (ama grafiğin
+başka bir yerine çift tıklayınca normal fitContent-sıfırlama davranışının
+bozulmadığını) doğrulamak (yerel sandbox'ta test edilemedi). Sonra
+kullanıcıyla birlikte **EMA**'ya geçilecek
 — bu turda `MA_DEFAULTS_APPLY`/`_openMovingAverageSettings` zaten EMA/DEMA
 ikisini de kapsayacak şekilde genel yazıldığı için EMA'nın kendi payı
 muhtemelen çok küçük kalacak (aynı Length/Period varsayılanı DEFAULT_PERIOD.ema=20

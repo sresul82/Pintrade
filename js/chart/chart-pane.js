@@ -506,6 +506,30 @@ class ChartPane {
         }
         return; // subpane alanı ama eşleşen indikatör yok
       }
+      // [2026-08-27, kullanıcı isteği] Ana paneldeki overlay göstergeler
+      // (EMA/DEMA) RSI'nin subpane'de zaten sahip olduğu AYNI "çizgiye
+      // çift tıkla → ayar penceresi aç" davranışını hak ediyor — önceden
+      // SADECE sidebar'daki kalem ikonundan açılabiliyordu. Yukarıdaki
+      // subpane hit-test'iyle BİREBİR aynı desen (nearest-value → coordinate
+      // → tolerans), tek fark: pane 0 offsetY=0 olduğu için offsetY çıkarma
+      // yok. Bir çizgiye isabet ederse aşağıdaki fitContent-sıfırlama
+      // davranışına DÜŞMEDEN erken çıkılır (RSI'daki aynı early-return).
+      if (this.indicators.length) {
+        const hitTime = this.chart.timeScale().coordinateToTime(x);
+        if (hitTime != null) {
+          for (const cfg of this.indicators) {
+            if (cfg.type !== 'ema' && cfg.type !== 'dema') continue;
+            const series = this._indSeries[cfg.id];
+            if (!series) continue;
+            const val = this._nearestSeriesValue(series, hitTime);
+            const lineY = val != null ? series.priceToCoordinate(val) : null;
+            if (lineY != null && Math.abs(y - lineY) <= HIT_TOLERANCE_PX) {
+              EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: cfg.id });
+              return;
+            }
+          }
+        }
+      }
       // Çift tıklama anında gerçek mumların logical range'ini hesapla
       const candles = this.candlesData;
       if (!candles || candles.length === 0) return;
