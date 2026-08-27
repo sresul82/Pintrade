@@ -610,3 +610,69 @@ getState) ve `_updateVisualLines()`'taki Ask/Bid çizgi çizim bloğu
 `chart-pane.js`'den tamamen silindi. `js/` genelinde bu isimlere sıfır
 referans kaldığı doğrulandı (order book'taki AYRI/ilgisiz `bidAskRatio`
 alanına dokunulmadı — o L/S verisiyle ilgili, farklı bir özellik).
+
+---
+
+## Görev-14 — 2026-08-27: İndikatörlerin altını tek tek doldurma — DEMA (ilk tur)
+
+**Durum: ⏳ Kod tamamlandı — production'da henüz doğrulanmadı.** Kullanıcı
+isteği: EMA/DEMA/RSI'dan sonra kalan indikatörlerin (şimdilik EMA/DEMA)
+gerçek TV-parite ayar penceresine kavuşması. Önceden EMA/DEMA sadece
+"Length + Color" gösteren çok basit bir modaldi — `cfg`'de source/offset/
+width/lineStyle/precision/visibility hiç yoktu, seri kurulumunda
+(`_rebuildIndicatorOverlays`) da hardcoded değerler (`lineWidth:2`,
+`precision:8`, `lastValueVisible:false`) kullanılıyordu, hiçbiri ayardan
+okunmuyordu.
+
+**Kullanıcı TV'nin gerçek Pine kodunu (`//@version=6 indicator("Double
+EMA"...)`, `dema = 2*ta.ema(src,length) - ta.ema(ta.ema(src,length),length)`)
+VE ayar penceresi ekran görüntülerini (Inputs/Style/Visibility sekmeleri)
+paylaştı** — tahminle değil, bu referanslarla dolduruldu.
+
+**Yapılanlar (RSI'nin kurduğu AYNI mimari tekrar kullanıldı, sıfırdan
+icat edilmedi):**
+- `ChartPane.MA_DEFAULTS_APPLY(cfg)` (yeni static method, `RSI_DEFAULTS_APPLY`
+  ile AYNI desen) — `source`/`offset`/`width`/`lineStyle`/`showLine`/
+  `precision`/`showPriceLabels`/`showValuesInStatusLine`/
+  `showInputsInStatusLine`/`calcTimeframe`/`waitForTfClose` alanlarını
+  eksikse doldurur. Her `_rebuildIndicatorOverlays` turunda çağrılır (RSI'daki
+  AYNI "eski kayıtlı state'te yeni alan yok" güvenlik ağı).
+- `ChartPane.RSI_SOURCE_SERIES` artık EMA/DEMA ile de PAYLAŞILIYOR (adı
+  RSI_ ile başlıyor ama kopya yazılmadı) + yeni `hlcc4` ((H+L+C+C)/4,
+  TV'nin DEMA ekran görüntüsünde RSI'da olmayan bir seçenek) case'i eklendi.
+- `_recomputeAllIndicators`: artık `cfg.source` her tür için (sadece RSI
+  değil) uygulanıyor; TV'nin "Offset" alanı (çizilen değeri N bar sağa/sola
+  kaydırır) `points` dizisi kurulurken uygulanıyor (ekranın açık ucuna
+  taşan offsetler BİLEREK atlanıyor — TV'nin gelecek bar projeksiyonu
+  desteklenmiyor, kapsam dışı bırakıldı).
+- `_rebuildIndicatorOverlays`: hem update hem creation yolunda artık
+  `cfg.width`/`lineStyle`/`showLine`(saydamlaştırma)/`precision`
+  uygulanıyor. Yeni `ChartPane.MA_PRECISION_DECIMALS(cfg, priceHint)` —
+  `RSI_PRECISION_DECIMALS`'tan FARKLI: RSI'da 'Default' sabit 2 ondalığa
+  düşer (0-100 skalası), MA'da 'Default' sembolün kendi dinamik
+  hassasiyetine (`_getDynamicDecimals`) düşüyor — aksi halde düşük fiyatlı
+  coinlerde DEMA değeri 0.00'a yuvarlanırdı.
+- `js/core/app.js` — yeni `_openMovingAverageSettings(pane, cfg, indicatorId)`,
+  RSI'nın `_openRsiSettings`'iyle AYNI yardımcı fonksiyonları (`_rsiRow`/
+  `_rsiCheck`/`_rsiSelect`/`_rsiLineCombo`/`_rsiToggleRow`) kullanıyor.
+  **2 sekme** (Inputs, Style) — TV'nin 3. sekmesi (Visibility, çözünürlük
+  bazlı göster/gizle: Ticks/Seconds/.../Months) bu projede hiçbir yerde
+  karşılığı olmayan bir mekanizma, Status Line'da olduğu gibi BİLEREK sahte
+  bir sekme eklenmedi.
+  - Inputs: Length, Source (MA_SOURCE_OPTIONS = RSI_SOURCE_OPTIONS + hlcc4),
+    Offset, Calculation > Timeframe/Wait for timeframe closes (RSI'daki
+    AYNI bilinçli sınırlama — SADECE 'Chart' fonksiyonel, paylaşılan
+    Binance bütçesi riski yüzünden diğer TF'ler yapılmadı).
+  - Style: çizgi combo (renk/kalınlık/stil) + göster/gizle checkbox'ı,
+    Precision, Labels on price scale, Values/Inputs in status line.
+- Eski bare-bones "Length + Color" modal tamamen kaldırıldı.
+
+**Sonraki oturumda ilk iş:** production'da bir DEMA ekle, ayarlarını aç,
+Source'u değiştirip (ör. Open) çizginin gerçekten değiştiğini, Offset
+verip çizginin kaydığını, renk/kalınlık/stil combo'sunun çalıştığını,
+Precision'ı değiştirip ondalık sayısının değiştiğini doğrulamak (yerel
+sandbox'ta test edilemedi). Sonra kullanıcıyla birlikte **EMA**'ya geçilecek
+— bu turda `MA_DEFAULTS_APPLY`/`_openMovingAverageSettings` zaten EMA/DEMA
+ikisini de kapsayacak şekilde genel yazıldığı için EMA'nın kendi payı
+muhtemelen çok küçük kalacak (aynı Length/Period varsayılanı DEFAULT_PERIOD.ema=20
+zaten doğru, TV'nin EMA'sı da aynı formülü/ayar setini kullanıyor).

@@ -736,6 +736,12 @@ class ChartPane {
       // düşer (eski/kayıtlı state'te de AYNI fonksiyon kullanılıyor, tek yerden).
       Object.assign(cfg, opts);
       ChartPane.RSI_DEFAULTS_APPLY(cfg);
+    } else if (type === 'ema' || type === 'dema') {
+      // 2026-08-27 (kullanıcı isteği, TV'nin gerçek Pine kodu + ayar
+      // penceresi ekran görüntüleri referans alındı) — AYNI desen: RSI
+      // gibi ema/dema de eksik alanları ChartPane.MA_DEFAULTS_APPLY'den alır.
+      Object.assign(cfg, opts);
+      ChartPane.MA_DEFAULTS_APPLY(cfg);
     }
     this.indicators.push(cfg);
     this._rebuildIndicatorOverlays();
@@ -862,7 +868,51 @@ class ChartPane {
       : LightweightCharts.LineStyle.Solid;
   }
 
-  /** cfg.source'a göre bar dizisinden RSI'nin çalışacağı kaynak diziyi üretir. */
+  // ── EMA/DEMA (2026-08-27, kullanıcı isteği — TV'nin gerçek Pine kodu +
+  // ayar penceresi ekran görüntüleri referans alındı) ──────────────────
+  // Eskiden bu iki gösterge sadece "Length + Color" gibi çok temel bir
+  // modaldi (bkz. app.js eski ind-settings-backdrop) — cfg'de source/offset/
+  // width/lineStyle/precision/visibility hiç yoktu, seri kurulumunda
+  // (_rebuildIndicatorOverlays) da hardcoded değerler (lineWidth:2,
+  // precision:8) kullanılıyordu. RSI'nin kurduğu AYNI mimari (Inputs/Style
+  // sekmeleri, _rsiRow/_rsiCheck/_rsiSelect/_rsiLineCombo yardımcıları)
+  // burada da tekrar kullanılıyor, sıfırdan icat edilmiyor.
+  static MA_DEFAULTS_APPLY(cfg) {
+    if (cfg.type !== 'ema' && cfg.type !== 'dema') return cfg;
+    cfg.source ??= 'close';
+    // TV: "Offset" — çizilen çizgiyi N bar sağa(+)/sola(-) kaydırır.
+    cfg.offset ??= 0;
+    cfg.width ??= 2;
+    cfg.lineStyle ??= 'solid';
+    cfg.showLine ??= true; // Style sekmesindeki "DEMA"/"EMA" checkbox'ı
+    cfg.precision ??= null; // null = 'Default' (sembolün kendi dinamik hassasiyeti)
+    cfg.showPriceLabels ??= true;
+    cfg.showValuesInStatusLine ??= true;
+    cfg.showInputsInStatusLine ??= true;
+    // RSI'daki AYNI bilinçli sınırlama (bkz. yukarıdaki not) — SADECE
+    // 'chart' fonksiyonel, paylaşılan Binance bütçesi riski yüzünden.
+    cfg.calcTimeframe ??= 'chart';
+    cfg.waitForTfClose ??= true;
+    return cfg;
+  }
+
+  /** cfg.precision (null=Default) → LWC priceFormat için ondalık sayısı.
+   *  RSI_PRECISION_DECIMALS'tan FARKLI: RSI sabit 0-100 skalasında olduğu
+   *  için 'Default' orada sabit 2'ye düşer, ama EMA/DEMA doğrudan fiyat
+   *  skalasında olduğu için 'Default' burada sembolün kendi dinamik
+   *  hassasiyetine (_getDynamicDecimals, chart-config.js) düşmeli — aksi
+   *  halde düşük fiyatlı coinlerde (ör. 0.00001234) çizgi değeri 0.00'a
+   *  yuvarlanırdı. */
+  static MA_PRECISION_DECIMALS(cfg, priceHint) {
+    const p = parseInt(cfg.precision, 10);
+    if (Number.isFinite(p) && p >= 0) return p;
+    return typeof _getDynamicDecimals === 'function' ? _getDynamicDecimals(priceHint) : 2;
+  }
+
+  /** cfg.source'a göre bar dizisinden kaynak diziyi üretir — adı RSI_ ile
+   *  başlıyor (ilk kullanıcısı oydu) ama artık EMA/DEMA de aynı fonksiyonu
+   *  paylaşıyor (2026-08-27) — tek doğruluk kaynağı, kopya yazılmadı.
+   *  'hlcc4' TV'nin DEMA ayar penceresinde görülen (H+L+C+C)/4'e karşılık gelir. */
   static RSI_SOURCE_SERIES(candles, source) {
     switch (source) {
       case 'open':  return candles.map(d => d.open);
@@ -871,6 +921,7 @@ class ChartPane {
       case 'hl2':   return candles.map(d => (d.high + d.low) / 2);
       case 'hlc3':  return candles.map(d => (d.high + d.low + d.close) / 3);
       case 'ohlc4': return candles.map(d => (d.open + d.high + d.low + d.close) / 4);
+      case 'hlcc4': return candles.map(d => (d.high + d.low + d.close + d.close) / 4);
       default:      return candles.map(d => d.close); // 'close'
     }
   }
@@ -915,26 +966,39 @@ class ChartPane {
     });
 
     this.indicators.forEach(cfg => {
+      // RSI'daki AYNI güvenlik ağı (bkz. _rebuildSubpaneAux'taki RSI_DEFAULTS_APPLY
+      // notu) — eski kayıtlı state'te (bu değişiklikten önce sadece id/type/
+      // period/color vardı) yeni alanlar (source/offset/width/...) eksik
+      // olabilir, her rebuild'de cfg'ye kalıcı olarak yazılır.
+      ChartPane.MA_DEFAULTS_APPLY(cfg);
       const isSubpane = ChartPane.SUBPANE_TYPES.has(cfg.type);
+      const isMA = cfg.type === 'ema' || cfg.type === 'dema';
       // Chart hâlâ yer tutucu boyuttaysa (ilk gerçek resize olmadıysa) subpane
       // türü göstergeleri KURMA — bkz. constructor'daki `_chartReady` notu.
       // Overlay türleri (ema/dema) bundan etkilenmez, hemen kurulabilirler.
       if (isSubpane && !this._chartReady) return;
       if (this._indSeries[cfg.id]) {
-        const decimals = isSubpane ? ChartPane.RSI_PRECISION_DECIMALS(cfg) : null;
-        // TV Style sekmesi — "RSI" satırının checkbox'ı kapalıysa çizgiyi
-        // saydam yap (band/fill/MA/divergence çizimleri etkilenmez).
-        const lineColor = (isSubpane && cfg.showLine === false) ? 'rgba(0,0,0,0)' : cfg.color;
+        // 2026-08-27 — EMA/DEMA artık RSI ile AYNI şekilde width/lineStyle/
+        // precision/görünürlük okuyor (önceden sadece color uygulanıyordu,
+        // seri kuruluşunda hardcoded lineWidth:2/precision:8 kalıyordu).
+        const decimals = isSubpane ? ChartPane.RSI_PRECISION_DECIMALS(cfg)
+          : isMA ? ChartPane.MA_PRECISION_DECIMALS(cfg, cfg._lastValue ?? this._lastPrice ?? 1)
+          : null;
+        // TV Style sekmesi — "RSI"/"EMA"/"DEMA" satırının checkbox'ı kapalıysa
+        // çizgiyi saydam yap (band/fill/MA/divergence çizimleri etkilenmez).
+        const lineColor = ((isSubpane || isMA) && cfg.showLine === false) ? 'rgba(0,0,0,0)' : cfg.color;
         this._indSeries[cfg.id].applyOptions({
           color: lineColor,
-          ...(isSubpane ? {
+          ...((isSubpane || isMA) ? {
             lineWidth: cfg.width,
             lineStyle: ChartPane.LWC_LINE_STYLE(cfg.lineStyle),
+            lastValueVisible: cfg.showPriceLabels,
+            priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
+          } : {}),
+          ...(isSubpane ? {
             crosshairMarkerRadius: cfg.markerRadius,
             crosshairMarkerBackgroundColor: cfg.markerColor || cfg.color,
             crosshairMarkerBorderColor: cfg.markerColor || cfg.color,
-            lastValueVisible: cfg.showPriceLabels,
-            priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
           } : {}),
         });
         if (isSubpane) {
@@ -990,10 +1054,15 @@ class ChartPane {
         const pane = this.chart.panes()[paneIndex];
         if (pane) pane.setStretchFactor(0.3);
       } else {
+        // 2026-08-27 — önceden hepsi hardcoded (lineWidth:2, precision:8,
+        // lastValueVisible:false) idi, cfg'deki hiçbir ayarı okumuyordu.
+        const decimals = ChartPane.MA_PRECISION_DECIMALS(cfg, this._lastPrice ?? 1);
+        const lineColor = cfg.showLine === false ? 'rgba(0,0,0,0)' : cfg.color;
         this._indSeries[cfg.id] = this.chart.addSeries(LightweightCharts.LineSeries, {
-          color: cfg.color, lineWidth: 2, priceScaleId: this._mainScaleId(),
-          priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
-          lastValueVisible: false, priceLineVisible: false,
+          color: lineColor, lineWidth: cfg.width || 2, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.lineStyle),
+          priceScaleId: this._mainScaleId(),
+          priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
+          lastValueVisible: cfg.showPriceLabels !== false, priceLineVisible: false,
         });
       }
     });
@@ -1231,20 +1300,26 @@ class ChartPane {
     const lastTime = times[times.length - 1];
 
     this.indicators.forEach(cfg => {
-      // RSI'de 'close' dışı bir Source seçiliyse (Open/High/Low/HL2/HLC3/OHLC4)
+      // 'close' dışı bir Source seçiliyse (Open/High/Low/HL2/HLC3/OHLC4/HLCC4)
       // liveOverride'ı (sadece close taşır) UYGULAMADAN candlesData'dan üretir —
       // canlı tick'te tek bar geç güncellenmesi (bir sonraki tam candle'da düzelir)
       // yerinde bir basitleştirme, TV'nin çok küçük TF'lerdeki davranışına yakın.
-      const rsiSource = cfg.type === 'rsi' && cfg.source && cfg.source !== 'close'
+      // 2026-08-27 — RSI'ya ÖZEL değildi zaten, artık EMA/DEMA de aynı yolu kullanıyor.
+      const srcSeries = cfg.source && cfg.source !== 'close'
         ? ChartPane.RSI_SOURCE_SERIES(this.candlesData, cfg.source)
         : closes;
-      const arr = cfg.type === 'ema' ? IndicatorEngine.calcEMAFull(closes, cfg.period)
-        : cfg.type === 'dema' ? IndicatorEngine.calcDEMAFull(closes, cfg.period)
-        : IndicatorEngine.calcRSIFull(rsiSource, cfg.period); // 'rsi'
+      const arr = cfg.type === 'ema' ? IndicatorEngine.calcEMAFull(srcSeries, cfg.period)
+        : cfg.type === 'dema' ? IndicatorEngine.calcDEMAFull(srcSeries, cfg.period)
+        : IndicatorEngine.calcRSIFull(srcSeries, cfg.period); // 'rsi'
       const points = [];
+      // TV "Offset" — EMA/DEMA'da çizilen değeri N bar sağa(+)/sola(-) kaydırır
+      // (hesaplama aynı kalır, sadece hangi zaman damgasına çizildiği değişir).
+      const offset = (cfg.type === 'ema' || cfg.type === 'dema') ? (cfg.offset || 0) : 0;
       for (let i = 0; i < arr.length; i++) {
         if (arr[i] == null) continue;
-        points.push({ time: times[i], value: arr[i] });
+        const targetIdx = i + offset;
+        if (targetIdx < 0 || targetIdx >= times.length) continue; // ekranın açık ucuna taşamıyor, bkz. üst notlar
+        points.push({ time: times[targetIdx], value: arr[i] });
       }
       const series = this._indSeries[cfg.id];
       if (series) {

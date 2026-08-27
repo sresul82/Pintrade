@@ -1366,46 +1366,11 @@ const App = {
         _openRsiSettings(pane, cfg, indicatorId);
         return;
       }
-
-      const NAME = { ema: 'EMA', dema: 'DEMA' };
-      const backdrop = document.createElement('div');
-      backdrop.id = 'ind-settings-backdrop';
-      backdrop.className = 'modal-backdrop';
-      backdrop.innerHTML = `
-        <div class="modal" style="width:280px;">
-          <div class="modal-header">
-            <span>${NAME[cfg.type]} settings</span>
-            <button id="ind-settings-close" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; line-height:1;">✕</button>
-          </div>
-          <div class="modal-body">
-            <label class="form-label">Length</label>
-            <input class="form-input" id="ind-settings-period" type="number" min="1" step="1" value="${cfg.period}" style="margin-bottom:10px;">
-            <label class="form-label">Color</label>
-            <input id="ind-settings-color" type="color" value="${cfg.color}" style="width:100%; height:32px; margin-bottom:4px; background:transparent; border:1px solid var(--border-primary); border-radius:6px; cursor:pointer;">
-          </div>
-          <div class="modal-footer" style="justify-content:space-between;">
-            <button class="btn" id="ind-settings-remove" style="color:#e05c5c;">Remove</button>
-            <div style="display:flex; gap:8px;">
-              <button class="btn" id="ind-settings-cancel">Cancel</button>
-              <button class="btn" id="ind-settings-apply" style="background:${TV_BLUE}; border-color:${TV_BLUE}; color:#fff;">Apply</button>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(backdrop);
-      const close = () => backdrop.remove();
-      backdrop.addEventListener('click', (e2) => { if (e2.target === backdrop) close(); });
-      document.getElementById('ind-settings-close')?.addEventListener('click', close);
-      document.getElementById('ind-settings-cancel')?.addEventListener('click', close);
-      document.getElementById('ind-settings-remove')?.addEventListener('click', () => {
-        close();
-        pane.removeIndicator(indicatorId);
-      });
-      document.getElementById('ind-settings-apply')?.addEventListener('click', () => {
-        const period = parseInt(document.getElementById('ind-settings-period')?.value, 10);
-        const color = document.getElementById('ind-settings-color')?.value || cfg.color;
-        close();
-        pane.updateIndicatorSettings(indicatorId, { period: (Number.isFinite(period) && period > 0) ? period : cfg.period, color });
-      });
+      // 2026-08-27 (kullanıcı isteği) — EMA/DEMA artık RSI'nınkine benzer
+      // gerçek bir TV-parite ayar penceresi kullanıyor (bkz. aşağıdaki
+      // _openMovingAverageSettings), eskiden burada sadece "Length + Color"
+      // gösteren çok basit bir modal vardı.
+      _openMovingAverageSettings(pane, cfg, indicatorId);
     });
 
     // ── RSI'ye özel ayar penceresi (2026-08-18, kullanıcı isteği).
@@ -1485,6 +1450,10 @@ const App = {
     }
 
     const RSI_SOURCE_OPTIONS = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'], ['hl2', 'HL2'], ['hlc3', 'HLC3'], ['ohlc4', 'OHLC4']];
+    // [2026-08-27] TV'nin DEMA ayar penceresi ekran görüntüsünde RSI'da
+    // olmayan bir seçenek daha var: (H+L+C+C)/4. Karışıklık olmasın diye
+    // RSI_SOURCE_OPTIONS'a eklemek yerine EMA/DEMA için ayrı bir liste.
+    const MA_SOURCE_OPTIONS = [...RSI_SOURCE_OPTIONS, ['hlcc4', '(H + L + C + C)/4']];
     const RSI_MA_TYPE_OPTIONS = [['none', 'None'], ['sma', 'SMA'], ['ema', 'EMA'], ['smma', 'SMMA (RMA)'], ['wma', 'WMA']];
     const RSI_PRECISION_OPTIONS = [['', 'Default'], ['0', '0'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
     // TV: Chart (indikatörün kendi zaman dilimi) + sabit TF listesi.
@@ -1733,6 +1702,158 @@ const App = {
           bullWidth: draft.bullWidth, bullStyle: draft.bullStyle,
           bearWidth: draft.bearWidth, bearStyle: draft.bearStyle,
           calcTimeframe: draft.calcTimeframe, waitForTfClose: draft.waitForTfClose,
+        });
+      });
+    }
+
+    // ── EMA/DEMA ayar penceresi (2026-08-27, kullanıcı isteği — TV'nin
+    // gerçek Pine kodu + ayar penceresi ekran görüntüleri referans alındı).
+    // RSI'nın kurduğu AYNI mimari (dsd-tabs sekme geçişi, draggable dialog,
+    // _rsiRow/_rsiCheck/_rsiSelect/_rsiLineCombo yardımcıları) tekrar
+    // kullanılıyor — sadece 2 sekme (Inputs/Style): TV'nin Visibility
+    // sekmesi (Ticks/Seconds/.../Months çözünürlük bazlı göster/gizle) bu
+    // projede hiçbir yerde karşılığı olmayan bir mekanizma — RSI'nın kendi
+    // Visibility sekmesi zaten farklı bir amaca (band/fill toggle'ları)
+    // hizmet ediyordu, EMA/DEMA'da o alanlar da yok. Boş/sahte bir sekme
+    // eklemek yerine (Chart Settings > Status Line'da olduğu gibi) BİLEREK
+    // atlandı.
+    const MA_TABS = ['inputs', 'style'];
+    let _maActiveTab = 'inputs';
+
+    function _maRenderTab(tab, cfg) {
+      const label = cfg.type === 'ema' ? 'EMA' : 'DEMA';
+      if (tab === 'inputs') {
+        return `
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-period" min="1" step="1" value="${cfg.period}"/>`)}
+          ${_rsiRow('Source', _rsiSelect('ma-source', MA_SOURCE_OPTIONS, cfg.source))}
+          ${_rsiRow('Offset', `<input type="number" class="dsd-input" id="ma-offset" step="1" value="${cfg.offset ?? 0}"/>`)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Calculation</div>
+          ${_rsiRow('Timeframe', _rsiSelect('ma-calc-tf', RSI_TIMEFRAME_OPTIONS, cfg.calcTimeframe))}
+          ${_rsiCheck('ma-wait-tf-close', 'Wait for timeframe closes', cfg.waitForTfClose)}`;
+      }
+      // style
+      return `
+        ${_rsiToggleRow('ma-show-line', cfg.showLine, label, _rsiLineCombo('ma-combo-line', cfg.color, cfg.width, cfg.lineStyle))}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Output values</div>
+        ${_rsiRow('Precision', _rsiSelect('ma-precision', RSI_PRECISION_OPTIONS, cfg.precision == null ? '' : String(cfg.precision)))}
+        ${_rsiCheck('ma-price-labels', 'Labels on price scale', cfg.showPriceLabels)}
+        ${_rsiCheck('ma-status-values', 'Values in status line', cfg.showValuesInStatusLine)}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Input values</div>
+        ${_rsiCheck('ma-status-inputs', 'Inputs in status line', cfg.showInputsInStatusLine)}`;
+    }
+
+    function _openMovingAverageSettings(pane, cfg, indicatorId) {
+      document.getElementById('dsd-overlay')?.remove();
+      _maActiveTab = 'inputs';
+      const label = cfg.type === 'ema' ? 'EMA' : 'DEMA';
+      const overlay = document.createElement('div');
+      overlay.id = 'dsd-overlay';
+      overlay.className = 'dsd-overlay';
+
+      const tabsHtml = () => MA_TABS.map(t => `<button class="dsd-tab ${t === _maActiveTab ? 'active' : ''}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('');
+
+      overlay.innerHTML = `
+        <div class="dsd-dialog" id="dsd-dialog" style="width:320px;">
+          <div class="dsd-header">
+            <span class="dsd-title">${label}</span>
+            <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>
+          </div>
+          <div class="dsd-tabs" id="dsd-ma-tabs">${tabsHtml()}</div>
+          <div class="dsd-body" id="dsd-ma-body">${_maRenderTab(_maActiveTab, cfg)}</div>
+          <div class="dsd-footer">
+            <div class="dsd-footer-left">
+              <button class="dsd-tmpl-btn" id="dsd-btn-remove">Remove</button>
+            </div>
+            <div class="dsd-footer-right">
+              <button class="dsd-btn-cancel" id="dsd-btn-cancel">Cancel</button>
+              <button class="dsd-btn-ok" id="dsd-btn-ok">Ok</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      {
+        const dsdDialogEl = document.getElementById('dsd-dialog');
+        const dsdHeaderEl = overlay.querySelector('.dsd-header');
+        if (dsdDialogEl && dsdHeaderEl && window.DSDUtils) {
+          window.DSDUtils.makeDraggable(dsdDialogEl, dsdHeaderEl);
+        }
+      }
+
+      const draft = { ...cfg };
+      function _maSyncDraftFromDom() {
+        const combo = overlay.querySelector('#ma-combo-line');
+        if (combo) {
+          draft.color = combo.dataset.color;
+          draft.width = parseInt(combo.dataset.width, 10) || draft.width;
+          draft.lineStyle = combo.dataset.linestyle || draft.lineStyle;
+        }
+        const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
+        if (document.getElementById('ma-period')) draft.period = Math.max(1, Math.round(num('ma-period') ?? draft.period));
+        if (document.getElementById('ma-source')) draft.source = document.getElementById('ma-source').value;
+        if (document.getElementById('ma-offset')) draft.offset = Math.round(num('ma-offset') ?? draft.offset ?? 0);
+        if (document.getElementById('ma-calc-tf')) draft.calcTimeframe = document.getElementById('ma-calc-tf').value;
+        if (document.getElementById('ma-precision')) {
+          const raw = document.getElementById('ma-precision').value;
+          draft.precision = raw === '' ? null : parseInt(raw, 10);
+        }
+        const chk = (id) => document.getElementById(id)?.checked;
+        if (document.getElementById('ma-wait-tf-close')) draft.waitForTfClose = chk('ma-wait-tf-close');
+        if (document.getElementById('ma-show-line')) draft.showLine = chk('ma-show-line');
+        if (document.getElementById('ma-price-labels')) draft.showPriceLabels = chk('ma-price-labels');
+        if (document.getElementById('ma-status-values')) draft.showValuesInStatusLine = chk('ma-status-values');
+        if (document.getElementById('ma-status-inputs')) draft.showInputsInStatusLine = chk('ma-status-inputs');
+      }
+      function _maBindBody() {
+        overlay.querySelectorAll('.dsd-reg-line-combo').forEach(combo => {
+          const swatch = combo.querySelector('.dsd-reg-swatch');
+          combo.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const curColor = combo.dataset.color;
+            const curW = parseInt(combo.dataset.width, 10) || 1;
+            const curS = combo.dataset.linestyle || 'solid';
+            window.DSDColorPicker.showCombinedLineSettings(combo, curColor, curW, curS, true, (res) => {
+              combo.dataset.color = res.color;
+              combo.dataset.width = res.width;
+              combo.dataset.linestyle = res.style;
+              swatch.style.background = res.color;
+            });
+          });
+        });
+      }
+      _maBindBody();
+
+      overlay.querySelectorAll('.dsd-tab').forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          _maSyncDraftFromDom();
+          _maActiveTab = tabBtn.dataset.tab;
+          overlay.querySelectorAll('.dsd-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === _maActiveTab));
+          overlay.querySelector('#dsd-ma-body').innerHTML = _maRenderTab(_maActiveTab, draft);
+          _maBindBody();
+        });
+      });
+
+      const close = () => overlay.remove();
+      document.getElementById('dsd-close-btn')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-cancel')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-remove')?.addEventListener('click', () => {
+        window.ConfirmModal.show(`Remove ${label} indicator? This cannot be undone.`).then((ok) => {
+          if (!ok) return;
+          close();
+          pane.removeIndicator(indicatorId);
+        });
+      });
+      document.getElementById('dsd-btn-ok')?.addEventListener('click', () => {
+        _maSyncDraftFromDom();
+        close();
+        pane.updateIndicatorSettings(indicatorId, {
+          period: draft.period, source: draft.source, offset: draft.offset,
+          calcTimeframe: draft.calcTimeframe, waitForTfClose: draft.waitForTfClose,
+          color: draft.color, width: draft.width, lineStyle: draft.lineStyle,
+          showLine: draft.showLine, precision: draft.precision,
+          showPriceLabels: draft.showPriceLabels,
+          showValuesInStatusLine: draft.showValuesInStatusLine,
+          showInputsInStatusLine: draft.showInputsInStatusLine,
         });
       });
     }
