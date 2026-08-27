@@ -243,6 +243,106 @@ const IndicatorEngine = (() => {
     return out;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // [2026-08-27, kullanıcı isteği] TV'nin GERÇEK "Linear Regression
+  // Channel" indikatörünün (built-in) Pine kaynağı kullanıcı tarafından
+  // birebir paylaşıldı, bu fonksiyonlar o kaynağın DOĞRUDAN portu (satır
+  // satır aynı formüller — calcSlope/calcDev). YUKARIDAKİ calcRegressionChannel
+  // (bkz. dosya başındaki not) ile KARIŞTIRILMASIN — o, Kom1 botunun
+  // kendi basit "sadece mid değeri" ihtiyacı için (bot-architecture
+  // kuralı: davranışı DEĞİŞTİRİLMEDİ), sapma bantları/Pearson's R yok.
+  // Bu yeni fonksiyonlar SADECE chart göstergesi için, TV'nin dolgu/uzatma
+  // hariç TÜM matematiğini (deviation bantları + Pearson's R) içerir.
+  //
+  // NOT: Pine'da series[0] = EN GÜNCEL bar, series[length-1] = length bar
+  // ÖNCESİ (yani "en yeniden en eskiye" sıralı). Bu projede candlesData
+  // TERSİ yönde (en eskiden en yeniye, ascending time) tutuluyor — bu
+  // yüzden fonksiyonlar `recentFirst` (Pine sırası) dizileri BEKLER,
+  // çağıran taraf (chart-pane.js) `slice(-length).reverse()` ile çevirir.
+  // ══════════════════════════════════════════════════════════════
+
+  /** Pine calcSlope() portu — recentFirst[0]=en güncel bar. */
+  function calcLinRegSlope(recentFirst, length) {
+    if (length <= 1 || recentFirst.length < length) return { slope: null, average: null, intercept: null };
+    let sumX = 0, sumY = 0, sumXSqr = 0, sumXY = 0;
+    for (let i = 0; i < length; i++) {
+      const val = recentFirst[i];
+      const per = i + 1;
+      sumX += per; sumY += val; sumXSqr += per * per; sumXY += val * per;
+    }
+    const denom = length * sumXSqr - sumX * sumX;
+    if (denom === 0) return { slope: null, average: null, intercept: null };
+    const slope = (length * sumXY - sumX * sumY) / denom;
+    const average = sumY / length;
+    const intercept = average - slope * sumX / length + slope;
+    return { slope, average, intercept };
+  }
+
+  /** Pine calcDev() portu — sourceRecentFirst/highRecentFirst/lowRecentFirst
+   *  hepsi Pine sırasında (index 0 = en güncel bar). */
+  function calcLinRegDeviation(sourceRecentFirst, highRecentFirst, lowRecentFirst, length, slope, average, intercept) {
+    let upDev = 0, dnDev = 0, stdDevAcc = 0, dsxx = 0, dsyy = 0, dsxy = 0;
+    const periods = length - 1;
+    const daY = intercept + slope * periods / 2;
+    let val = intercept;
+    for (let j = 0; j <= periods; j++) {
+      let price = highRecentFirst[j] - val;
+      if (price > upDev) upDev = price;
+      price = val - lowRecentFirst[j];
+      if (price > dnDev) dnDev = price;
+      price = sourceRecentFirst[j];
+      const dxt = price - average;
+      const dyt = val - daY;
+      price -= val;
+      stdDevAcc += price * price;
+      dsxx += dxt * dxt; dsyy += dyt * dyt; dsxy += dxt * dyt;
+      val += slope;
+    }
+    const stdDev = Math.sqrt(stdDevAcc / (periods === 0 ? 1 : periods));
+    const pearsonR = (dsxx === 0 || dsyy === 0) ? 0 : dsxy / Math.sqrt(dsxx * dsyy);
+    return { stdDev, pearsonR, upDev, dnDev };
+  }
+
+  /**
+   * Chart göstergesi için tek giriş noktası — TV'nin sadece "son bar"da
+   * hesapladığı kanalı üretir (`barstate.islast` — geçmiş her bar için
+   * TEKRAR hesaplanmaz, tek bir statik kanal). `sourceAsc`/`highAsc`/
+   * `lowAsc` bu projenin kendi sırasında (ascending, en eski→en yeni).
+   * @returns {null | {startPrice, endPrice, upperStart, upperEnd, lowerStart, lowerEnd, pearsonR}}
+   */
+  function calcLinRegChannelFull(sourceAsc, highAsc, lowAsc, length, opts = {}) {
+    const n = sourceAsc.length;
+    if (n < length || length <= 1) return null;
+    // Pine sırasına çevir: index 0 = en güncel bar.
+    const srcRF  = sourceAsc.slice(n - length).reverse();
+    const highRF = highAsc.slice(n - length).reverse();
+    const lowRF  = lowAsc.slice(n - length).reverse();
+
+    const { slope, average, intercept } = calcLinRegSlope(srcRF, length);
+    if (slope == null) return null;
+    const startPrice = intercept + slope * (length - 1);
+    const endPrice = intercept;
+
+    const { stdDev, pearsonR, upDev, dnDev } = calcLinRegDeviation(srcRF, highRF, lowRF, length, slope, average, intercept);
+
+    const useUpperDev = opts.useUpperDev !== false;
+    const useLowerDev = opts.useLowerDev !== false;
+    const upperMult = opts.upperMult ?? 2.0;
+    const lowerMult = opts.lowerMult ?? 2.0;
+
+    const upperOffsetStart = useUpperDev ? upperMult * stdDev : upDev;
+    const upperOffsetEnd   = useUpperDev ? upperMult * stdDev : upDev;
+    const lowerOffsetStart = useLowerDev ? -lowerMult * stdDev : -dnDev;
+    const lowerOffsetEnd   = useLowerDev ? -lowerMult * stdDev : -dnDev;
+
+    return {
+      startPrice, endPrice,
+      upperStart: startPrice + upperOffsetStart, upperEnd: endPrice + upperOffsetEnd,
+      lowerStart: startPrice + lowerOffsetStart, lowerEnd: endPrice + lowerOffsetEnd,
+      pearsonR,
+    };
+  }
+
   /** RSI (Wilder) — tam seri, yuvarlanmamış, chart alt-pencere için. */
   function calcRSIFull(closes, period = RSI_PERIOD_DEFAULT) {
     const out = new Array(closes.length).fill(null);
@@ -391,6 +491,7 @@ const IndicatorEngine = (() => {
     calcRSIFull,
     calcMAOfSeries,
     calcRegularDivergence,
+    calcLinRegChannelFull,
   };
 })();
 

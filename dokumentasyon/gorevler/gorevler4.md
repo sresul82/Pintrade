@@ -748,3 +748,70 @@ küçük kaldı — ama iki gerçek fark bulundu/eklendi:
 varsayılan 9 geldiğini, Smoothing > Type'ı SMA/EMA/vb. yapıp ikinci bir
 çizginin (varsayılan sarı, `#f7c948`) belirdiğini, None'a dönünce
 kaybolduğunu doğrulamak.
+
+---
+
+## Görev-15 — 2026-08-27: Linear Regression Channel indikatörü eklendi
+
+**Durum: ⏳ Kod tamamlandı — production'da henüz doğrulanmadı, bilinçli
+sınırlamalar var (aşağıda).** Kullanıcı TV'nin GERÇEK built-in "Linear
+Regression Channel" indikatörünün Pine kaynağını (`//@version=6
+indicator("Linear Regression Channel", ...)`) birebir paylaştı — DEMA'da
+olduğu gibi tahmin edilmedi, doğrudan bu kaynaktan port edildi.
+
+**Matematik (`js/screener/indicator-engine.js`):**
+- `calcLinRegSlope` — Pine `calcSlope()` portu (en küçük kareler regresyonu).
+- `calcLinRegDeviation` — Pine `calcDev()` portu (stdDev + Pearson's R +
+  upDev/dnDev — high/low'a göre max sapma, "deviation kapalı" modu için).
+- `calcLinRegChannelFull(sourceAsc, highAsc, lowAsc, length, opts)` — tek
+  giriş noktası, bu projenin ascending (en eski→en yeni) dizi sırasını
+  Pine'ın `series[0]=en güncel` sırasına çevirip yukarıdaki ikisini çağırır.
+- **KARIŞTIRILMASIN:** dosyanın başında ZATEN var olan `calcRegressionChannel`
+  (Kom1 botunun kendi basit "sadece mid değeri" ihtiyacı için) — bot-architecture
+  kuralı gereği DOKUNULMADI, bambaşka bir fonksiyon.
+
+**Render (`js/chart/chart-pane.js`):**
+- `ChartPane.LINREG_DEFAULTS_APPLY(cfg)` — RSI/MA_DEFAULTS_APPLY ile AYNI
+  desen. Alanlar Pine'ın kendi `input()` çağrılarıyla BİREBİR: `source`,
+  `upperDevEnabled`/`upperMult` (varsayılan true/2.0), `lowerDevEnabled`/
+  `lowerMult` (true/2.0), `showPearson` (true), `extendLeft` (false),
+  `extendRight` (true), `colorUpper`/`colorLower` (TV'nin blue/red'i).
+- `_rebuildLinRegChannel(cfg)` — 3 `LineSeries` kurar: orta/base
+  (`this._indSeries[cfg.id]`, çift-tıklama/legend'in "birincil seri"
+  konvansiyonuyla tutarlı) + üst/alt (`this._indAuxSeries[cfg.id] =
+  {upper, lower}`, RSI'nın `aux` mimarisiyle AYNI depoda, farklı anahtarlarla).
+  **Pine kaynağının kendi tuhaflığı, kopya DEĞİL:** hem üst hem ALT çizginin
+  stroke rengi `colorUpper` — sadece orta/base çizgi `colorLower` kullanıyor
+  (kaynak kodu iki kez kontrol ettim, gerçekten böyle yazılmış).
+- `_computeLinRegChannel(cfg, times)` — TV'nin `barstate.islast` davranışı:
+  geçmiş her bar için AYRI hesaplanmıyor, sadece son `cfg.period` barlık
+  pencerede TEK bir statik kanal (2 nokta + extend açıksa 1 nokta daha,
+  her uçta).
+- Çift-tıklama ile ayar açma (bkz. Görev-14'teki genel mekanizma) 3
+  çizginin HERHANGİ birine de tepki verecek şekilde genişletildi.
+- Legend'de değer + (`showPearson` açıksa) `R:0.87` gibi bir ek metin.
+
+**Bilinçli sınırlamalar (görsel doğrulama yapılamayan bu ortamda riskli
+bulunanlar, AÇIKÇA belirtiliyor):**
+- **Dolgu (linefill) YOK** — Pine'da `linefill.new(upper, baseLine, ...)`
+  ile üst/alt bölgeler renkli dolduruluyor. LWC'de iki EĞİK çizgi arasını
+  doldurmak native bir seri tipiyle mümkün değil, `ICustomSeriesPaneView`
+  (custom-series) yazmak gerekir — bu turda YAPILMADI, sadece 3 çizgi var.
+- **Extend Left/Right yaklaşık, sonsuz DEĞİL** — TV'nin çizgileri gerçekten
+  sınırsız uzanır (ekran nereye kaydırılırsa). Burada sabit `EXTEND_BARS=200`
+  kadar bir uzatma kullanıldı (pan/zoom'a tepki veren dinamik bir çözüm
+  ayrı, daha büyük bir iş olurdu). Tipik yakınlaştırmalarda ekrana sığması
+  yeterli ama aşırı uzağa kaydırılırsa çizgi ekrandan çıkabilir.
+- **Style/Precision kontrolü yok** — Pine kaynağında böyle bir `input()`
+  yok, TV'nin gerçek ayarlar penceresinde (Inputs/Style/Visibility gibi
+  sekmeler) olup olmadığına dair ekran görüntüsü verilmedi (DEMA/EMA'da
+  olduğu gibi) — bu yüzden SADECE Pine'ın kendi `input()`'larına birebir
+  karşılık gelen tek bölümlü bir ayar penceresi yapıldı, sekme İCAT EDİLMEDİ.
+
+**Sonraki oturumda ilk iş:** production'da bir Linear Regression Channel
+ekle — 3 çizginin (orta/üst/alt) göründüğünü, Length/Source/Deviation/
+Extend ayarlarının çalıştığını, Pearson's R'nin legend'de göründüğünü
+doğrula. Eğer kullanıcı gerçek TV ayar penceresinin ekran görüntüsünü
+paylaşırsa (DEMA/EMA'da olduğu gibi) sekme yapısı/Style kontrolleri
+buna göre düzeltilebilir. Dolgu (linefill) ayrı bir iş olarak
+değerlendirilmeli — custom-series gerektiriyor.

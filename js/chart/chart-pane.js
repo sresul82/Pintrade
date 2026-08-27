@@ -517,15 +517,25 @@ class ChartPane {
       if (this.indicators.length) {
         const hitTime = this.chart.timeScale().coordinateToTime(x);
         if (hitTime != null) {
-          for (const cfg of this.indicators) {
-            if (cfg.type !== 'ema' && cfg.type !== 'dema') continue;
-            const series = this._indSeries[cfg.id];
-            if (!series) continue;
+          const testHit = (series) => {
+            if (!series) return false;
             const val = this._nearestSeriesValue(series, hitTime);
             const lineY = val != null ? series.priceToCoordinate(val) : null;
-            if (lineY != null && Math.abs(y - lineY) <= HIT_TOLERANCE_PX) {
-              EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: cfg.id });
-              return;
+            return lineY != null && Math.abs(y - lineY) <= HIT_TOLERANCE_PX;
+          };
+          for (const cfg of this.indicators) {
+            if (cfg.type === 'ema' || cfg.type === 'dema') {
+              if (testHit(this._indSeries[cfg.id])) {
+                EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: cfg.id });
+                return;
+              }
+            } else if (cfg.type === 'linreg') {
+              // 3 çizgiden (orta/üst/alt) HERHANGİ birine isabet yeterli.
+              const aux = this._indAuxSeries[cfg.id];
+              if (testHit(this._indSeries[cfg.id]) || testHit(aux?.upper) || testHit(aux?.lower)) {
+                EventBus.emit('indicator:editRequested', { paneIdx: this.idx, indicatorId: cfg.id });
+                return;
+              }
             }
           }
         }
@@ -745,10 +755,10 @@ class ChartPane {
    *  'rsi': v5 native pane API'siyle AYRI bir alt-panel (subpane) — TV'deki
    *  gibi sabit 0-100 eksen + 30/70 referans çizgileri. */
   addIndicator(type, opts = {}) {
-    const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800', rsi: '#a855f7' };
+    const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800', rsi: '#a855f7', linreg: '#f23645' };
     // [2026-08-27, kullanıcı ekran görüntüsü] TV'nin gerçek EMA varsayılanı
     // 9 — burada yanlışlıkla 20 idi (DEMA zaten doğruydu, 9).
-    const DEFAULT_PERIOD = { ema: 9, dema: 9, rsi: 14 };
+    const DEFAULT_PERIOD = { ema: 9, dema: 9, rsi: 14, linreg: 100 };
     const cfg = {
       id: 'ind_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       type,
@@ -768,6 +778,11 @@ class ChartPane {
       // gibi ema/dema de eksik alanları ChartPane.MA_DEFAULTS_APPLY'den alır.
       Object.assign(cfg, opts);
       ChartPane.MA_DEFAULTS_APPLY(cfg);
+    } else if (type === 'linreg') {
+      // 2026-08-27 (kullanıcı isteği — TV'nin GERÇEK "Linear Regression
+      // Channel" built-in indikatörünün Pine kaynağı birebir paylaşıldı).
+      Object.assign(cfg, opts);
+      ChartPane.LINREG_DEFAULTS_APPLY(cfg);
     }
     this.indicators.push(cfg);
     this._rebuildIndicatorOverlays();
@@ -949,6 +964,38 @@ class ChartPane {
     return typeof _getDynamicDecimals === 'function' ? _getDynamicDecimals(priceHint) : 2;
   }
 
+  // ── Linear Regression Channel (2026-08-27, kullanıcı isteği — TV'nin
+  // GERÇEK "Linear Regression Channel" built-in indikatörünün Pine kaynağı
+  // birebir paylaşıldı). Matematik `indicator-engine.js`'deki
+  // `calcLinRegChannelFull`'da (Kom1'in kendi basit `calcRegressionChannel`'ıyla
+  // KARIŞTIRILMASIN, ayrı fonksiyon). Renkler Pine'daki gibi: `colorUpper`
+  // hem üst çizgi hem (kaynak kodun kendi tuhaflığı — kopya değil, TV'nin
+  // orijinal script'i böyle) ALT çizgi için kullanılıyor, `colorLower`
+  // sadece orta/base regresyon çizgisi için. Dolgu alanı (linefill) BU
+  // TURDA YAPILMADI — LWC'de iki eğik çizgi arasını doldurmak custom-series
+  // (ICustomSeriesPaneView) gerektirir, görsel doğrulama yapılamayan bu
+  // ortamda riskli bulundu; sadece 3 çizgi (üst/orta/alt) çiziliyor.
+  static LINREG_DEFAULTS_APPLY(cfg) {
+    if (cfg.type !== 'linreg') return cfg;
+    cfg.source ??= 'close';
+    cfg.upperDevEnabled ??= true;
+    cfg.upperMult ??= 2.0;
+    cfg.lowerDevEnabled ??= true;
+    cfg.lowerMult ??= 2.0;
+    cfg.showPearson ??= true;
+    cfg.extendLeft ??= false;
+    cfg.extendRight ??= true;
+    // Pine: color.new(color.blue,85)/color.new(color.red,85) — TV'nin
+    // kendi blue/red hex'leri. Dolgu yapılmadığı için (yukarıdaki not)
+    // şeffaflık burada anlamsız, opak saklanıyor.
+    cfg.colorUpper ??= '#2962ff';
+    cfg.colorLower ??= '#f23645';
+    cfg.width ??= 1; // Pine: width=1, sabit
+    cfg.lineStyle ??= 'solid';
+    cfg.showLine ??= true;
+    return cfg;
+  }
+
   /** cfg.source'a göre bar dizisinden kaynak diziyi üretir — adı RSI_ ile
    *  başlıyor (ilk kullanıcısı oydu) ama artık EMA/DEMA de aynı fonksiyonu
    *  paylaşıyor (2026-08-27) — tek doğruluk kaynağı, kopya yazılmadı.
@@ -993,6 +1040,8 @@ class ChartPane {
           if (aux.ob) { try { this.chart.removeSeries(aux.ob); } catch (_) {} }
           if (aux.os) { try { this.chart.removeSeries(aux.os); } catch (_) {} }
           if (aux.ma) { try { this.chart.removeSeries(aux.ma); } catch (_) {} }
+          if (aux.upper) { try { this.chart.removeSeries(aux.upper); } catch (_) {} } // linreg
+          if (aux.lower) { try { this.chart.removeSeries(aux.lower); } catch (_) {} } // linreg
           delete this._indAuxSeries[id];
         }
         if (this._indFillEl[id]) { this._indFillEl[id].remove(); delete this._indFillEl[id]; }
@@ -1013,6 +1062,11 @@ class ChartPane {
       // period/color vardı) yeni alanlar (source/offset/width/...) eksik
       // olabilir, her rebuild'de cfg'ye kalıcı olarak yazılır.
       ChartPane.MA_DEFAULTS_APPLY(cfg);
+      ChartPane.LINREG_DEFAULTS_APPLY(cfg);
+      // Linear Regression Channel — kendi 3-serili (üst/orta/alt) modeli
+      // aşağıdaki tek-seri isSubpane/isMA mantığından TAMAMEN farklı, bu
+      // yüzden ayrı bir dal olarak baştan çıkılıyor.
+      if (cfg.type === 'linreg') { this._rebuildLinRegChannel(cfg); return; }
       const isSubpane = ChartPane.SUBPANE_TYPES.has(cfg.type);
       const isMA = cfg.type === 'ema' || cfg.type === 'dema';
       // Chart hâlâ yer tutucu boyuttaysa (ilk gerçek resize olmadıysa) subpane
@@ -1139,6 +1193,93 @@ class ChartPane {
       lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
     });
     this._indAuxSeries[cfg.id] = { ma };
+  }
+
+  /** Linear Regression Channel — 3 çizgi (orta/üst/alt). Ana (orta/base)
+   *  seri `this._indSeries[cfg.id]`'de (çift-tıklama hit-test'i ve sidebar
+   *  legend'in beklediği "birincil seri" konvansiyonuyla tutarlı), üst/alt
+   *  `this._indAuxSeries[cfg.id] = { upper, lower }`'da. Üçü de tam olarak
+   *  AYNI iki (veya extend açıksa dört) veri noktasına sahip — veri
+   *  `_recomputeAllIndicators`'daki `_computeLinRegChannel`'da hesaplanır,
+   *  burası sadece seri nesnelerini kurar/stilini uygular. */
+  _rebuildLinRegChannel(cfg) {
+    const lineColor = (base) => cfg.showLine === false ? 'rgba(0,0,0,0)' : base;
+    const opts = (base) => ({
+      color: lineColor(base), lineWidth: cfg.width, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.lineStyle),
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+    });
+    const existingBase = this._indSeries[cfg.id];
+    const existingAux = this._indAuxSeries[cfg.id];
+    if (existingBase && existingAux?.upper && existingAux?.lower) {
+      existingBase.applyOptions(opts(cfg.colorLower));
+      existingAux.upper.applyOptions(opts(cfg.colorUpper));
+      // Pine kaynağının kendi tuhaflığı — alt çizgi de colorUpper kullanıyor
+      // (bkz. LINREG_DEFAULTS_APPLY başlığındaki not), kopya değil.
+      existingAux.lower.applyOptions(opts(cfg.colorUpper));
+      return;
+    }
+    const scaleId = this._mainScaleId();
+    this._indSeries[cfg.id] = this.chart.addSeries(LightweightCharts.LineSeries, { ...opts(cfg.colorLower), priceScaleId: scaleId });
+    const upper = this.chart.addSeries(LightweightCharts.LineSeries, { ...opts(cfg.colorUpper), priceScaleId: scaleId });
+    const lower = this.chart.addSeries(LightweightCharts.LineSeries, { ...opts(cfg.colorUpper), priceScaleId: scaleId });
+    this._indAuxSeries[cfg.id] = { upper, lower };
+  }
+
+  /** Linear Regression Channel'ın matematiğini (IndicatorEngine.calcLinRegChannelFull)
+   *  çağırıp 3 seriye (orta/üst/alt) `setData` eder. TV'nin `barstate.islast`
+   *  davranışı — geçmiş her bar için ayrı ayrı hesaplanmaz, SADECE son
+   *  `cfg.period` barlık pencerede tek bir statik kanal (2 uç noktası,
+   *  extend açıksa +1 nokta daha) çizilir.
+   *
+   *  **Bilinçli sınırlama (extend):** TV'nin çizgileri gerçekten SONSUZA
+   *  uzanır (ekran nereye kaydırılırsa kaydırılsın). Burada bunun yerine
+   *  sabit `EXTEND_BARS` (200) kadar bir uzatma kullanılıyor — görünür
+   *  aralığa (viewport) tepki veren dinamik bir uzatma, pan/zoom event'ine
+   *  abone olup her seferinde yeniden hesaplamayı gerektirirdi (ayrı,
+   *  daha büyük bir iş); tipik yakınlaştırma seviyelerinde görsel olarak
+   *  ekrana sığması yeterli, ama aşırı ıraksatılırsa (çok uzağa kaydırma)
+   *  çizgi ekrandan çıkabilir. Fib araçlarındaki `_extendToEdge`'in
+   *  (piksel-uzayında sonsuz uzatma) veri-uzayındaki (LWC seri noktaları)
+   *  karşılığı yok, bu yüzden bu yaklaşım seçildi. */
+  _computeLinRegChannel(cfg, times) {
+    const base = this._indSeries[cfg.id];
+    const aux = this._indAuxSeries[cfg.id];
+    if (!base || !aux?.upper || !aux?.lower || !this.candlesData?.length) return;
+
+    const sourceAsc = ChartPane.RSI_SOURCE_SERIES(this.candlesData, cfg.source);
+    const highAsc = this.candlesData.map(d => d.high);
+    const lowAsc = this.candlesData.map(d => d.low);
+    const result = IndicatorEngine.calcLinRegChannelFull(sourceAsc, highAsc, lowAsc, cfg.period, {
+      useUpperDev: cfg.upperDevEnabled, upperMult: cfg.upperMult,
+      useLowerDev: cfg.lowerDevEnabled, lowerMult: cfg.lowerMult,
+    });
+    if (!result) {
+      base.setData([]); aux.upper.setData([]); aux.lower.setData([]);
+      cfg._lastValue = null; cfg._pearsonR = null;
+      return;
+    }
+
+    const n = times.length;
+    const startTime = times[n - cfg.period];
+    const endTime = times[n - 1];
+    const barInterval = n > 1 ? (times[n - 1] - times[n - 2]) : 60;
+    const EXTEND_BARS = 200;
+
+    const buildLine = (startVal, endVal) => {
+      const perBar = (endVal - startVal) / (cfg.period - 1);
+      const pts = [];
+      if (cfg.extendLeft) pts.push({ time: startTime - barInterval * EXTEND_BARS, value: startVal - perBar * EXTEND_BARS });
+      pts.push({ time: startTime, value: startVal });
+      pts.push({ time: endTime, value: endVal });
+      if (cfg.extendRight) pts.push({ time: endTime + barInterval * EXTEND_BARS, value: endVal + perBar * EXTEND_BARS });
+      return pts;
+    };
+
+    base.setData(buildLine(result.startPrice, result.endPrice));
+    aux.upper.setData(buildLine(result.upperStart, result.upperEnd));
+    aux.lower.setData(buildLine(result.lowerStart, result.lowerEnd));
+    cfg._lastValue = result.endPrice;
+    cfg._pearsonR = result.pearsonR; // TV paritesi — "Show Pearson's R" (bkz. _updateIndicatorLegend)
   }
 
   /** RSI (subpane) için: 30/70 referans çizgileri (cfg.bandColor) + overbought/
@@ -1371,6 +1512,10 @@ class ChartPane {
     const lastTime = times[times.length - 1];
 
     this.indicators.forEach(cfg => {
+      // Linear Regression Channel — tek-değerli seri mantığından TAMAMEN
+      // farklı (sadece 2-4 noktalı düz çizgiler, TV'nin "sadece son bar'da
+      // hesapla" davranışı), ayrı bir dal.
+      if (cfg.type === 'linreg') { this._computeLinRegChannel(cfg, times); return; }
       // 'close' dışı bir Source seçiliyse (Open/High/Low/HL2/HLC3/OHLC4/HLCC4)
       // liveOverride'ı (sadece close taşır) UYGULAMADAN candlesData'dan üretir —
       // canlı tick'te tek bar geç güncellenmesi (bir sonraki tam candle'da düzelir)
@@ -1508,9 +1653,21 @@ class ChartPane {
   _updateIndicatorLegend(valuesOnly = false) {
     const fmtValue = (cfg) => {
       if (cfg._lastValue == null) return '—';
-      const decimals = cfg.type === 'rsi' ? ChartPane.RSI_PRECISION_DECIMALS(cfg) : 2;
+      // 2026-08-27 — EMA/DEMA/linreg artık MA_PRECISION_DECIMALS kullanıyor
+      // (önceden burası sabit 2'ydi, seriye uygulanan gerçek precision'dan
+      // BAĞIMSIZDI — düşük fiyatlı coinlerde legend değeri 0.00'a
+      // yuvarlanıp seride görünen değerle uyuşmuyordu).
+      const isMAlike = cfg.type === 'ema' || cfg.type === 'dema' || cfg.type === 'linreg';
+      const decimals = cfg.type === 'rsi' ? ChartPane.RSI_PRECISION_DECIMALS(cfg)
+        : isMAlike ? ChartPane.MA_PRECISION_DECIMALS(cfg, cfg._lastValue)
+        : 2;
       const mul = Math.pow(10, decimals);
-      return (Math.round(cfg._lastValue * mul) / mul).toFixed(decimals);
+      let out = (Math.round(cfg._lastValue * mul) / mul).toFixed(decimals);
+      // TV paritesi — "Show Pearson's R" (Linear Regression Channel'a özel).
+      if (cfg.type === 'linreg' && cfg.showPearson !== false && cfg._pearsonR != null) {
+        out += ` R:${cfg._pearsonR.toFixed(2)}`;
+      }
+      return out;
     };
     if (valuesOnly && this._indLegendEl) {
       this.indicators.forEach(cfg => {
@@ -1529,7 +1686,7 @@ class ChartPane {
       this._indLegendEl.style.cssText = 'position:absolute; top:6px; left:8px; z-index:2; font-size:11px; font-family:"JetBrains Mono",monospace; pointer-events:auto;';
       this.cvs.appendChild(this._indLegendEl);
     }
-    const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
+    const NAME = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI', linreg: 'LinReg' };
     // TV paritesi — "Inputs in status line" / "Values in status line" (RSI Style sekmesi).
     this._indLegendEl.innerHTML = this.indicators.map(cfg => {
       const showInputs = cfg.type !== 'rsi' || cfg.showInputsInStatusLine !== false;
@@ -2869,7 +3026,7 @@ class ChartPane {
       // kozmetik kontrolleri (bkz. constructor'daki notlar).
       dayOfWeekLabels: this.dayOfWeekLabels, dateFormat: this.dateFormat, timeFormat: this.timeFormat,
       // gorevler2.md Görev 14 (2026-08-11) — Chart İndikatörleri
-      indicators: this.indicators.map(({ _lastValue, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
+      indicators: this.indicators.map(({ _lastValue, _pearsonR, ...cfg }) => cfg), // canlı değeri kaydetme, sadece yapılandırmayı
     };
   }
 

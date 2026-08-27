@@ -7,8 +7,8 @@
  * pane'in indikatörleri değiştikçe liste kendini yeniler.
  */
 const IndicatorListPanel = (() => {
-  const NAME = { ema: 'Moving Average Exponential', dema: 'Double EMA', rsi: 'Relative Strength Index' };
-  const SHORT = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI' };
+  const NAME = { ema: 'Moving Average Exponential', dema: 'Double EMA', rsi: 'Relative Strength Index', linreg: 'Linear Regression Channel' };
+  const SHORT = { ema: 'EMA', dema: 'DEMA', rsi: 'RSI', linreg: 'LinReg' };
 
   function _esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c =>

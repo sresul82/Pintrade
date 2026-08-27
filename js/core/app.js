@@ -1291,6 +1291,7 @@ const App = {
       { type: 'ema',  name: 'Moving Average Exponential', short: 'EMA',  desc: 'Overlay — ana chart üzerinde' },
       { type: 'dema', name: 'Double EMA',                 short: 'DEMA', desc: 'Overlay — ana chart üzerinde' },
       { type: 'rsi',  name: 'Relative Strength Index',    short: 'RSI',  desc: 'Subpane — ayrı alt panelde' },
+      { type: 'linreg', name: 'Linear Regression Channel', short: 'LinReg', desc: 'Overlay — ana chart üzerinde, 3 çizgi' },
       // [2026-08-26, kullanıcı isteği] Volume gerçek bir indikatör DEĞİL —
       // hâlâ Settings > Canvas'taki showVolume checkbox'ına bağlı, burası
       // ve sidebar (IndicatorListPanel) sadece o tek doğruluk kaynağına
@@ -1364,6 +1365,10 @@ const App = {
 
       if (cfg.type === 'rsi') {
         _openRsiSettings(pane, cfg, indicatorId);
+        return;
+      }
+      if (cfg.type === 'linreg') {
+        _openLinRegSettings(pane, cfg, indicatorId);
         return;
       }
       // 2026-08-27 (kullanıcı isteği) — EMA/DEMA artık RSI'nınkine benzer
@@ -1869,6 +1874,97 @@ const App = {
           showPriceLabels: draft.showPriceLabels,
           showValuesInStatusLine: draft.showValuesInStatusLine,
           showInputsInStatusLine: draft.showInputsInStatusLine,
+        });
+      });
+    }
+
+    // ── Linear Regression Channel ayar penceresi (2026-08-27, kullanıcı
+    // isteği — TV'nin GERÇEK built-in "Linear Regression Channel"
+    // indikatörünün Pine kaynağı birebir paylaşıldı). Kaynak kodun kendi
+    // `input()` çağrılarıyla BİREBİR eşleşen alanlar dışında hiçbir şey
+    // İCAT EDİLMEDİ (ör. genel çizgi kalınlığı/stili için ayrı bir kontrol
+    // eklenmedi — Pine'da öyle bir input yok, TV'nin gerçek Style
+    // sekmesinin var olup olmadığına dair bir kanıtım yok). Tek bölüm
+    // (tab yok) — Pine kaynağı zaten Inputs/Channel/Display/Color diye
+    // 4 GRUBA ayrılmış durumda, ayrıca sekmelere bölmek gerekmedi.
+    function _openLinRegSettings(pane, cfg, indicatorId) {
+      document.getElementById('dsd-overlay')?.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'dsd-overlay';
+      overlay.className = 'dsd-overlay';
+
+      const renderBody = (c) => `
+        ${_rsiRow('Length', `<input type="number" class="dsd-input" id="lr-length" min="1" step="1" value="${c.period}"/>`)}
+        ${_rsiRow('Source', _rsiSelect('lr-source', MA_SOURCE_OPTIONS, c.source))}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Channel Settings</div>
+        ${_rsiToggleRow('lr-upper-dev', c.upperDevEnabled, 'Upper Deviation', `<input type="number" class="dsd-input" id="lr-upper-mult" step="0.1" value="${c.upperMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
+        ${_rsiToggleRow('lr-lower-dev', c.lowerDevEnabled, 'Lower Deviation', `<input type="number" class="dsd-input" id="lr-lower-mult" step="0.1" value="${c.lowerMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Display Settings</div>
+        ${_rsiCheck('lr-show-pearson', "Show Pearson's R", c.showPearson)}
+        ${_rsiCheck('lr-extend-left', 'Extend Lines Left', c.extendLeft)}
+        ${_rsiCheck('lr-extend-right', 'Extend Lines Right', c.extendRight)}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Color Settings</div>
+        ${_rsiRow('Upper / Lower', _rsiSwatch('lr-color-upper', c.colorUpper) + _rsiSwatch('lr-color-lower', c.colorLower))}`;
+
+      overlay.innerHTML = `
+        <div class="dsd-dialog" id="dsd-dialog" style="width:320px;">
+          <div class="dsd-header">
+            <span class="dsd-title">Linear Regression Channel</span>
+            <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>
+          </div>
+          <div class="dsd-body" id="dsd-lr-body">${renderBody(cfg)}</div>
+          <div class="dsd-footer">
+            <div class="dsd-footer-left">
+              <button class="dsd-tmpl-btn" id="dsd-btn-remove">Remove</button>
+            </div>
+            <div class="dsd-footer-right">
+              <button class="dsd-btn-cancel" id="dsd-btn-cancel">Cancel</button>
+              <button class="dsd-btn-ok" id="dsd-btn-ok">Ok</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      {
+        const dsdDialogEl = document.getElementById('dsd-dialog');
+        const dsdHeaderEl = overlay.querySelector('.dsd-header');
+        if (dsdDialogEl && dsdHeaderEl && window.DSDUtils) {
+          window.DSDUtils.makeDraggable(dsdDialogEl, dsdHeaderEl);
+        }
+      }
+
+      overlay.querySelectorAll('.dsd-color-swatch').forEach(box => {
+        box.addEventListener('click', () => {
+          window.DSDColorPicker.showColorPalette(box, box.dataset.color, (newColor) => {
+            box.dataset.color = newColor;
+            box.style.background = newColor;
+          });
+        });
+      });
+
+      const close = () => overlay.remove();
+      document.getElementById('dsd-close-btn')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-cancel')?.addEventListener('click', close);
+      document.getElementById('dsd-btn-remove')?.addEventListener('click', () => {
+        window.ConfirmModal.show('Remove Linear Regression Channel indicator? This cannot be undone.').then((ok) => {
+          if (!ok) return;
+          close();
+          pane.removeIndicator(indicatorId);
+        });
+      });
+      document.getElementById('dsd-btn-ok')?.addEventListener('click', () => {
+        const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
+        const chk = (id) => document.getElementById(id)?.checked;
+        const swatch = (id) => overlay.querySelector(`#${id}`)?.dataset.color;
+        close();
+        pane.updateIndicatorSettings(indicatorId, {
+          period: Math.max(1, Math.round(num('lr-length') ?? cfg.period)),
+          source: document.getElementById('lr-source')?.value ?? cfg.source,
+          upperDevEnabled: chk('lr-upper-dev'), upperMult: num('lr-upper-mult') ?? cfg.upperMult,
+          lowerDevEnabled: chk('lr-lower-dev'), lowerMult: num('lr-lower-mult') ?? cfg.lowerMult,
+          showPearson: chk('lr-show-pearson'), extendLeft: chk('lr-extend-left'), extendRight: chk('lr-extend-right'),
+          colorUpper: swatch('lr-color-upper') ?? cfg.colorUpper,
+          colorLower: swatch('lr-color-lower') ?? cfg.colorLower,
         });
       });
     }
