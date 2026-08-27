@@ -363,6 +363,13 @@ const _latestPrices = {
   bybit:   new Map(),
 };
 
+// gorevler4.md Görev-17 Madde B — Kom1ServerWatcher'ın evren/katman
+// yenilemesi için ihtiyaç duyduğu hacim verisi. collectBinanceData zaten
+// her 1 dakikada tüm sembollerin ticker/24hr'ını çekiyor; Kom1'in AYNI
+// endpoint'e kendi başına ikinci bir istek atmaması için bu snapshot
+// paylaşılıyor (bkz. kom1-server-watcher.js `_refreshUniverse` başlığı).
+const _latestBinanceTickers = new Map(); // symbol → { quoteVolume24h }
+
 // "1D Open" için UTC gün başı fiyatını hangi güne kadar zaten kaydettiğimiz
 // (server.js açılışında Mongo'dan yüklenir — restart'ta yanlışlıkla o anki
 // fiyatı "gün açılışı" sanıp üzerine yazmasın diye).
@@ -428,6 +435,8 @@ async function collectBinanceData() {
       tkMap[t.symbol] = t;
       const p = parseFloat(t.lastPrice);
       if (!isNaN(p)) _latestPrices.binance.set(t.symbol, p);
+      const vol = parseFloat(t.quoteVolume);
+      _latestBinanceTickers.set(t.symbol, { quoteVolume24h: isNaN(vol) ? 0 : vol });
     });
 
     await _maybeCaptureDayOpen(tkMap);
@@ -992,7 +1001,7 @@ mongoose.connection.once('open', () => {
         sendTelegramMessage(_kom1TelegramText(confirmed));
       }
       catch (err) { console.warn('[Kom1ServerWatcher] Sinyal kaydedilemedi:', err.message); }
-    }).then(async () => {
+    }, _latestBinanceTickers).then(async () => {
       // Tarama durumunu (katman/hacim/son-tarandı) kalıcı hale getir —
       // watcher kendi Mongo'ya dokunmaz (DB-agnostic), bu yüzden server.js yapıyor.
       const records = Kom1ServerWatcher.getScanStateForPersist();

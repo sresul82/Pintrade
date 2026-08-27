@@ -182,14 +182,20 @@ const _dirty = new Set();
  * ile tüm sembol evrenini çeker, hacme göre sıralayıp 3 katmana böler.
  * Var olan `lastScannedAt` değerleri (rotasyon durumu) KORUNUR — sadece
  * tier/hacim güncellenir, sembol ilk kez görülüyorsa lastScannedAt=0 (hemen taransın).
+ *
+ * gorevler4.md Görev-17 Madde B: `ticker/24hr` artık BURADA ayrıca çekilmiyor —
+ * `server.js`'teki `collectBinanceData`'nın zaten her 1 dakikada tuttuğu aynı
+ * veri `tickerSnapshot` (Map<symbol, {quoteVolume24h}>) olarak parametreyle
+ * geçiriliyor (bkz. server.js `_latestBinanceTickers`). Snapshot henüz boşsa
+ * (ör. Mongo henüz bağlanmadıysa — `collectBinanceData` bu durumda hiç
+ * çalışmıyor) mevcut REST çağrısına AYNEN düşülüyor, yani evren yenilemesi
+ * paylaşılan veri geçici olarak yoksa kesintiye uğramıyor.
+ * @param {Map<string, {quoteVolume24h: number}>} [tickerSnapshot]
  */
-async function _refreshUniverse() {
-  const [info, tickers] = await Promise.all([
-    fetchJson('/fapi/v1/exchangeInfo'),
-    fetchJson('/fapi/v1/ticker/24hr'),
-  ]);
-  if (!info || !Array.isArray(info.symbols) || !Array.isArray(tickers)) {
-    throw new Error('exchangeInfo/24hr ticker beklenmeyen yanıt');
+async function _refreshUniverse(tickerSnapshot) {
+  const info = await fetchJson('/fapi/v1/exchangeInfo');
+  if (!info || !Array.isArray(info.symbols)) {
+    throw new Error('exchangeInfo beklenmeyen yanıt');
   }
 
   const tradingUsdtPerp = new Set(
@@ -200,9 +206,19 @@ async function _refreshUniverse() {
   );
 
   const volumeBySymbol = new Map();
-  for (const t of tickers) {
-    if (!tradingUsdtPerp.has(t.symbol)) continue;
-    volumeBySymbol.set(t.symbol, parseFloat(t.quoteVolume) || 0);
+  if (tickerSnapshot && tickerSnapshot.size > 0) {
+    for (const [symbol, t] of tickerSnapshot) {
+      if (!tradingUsdtPerp.has(symbol)) continue;
+      volumeBySymbol.set(symbol, t.quoteVolume24h || 0);
+    }
+  } else {
+    // Paylaşılan snapshot henüz hazır değil — mevcut REST fallback
+    const tickers = await fetchJson('/fapi/v1/ticker/24hr');
+    if (!Array.isArray(tickers)) throw new Error('ticker/24hr beklenmeyen yanıt (fallback)');
+    for (const t of tickers) {
+      if (!tradingUsdtPerp.has(t.symbol)) continue;
+      volumeBySymbol.set(t.symbol, parseFloat(t.quoteVolume) || 0);
+    }
   }
 
   // Hacme göre azalan sırala → katman sınırlarını uygula
@@ -233,10 +249,10 @@ async function _refreshUniverse() {
   console.log(`[Kom1ServerWatcher] Evren yenilendi: ${s.total} USDT perpetual, Katman1=${s.tier1}, Katman2=${s.tier2}, Katman3=${s.tier3}.`);
 }
 
-async function _maybeRefreshUniverse() {
+async function _maybeRefreshUniverse(tickerSnapshot) {
   if (_universe.size > 0 && Date.now() - _lastUniverseRefresh < UNIVERSE_REFRESH_MS) return;
   try {
-    await _refreshUniverse();
+    await _refreshUniverse(tickerSnapshot);
   } catch (err) {
     console.warn('[Kom1ServerWatcher] Evren yenileme başarısız, önceki liste kullanılmaya devam:', err.message);
   }
@@ -404,21 +420,24 @@ let _ticking = false;
 // (örn. >30dk) tick() döngüsünün bir yerde exception'la öldüğüne işarettir.
 let _lastTickAt = null;
 
-/** @param {(confirmed: object) => Promise<void>|void} onConfirmed */
-async function tick(onConfirmed) {
+/**
+ * @param {(confirmed: object) => Promise<void>|void} onConfirmed
+ * @param {Map<string, {quoteVolume24h: number}>} [tickerSnapshot] — bkz. _refreshUniverse başlığı
+ */
+async function tick(onConfirmed, tickerSnapshot) {
   if (_ticking) { console.warn('[Kom1ServerWatcher] Önceki tur hâlâ sürüyor, bu tur atlandı.'); return; }
   _ticking = true;
   _lastTickAt = Date.now();
   try {
-    await _tick(onConfirmed);
+    await _tick(onConfirmed, tickerSnapshot);
   } finally {
     _ticking = false;
   }
 }
 
-async function _tick(onConfirmed) {
+async function _tick(onConfirmed, tickerSnapshot) {
   _sweepExpired();
-  await _maybeRefreshUniverse();
+  await _maybeRefreshUniverse(tickerSnapshot);
 
   // ── Büyük TF taraması: SADECE bu turda "sırası gelen" (katman aralığı
   // dolmuş) semboller. Evren boşsa (ilk yenileme başarısız olduysa) sessizce
