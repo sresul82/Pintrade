@@ -120,7 +120,62 @@ window.DrawingForecast = (() => {
 
   // ── FORECASTING (Pozisyonlar ve Tahmin) ───────────────────
 
-  function _drawPosition(ctx, d, pane, type) {
+  // gorevler: Forecast & Measurement TV parity, Faz 1 (Long/Short Position).
+  // İstatistik formülleri TV'nin iç matematiğinden ters mühendislikle değil,
+  // gerçek TV hesabında gözlemlenen render'dan çıkarıldı — "en iyi çaba"
+  // yaklaşımı, TV ile sayısal olarak birebir garantili DEĞİL.
+  function _fmtPrice(v) {
+    if (!isFinite(v)) return '0';
+    return Math.abs(v) < 1 ? v.toFixed(5) : v.toFixed(3);
+  }
+  function _fmtAmt(v) {
+    if (!isFinite(v)) return '0';
+    return (v >= 0 ? '' : '-') + Math.abs(v).toFixed(2);
+  }
+  function _isStatOn(stats, key) {
+    const DEFAULT_ON = window.DSDPositionTabs ? window.DSDPositionTabs.DEFAULT_ON : null;
+    if (stats && stats[key] !== undefined) return stats[key];
+    return DEFAULT_ON ? DEFAULT_ON.has(key) : true;
+  }
+  function _roundRectPath(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+    else { ctx.beginPath(); ctx.rect(x, y, w, h); }
+  }
+  function _calloutHeight(lines, fontSize) {
+    if (!lines.length) return 0;
+    const padY = 4, lineH = fontSize + 5;
+    return lines.length * lineH + padY * 2 - (lineH - fontSize);
+  }
+  function _drawCallout(ctx, x, y, lines, bg, fontSize, align) {
+    if (!lines.length) return 0;
+    ctx.font = `${fontSize}px -apple-system, Arial, sans-serif`;
+    const padX = 6, padY = 4, lineH = fontSize + 5;
+    const textW = Math.max(...lines.map(l => ctx.measureText(l).width));
+    const w = textW + padX * 2;
+    const h = lines.length * lineH + padY * 2 - (lineH - fontSize);
+    const boxX = align === 'right' ? x - w : x;
+    _roundRectPath(ctx, boxX, y, w, h, 3);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((l, i) => ctx.fillText(l, boxX + padX, y + padY + i * lineH));
+    return h;
+  }
+  function _drawHandle(ctx, x, y, shape, color) {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    if (shape === 'circle') {
+      ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillRect(x - 4, y - 4, 8, 8);
+      ctx.strokeRect(x - 4, y - 4, 8, 8);
+    }
+  }
+
+  function _drawPosition(ctx, d, pane, type, isSelected) {
       if (!d.p1 || !d.p2 || !d.p3) return;
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
@@ -133,8 +188,8 @@ window.DrawingForecast = (() => {
       const fontSize = s.fontSize || 11;
       const showPriceLabels = s.priceLabels !== false;
       const ey = a.y;
-      const py = pane.series.priceToCoordinate(d.p2.price) || a.y - 50;
-      const sy = pane.series.priceToCoordinate(d.p3.price) || a.y + 50;
+      const py = (_pt2xy(d.p2, pane) || {}).y ?? (a.y - 50);
+      const sy = (_pt2xy(d.p3, pane) || {}).y ?? (a.y + 50);
       const diffTarget = py - ey;
       const diffStop = sy - ey;
       const w = rightX - a.x;
@@ -154,30 +209,94 @@ window.DrawingForecast = (() => {
       ctx.moveTo(a.x, ey + diffStop);   ctx.lineTo(rightX, ey + diffStop);
       ctx.stroke();
       ctx.setLineDash([]);
-      if (showPriceLabels !== false && w > 60) {
+
+      // ── TV-tarzı yüzen callout'lar (tam-genişlik bar DEĞİL) ──────────
+      const alwaysShow = s.alwaysShowStats !== false;
+      if (showPriceLabels !== false && w > 40 && (alwaysShow || isSelected)) {
         const ep = d.p1.price, tp = d.p2.price, sp = d.p3.price;
-        const profitPx  = Math.abs(tp - ep);
-        const stopPx    = Math.abs(ep - sp);
-        const profitPct = (profitPx / Math.max(0.00000001, ep) * 100).toFixed(2);
-        const stopPct   = (stopPx   / Math.max(0.00000001, ep) * 100).toFixed(2);
-        const rr        = stopPx === 0 ? '0.00' : (profitPx / stopPx).toFixed(2);
-        const labelH = fontSize + 8;
-        ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-        const tLineY = ey + diffTarget;
-        ctx.fillStyle = 'rgba(8,153,129,0.85)';
-        ctx.fillRect(a.x, tLineY - labelH, w, labelH);
-        ctx.font = `bold ${fontSize}px -apple-system, Arial, sans-serif`;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(`Target: ${tp.toFixed(3)}  (${profitPct}%)   R:R ${rr}`, a.x + 6, tLineY - labelH / 2);
-        ctx.font = `${fontSize - 1}px -apple-system, Arial, sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.fillText(`Entry: ${ep.toFixed(3)}`, a.x + 6, ey - labelH / 2 - 2);
-        const sLineY = ey + diffStop;
-        ctx.fillStyle = 'rgba(242,54,69,0.85)';
-        ctx.fillRect(a.x, sLineY, w, labelH);
-        ctx.font = `bold ${fontSize}px -apple-system, Arial, sans-serif`;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(`Stop: ${sp.toFixed(3)}  (${stopPct}%)`, a.x + 6, sLineY + labelH / 2);
+        const targetDist = Math.abs(tp - ep);
+        const stopDist   = Math.abs(ep - sp);
+        const pctTgt = (targetDist / Math.max(1e-8, ep)) * 100;
+        const pctStop = (stopDist / Math.max(1e-8, ep)) * 100;
+        const priceToTicks = window.DSDPositionTabs
+          ? window.DSDPositionTabs.priceToTicks
+          : (diff) => Math.round(Math.abs(diff) * 1000);
+        const ticksTgt = priceToTicks(tp - ep);
+        const ticksStop = priceToTicks(ep - sp);
+        const rr = stopDist === 0 ? 0 : targetDist / stopDist;
+
+        const accSize = s.accSize !== undefined ? s.accSize : 10000;
+        const riskType = s.riskType || '%';
+        const riskInput = s.risk !== undefined ? s.risk : 1;
+        const riskAmount = riskType === '%' ? accSize * (riskInput / 100) : riskInput;
+        const qty = stopDist > 0 ? riskAmount / stopDist : 0;
+        const tpAmount = qty * targetDist;
+        const slAmount = riskAmount;
+        const qtyPrec = s.qtyPrec && s.qtyPrec !== 'Default' ? parseInt(s.qtyPrec, 10) : 2;
+        const qtyStr = qty.toFixed(isFinite(qtyPrec) ? qtyPrec : 2);
+
+        const stats = s.stats || {};
+        const on = (k) => _isStatOn(stats, k);
+        const compact = s.compactStats === true;
+
+        // ── Target callout (yeşil, hedef çizgisinin üstünde, sol-hizalı) ──
+        const tParts = [];
+        if (on('tpPriceOffset')) tParts.push(`Target: ${_fmtPrice(tp)}`);
+        if (on('tpPercentOffset')) tParts.push(`(${pctTgt.toFixed(2)}%)`);
+        if (!compact && on('tpTickOffset')) tParts.push(`${ticksTgt}`);
+        let tLine1 = tParts.join(' ');
+        if (!compact && on('tpAmount') && tLine1) tLine1 += `, Amount: ${_fmtAmt(tpAmount)}`;
+        const tLines = [];
+        if (tLine1) tLines.push(tLine1);
+        if (!compact && on('tpPL')) tLines.push(`TP PL: ${_fmtAmt(tpAmount)}`);
+        if (tLines.length) {
+          const tLineY = ey + diffTarget;
+          const h = _calloutHeight(tLines, fontSize);
+          _drawCallout(ctx, a.x + 4, tLineY - h - 4, tLines, 'rgba(8,153,129,0.9)', fontSize, 'left');
+        }
+
+        // ── Entry callout (mavi, entry çizgisinin ortasında) ─────────────
+        const eLines = [];
+        const pnlParts = [];
+        if (on('openClosedPL')) {
+          const lastClose = pane.candlesData && pane.candlesData.length
+            ? pane.candlesData[pane.candlesData.length - 1].close : ep;
+          const closedPL = qty * (type === 'short' ? (ep - lastClose) : (lastClose - ep));
+          pnlParts.push(`Closed PnL: ${_fmtAmt(closedPL)}`);
+        }
+        if (on('qty')) pnlParts.push(`Qty: ${qtyStr}`);
+        if (pnlParts.length) eLines.push(pnlParts.join(', '));
+        if (on('rrRatio')) eLines.push(`Risk/reward ratio: ${rr.toFixed(2)}`);
+        if (eLines.length) {
+          const midX = (a.x + rightX) / 2;
+          ctx.font = `${fontSize}px -apple-system, Arial, sans-serif`;
+          const boxW = Math.max(...eLines.map(l => ctx.measureText(l).width)) + 12;
+          _drawCallout(ctx, midX - boxW / 2, ey + 6, eLines, 'rgba(41,98,255,0.9)', fontSize, 'left');
+        }
+
+        // ── Stop callout (kırmızı, stop çizgisinin altında, sol-hizalı) ──
+        const sParts = [];
+        if (on('slPriceOffset')) sParts.push(`Stop: ${_fmtPrice(sp)}`);
+        if (on('slPercentOffset')) sParts.push(`(${pctStop.toFixed(2)}%)`);
+        if (!compact && on('slTickOffset')) sParts.push(`${ticksStop}`);
+        let sLine1 = sParts.join(' ');
+        if (!compact && on('slAmount') && sLine1) sLine1 += `, Amount: ${_fmtAmt(slAmount)}`;
+        const sLines = [];
+        if (sLine1) sLines.push(sLine1);
+        if (!compact && on('slPL')) sLines.push(`SL PL: ${_fmtAmt(-slAmount)}`);
+        if (sLines.length) {
+          const sLineY = ey + diffStop;
+          _drawCallout(ctx, a.x + 4, sLineY + 4, sLines, 'rgba(242,54,69,0.9)', fontSize, 'left');
+        }
+      }
+
+      // ── Seçiliyken TV-tarzı tutamaç işaretçileri (görsel; hit-test
+      // geometrisi core.js:_hitTest'te ayrıca tanımlı, burası sadece çizim) ──
+      if (isSelected) {
+        _drawHandle(ctx, a.x, ey, 'circle', color);              // entry — sol (tüm şekli taşı)
+        _drawHandle(ctx, rightX, ey, 'square', color);           // entry — sağ (genişlik resize)
+        _drawHandle(ctx, a.x, ey + diffTarget, 'square', color); // target — sol köşe
+        _drawHandle(ctx, a.x, ey + diffStop, 'square', color);   // stop — sol köşe
       }
     }
 

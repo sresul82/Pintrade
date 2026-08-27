@@ -4,6 +4,11 @@
  */
 window.DSDPositionTabs = (() => {
 
+  // 1 tick = 0.001 fiyat birimi — Inputs sekmesi ve render (drawing-forecast.js)
+  // aynı çeviriyi kullansın diye burada tek yerden export ediliyor.
+  const TICK_SCALE = 1000;
+  function priceToTicks(diff) { return Math.round(Math.abs(diff) * TICK_SCALE); }
+
   function renderPositionInputsTab(d) {
     const s = d.style || {};
     const accSize   = s.accSize   !== undefined ? s.accSize   : 10000;
@@ -12,8 +17,8 @@ window.DSDPositionTabs = (() => {
     const extP      = d.p1  ? d.p1.price  : 0;
     const targetP   = d.p2  ? d.p2.price  : 0;
     const stopP     = d.p3  ? d.p3.price  : 0;
-    const ticksTgt  = Math.round(Math.abs(targetP - extP) * 1000);
-    const ticksStop = Math.round(Math.abs(extP - stopP)   * 1000);
+    const ticksTgt  = priceToTicks(targetP - extP);
+    const ticksStop = priceToTicks(extP - stopP);
     const leverage  = s.leverage  !== undefined ? s.leverage  : 1;
     const qtyPrec   = s.qtyPrec   || 'Default';
 
@@ -86,6 +91,31 @@ window.DSDPositionTabs = (() => {
   }
 
 
+  // Stats items — same order as TradingView. Exported (bkz. return altta)
+  // ki drawing-forecast.js aynı kaynağı okusun, ikinci bir kopya türemesin.
+  const STAT_ITEMS = [
+    { key: 'tpPriceOffset',   label: 'TP price offset'   },
+    { key: 'tpPercentOffset', label: 'TP percent offset'  },
+    { key: 'tpTickOffset',    label: 'TP tick offset'     },
+    { key: 'tpAmount',        label: 'TP amount'          },
+    { key: 'tpPL',            label: 'TP PL'              },
+    { key: 'openClosedPL',    label: 'Open/closed PL'     },
+    { key: 'qty',             label: 'Qty'                },
+    { key: 'rrRatio',         label: 'Risk/reward ratio'  },
+    { key: 'slPriceOffset',   label: 'SL price offset'    },
+    { key: 'slPercentOffset', label: 'SL percent offset'  },
+    { key: 'slTickOffset',    label: 'SL tick offset'     },
+    { key: 'slAmount',        label: 'SL amount'          },
+    { key: 'slPL',            label: 'SL PL'              },
+  ];
+
+  // Default checked stats (matches TradingView defaults)
+  const DEFAULT_ON = new Set([
+    'tpPriceOffset','tpPercentOffset','tpTickOffset','tpAmount',
+    'openClosedPL','qty','rrRatio',
+    'slPriceOffset','slPercentOffset','slTickOffset','slAmount'
+  ]);
+
   function renderPositionStyleTab(d) {
     const s = d.style || {};
     const color    = s.color    || '#2962ff';
@@ -94,30 +124,6 @@ window.DSDPositionTabs = (() => {
     const textColor = s.textColor  || '#ffffff';
     const compactStats    = s.compactStats    === true;
     const alwaysShowStats = s.alwaysShowStats !== false;
-
-    // Stats items — same order as TradingView
-    const STAT_ITEMS = [
-      { key: 'tpPriceOffset',   label: 'TP price offset'   },
-      { key: 'tpPercentOffset', label: 'TP percent offset'  },
-      { key: 'tpTickOffset',    label: 'TP tick offset'     },
-      { key: 'tpAmount',        label: 'TP amount'          },
-      { key: 'tpPL',            label: 'TP PL'              },
-      { key: 'openClosedPL',    label: 'Open/closed PL'     },
-      { key: 'qty',             label: 'Qty'                },
-      { key: 'rrRatio',         label: 'Risk/reward ratio'  },
-      { key: 'slPriceOffset',   label: 'SL price offset'    },
-      { key: 'slPercentOffset', label: 'SL percent offset'  },
-      { key: 'slTickOffset',    label: 'SL tick offset'     },
-      { key: 'slAmount',        label: 'SL amount'          },
-      { key: 'slPL',            label: 'SL PL'              },
-    ];
-
-    // Default checked stats (matches TradingView defaults)
-    const DEFAULT_ON = new Set([
-      'tpPriceOffset','tpPercentOffset','tpTickOffset','tpAmount',
-      'openClosedPL','qty','rrRatio',
-      'slPriceOffset','slPercentOffset','slTickOffset','slAmount'
-    ]);
     const stats = s.stats || {};
 
     // Build summary label for the dropdown button
@@ -197,6 +203,10 @@ window.DSDPositionTabs = (() => {
 
   return {
     renderPositionInputsTab,
-    renderPositionStyleTab
+    renderPositionStyleTab,
+    STAT_ITEMS,
+    DEFAULT_ON,
+    TICK_SCALE,
+    priceToTicks,
   };
 })();

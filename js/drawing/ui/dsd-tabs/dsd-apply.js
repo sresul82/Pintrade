@@ -235,8 +235,12 @@ window.DSDApply = (() => {
 
     if (['longpos', 'shortpos'].includes(drawing.tool)) {
       if (get('dsd-pos-accSize')) s.accSize = parseFloat(get('dsd-pos-accSize').value) || 10000;
+      if (get('dsd-pos-accCur')) s.accCur = get('dsd-pos-accCur').value;
+      if (get('dsd-pos-lotSize')) s.lotSize = parseFloat(get('dsd-pos-lotSize').value) || 1;
       if (get('dsd-pos-risk')) s.risk = parseFloat(get('dsd-pos-risk').value);
-      if (get('dsd-pos-risk-type')) s.riskType = get('dsd-pos-risk-type').value;
+      if (get('dsd-pos-riskType')) s.riskType = get('dsd-pos-riskType').value;
+      if (get('dsd-pos-leverage')) s.leverage = parseFloat(get('dsd-pos-leverage').value) || 1;
+      if (get('dsd-pos-qtyPrec')) s.qtyPrec = get('dsd-pos-qtyPrec').value;
 
       if (get('dsd-pos-entry') && drawing.p1) drawing.p1.price = parseFloat(get('dsd-pos-entry').value) || drawing.p1.price;
       if (get('dsd-pos-target') && drawing.p2) drawing.p2.price = parseFloat(get('dsd-pos-target').value) || drawing.p2.price;

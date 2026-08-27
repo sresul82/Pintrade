@@ -257,14 +257,20 @@ window.DrawingManager = (() => {
         // For position tools, calculate topY so toolbar can appear above the shape
         let topY = e.clientY;
         if (['longpos', 'shortpos'].includes(hitDrawing.tool)) {
-          const a = _pt2xy(hitDrawing.p1, pane);
-          const b = hitDrawing.p2 ? { y: pane.series.priceToCoordinate(hitDrawing.p2.price) } : null;
-          const c = hitDrawing.p3 ? { y: pane.series.priceToCoordinate(hitDrawing.p3.price) } : null;
-          if (a) {
-            const ys = [a.y, b?.y, c?.y].filter(v => v != null);
-            const rawTop = Math.min(...ys);
-            const rect = pane.drawingCanvas.getBoundingClientRect();
-            topY = rect.top + rawTop;
+          const _prevRPK = _renderPaneKey;
+          _renderPaneKey = hitDrawing.paneKey || null;
+          try {
+            const a = _pt2xy(hitDrawing.p1, pane);
+            const b = hitDrawing.p2 ? _pt2xy(hitDrawing.p2, pane) : null;
+            const c = hitDrawing.p3 ? _pt2xy(hitDrawing.p3, pane) : null;
+            if (a) {
+              const ys = [a.y, b?.y, c?.y].filter(v => v != null);
+              const rawTop = Math.min(...ys);
+              const rect = pane.drawingCanvas.getBoundingClientRect();
+              topY = rect.top + rawTop;
+            }
+          } finally {
+            _renderPaneKey = _prevRPK;
           }
         }
         EventBus.emit('drawing:selected', { id: hitId, symbol: pane.symbol, x: e.clientX, y: e.clientY, topY });
@@ -551,19 +557,21 @@ window.DrawingManager = (() => {
 
         if (_dragState.hitType === 'p1') {
           if (['longpos', 'shortpos'].includes(d.tool)) {
-            const origP1X = _timeToX(pane, _dragState.origP1.time);
-            const origP1Y = pane.series.priceToCoordinate(_dragState.origP1.price);
-            const origP2X = _timeToX(pane, _dragState.origP2.time);
-            const origP2Y = pane.series.priceToCoordinate(_dragState.origP2.price);
-            const origP3X = _timeToX(pane, _dragState.origP3.time);
-            const origP3Y = pane.series.priceToCoordinate(_dragState.origP3.price);
-
-            d.p1.time = pane.chart.timeScale().coordinateToTime(origP1X + dx);
-            d.p1.price = pane.series.coordinateToPrice(origP1Y + dy);
-            d.p2.time = pane.chart.timeScale().coordinateToTime(origP2X + dx);
-            d.p2.price = pane.series.coordinateToPrice(origP2Y + dy);
-            d.p3.time = pane.chart.timeScale().coordinateToTime(origP3X + dx);
-            d.p3.price = pane.series.coordinateToPrice(origP3Y + dy);
+            const _prevRPK = _renderPaneKey;
+            _renderPaneKey = d.paneKey || null;
+            try {
+              const origA = _pt2xy(_dragState.origP1, pane);
+              const origB = _pt2xy(_dragState.origP2, pane);
+              const origC = _pt2xy(_dragState.origP3, pane);
+              const newA = _xy2pt({ x: origA.x + dx, y: origA.y + dy }, pane);
+              const newB = _xy2pt({ x: origB.x + dx, y: origB.y + dy }, pane);
+              const newC = _xy2pt({ x: origC.x + dx, y: origC.y + dy }, pane);
+              if (newA) { d.p1.time = newA.time; d.p1.price = newA.price; }
+              if (newB) { d.p2.time = newB.time; d.p2.price = newB.price; }
+              if (newC) { d.p3.time = newC.time; d.p3.price = newC.price; }
+            } finally {
+              _renderPaneKey = _prevRPK;
+            }
           } else {
             const { time, price } = _snapToCandle(pane, rawTime, rawPrice);
             d.p1 = { time, price };
@@ -689,10 +697,24 @@ window.DrawingManager = (() => {
             d.points[idx] = { time, price };
           }
         } else if (_dragState.hitType === 'targetPrice') {
-          const { price } = _snapToCandle(pane, rawTime, rawPrice);
+          let usePrice = rawPrice;
+          if (d.paneKey) {
+            const _prevRPK = _renderPaneKey;
+            _renderPaneKey = d.paneKey;
+            try { usePrice = _xy2pt({ x, y }, pane)?.price ?? rawPrice; }
+            finally { _renderPaneKey = _prevRPK; }
+          }
+          const { price } = _snapToCandle(pane, rawTime, usePrice);
           d.p2.price = price;
         } else if (_dragState.hitType === 'stopPrice') {
-          const { price } = _snapToCandle(pane, rawTime, rawPrice);
+          let usePrice = rawPrice;
+          if (d.paneKey) {
+            const _prevRPK = _renderPaneKey;
+            _renderPaneKey = d.paneKey;
+            try { usePrice = _xy2pt({ x, y }, pane)?.price ?? rawPrice; }
+            finally { _renderPaneKey = _prevRPK; }
+          }
+          const { price } = _snapToCandle(pane, rawTime, usePrice);
           d.p3.price = price;
         } else if (_dragState.hitType === 'endTime') {
           const { time } = _snapToCandle(pane, rawTime, rawPrice);
@@ -2176,8 +2198,8 @@ window.DrawingManager = (() => {
     if (d.tool === 'arrowdown') window.DrawingShapes.drawArrowDown(ctx, d, pane);
     // ── Forecast & Measurement (Including Volume-based) ──
     if (d.tool === 'measure') window.DrawingForecast.drawMeasureTool(ctx, d, pane);
-    if (d.tool === 'longpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'long');
-    if (d.tool === 'shortpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'short');
+    if (d.tool === 'longpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'long', d.id === _selectedId);
+    if (d.tool === 'shortpos') window.DrawingForecast.drawPosition(ctx, d, pane, 'short', d.id === _selectedId);
     if (d.tool === 'pricerange') window.DrawingForecast.drawPriceRange(ctx, d, pane);
     if (d.tool === 'daterange') window.DrawingForecast.drawDateRange(ctx, d, pane);
     if (d.tool === 'datepricerange') window.DrawingForecast.drawDatePriceRange(ctx, d, pane);
@@ -2824,9 +2846,9 @@ window.DrawingManager = (() => {
     if (['longpos', 'shortpos'].includes(d.tool) && d.p1 && d.p2 && d.p3) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
-      const tY = pane.series?.priceToCoordinate(d.p2.price);
-      const sY = pane.series?.priceToCoordinate(d.p3.price);
-      const eY = pane.series?.priceToCoordinate(d.p1.price);
+      const tY = (_pt2xy(d.p2, pane) || {}).y;
+      const sY = (_pt2xy(d.p3, pane) || {}).y;
+      const eY = (_pt2xy(d.p1, pane) || {}).y;
       const rX = b ? b.x : null;
       if (a && tY != null && sY != null) {
         const minX = a.x - tolerance;
