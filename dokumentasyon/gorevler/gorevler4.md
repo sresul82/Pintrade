@@ -1164,3 +1164,41 @@ tek commit'te BİRLEŞTİRİLMEYECEK) — biri üretimde sorun çıkarırsa diğ
 etkilemeden `git revert` ile geri alınabilsin diye. Önerilen sıra: önce A
 (tarayıcı taraflı, daha kolay canlı doğrulanabilir), sonra B (sunucu
 taraflı, MongoDB'siz test edilemediği için daha temkinli ilerlenmeli).
+
+---
+
+### UYGULAMA NOTU (2026-08-27, UYGULANDI — bu oturumda)
+
+Her iki madde de yukarıdaki plana birebir uygun şekilde, ayrı commit'ler
+olarak uygulandı:
+
+- **Madde A** — commit `25a509a`. `detail-panel.js`'in `loadSymbol()`
+  Binance dalı `_pollDetailData` ile birebir aynı desene alındı:
+  `MarketDataStore.getTicker`/`getFR` doluysa REST atlanıyor, boşsa mevcut
+  fallback aynen çalışıyor. **Doğrulama:** yerel preview'da (`node
+  server.js`, MongoDB'siz) `DetailPanel.loadSymbol()` doğrudan çağrılıp
+  `window.fetch` interceptor'la ölçüldü — `MarketDataStore.getTicker/getFR`
+  mock'lanıp dolu döndürüldüğünde `ticker/24hr`/`premiumIndex` istekleri
+  HİÇ atılmadı; mock kaldırılıp gerçek (bu sandbox'ta WS veri akışı
+  gelmediği için boş dönen) MDS ile tekrar çağrıldığında iki istek de
+  eskisi gibi atıldı — hem havuz-var hem havuz-yok dalı canlı doğrulandı.
+- **Madde B** — commit `b044eab`. `kom1-server-watcher.js`'in
+  `_refreshUniverse()`'ü artık `tickerSnapshot` parametresi alıyor;
+  `server.js`'te yeni `_latestBinanceTickers` haritası `collectBinanceData`
+  içinde (ticker/24hr'ı zaten çeken döngüde) dolduruluyor ve
+  `Kom1ServerWatcher.tick()`'e geçiriliyor. Snapshot boşsa (bu sandbox'ta
+  MongoDB olmadığı için `collectBinanceData` hiç çalışmıyor, tam da bu
+  senaryo) mevcut `ticker/24hr` REST çağrısına aynen düşülüyor — plandan
+  FARKLI olarak bilinçli eklenen bu fallback, kullanıcının "geri
+  dönülebilir/bozmaktan korkuyorum" ilkesine dayanıyor (Mongo geçici
+  kesintisinde Kom1'in evren/hacim verisi tamamen kaybolmasın diye).
+  **Doğrulama:** gerçek sunucu bu sandbox'ta canlı test edilemedi (Kom1
+  tick'i `mongoose.connection.once('open', ...)` içinde, MongoDB yok);
+  bunun yerine `https.request` mock'lanarak modül izole çalıştırıldı —
+  snapshot doluyken çağrılan path'lerde `ticker/24hr` HİÇ görünmedi
+  (sadece `exchangeInfo` + `klines`), snapshot boşken `ticker/24hr`
+  eskisi gibi çağrıldı. `node -c server.js` / `node -c
+  kom1-server-watcher.js` temiz. **Üretimde hâlâ doğrulanması gereken:**
+  bir sonraki gerçek Kom1 tarama turundan sonra evren boyutunun/sinyal
+  sayısının önceki turlarla tutarlı kaldığı ve sunucu loglarında Kom1'in
+  artık ikinci bir `ticker/24hr` isteği atmadığı kontrol edilmeli.
