@@ -1202,3 +1202,42 @@ olarak uygulandı:
   bir sonraki gerçek Kom1 tarama turundan sonra evren boyutunun/sinyal
   sayısının önceki turlarla tutarlı kaldığı ve sunucu loglarında Kom1'in
   artık ikinci bir `ticker/24hr` isteği atmadığı kontrol edilmeli.
+
+---
+
+### SONUÇ ve sıradaki oturum için kalanlar (2026-08-27)
+
+**Yapıldı:**
+1. Madde A ve Madde B, plandaki sırayla, birbirinden bağımsız 3 commit
+   halinde uygulandı — biri sorun çıkarırsa diğerini etkilemeden
+   `git revert` ile geri alınabilir:
+   - `25a509a` — Madde A (detail-panel.js)
+   - `b044eab` — Madde B (server.js + kom1-server-watcher.js)
+   - `b8712f3` — bu dokümandaki uygulama notu
+2. Her iki madde de bu sandbox'ın izin verdiği en yakın yöntemle
+   (fetch/https.request mock'lama) canlı doğrulandı, `node -c` temiz.
+3. Kod, kullanıcının "her adım küçük/izole/geri alınabilir olsun" ve
+   "genel sistemi bozmaktan korkuyorum" ilkesine göre yazıldı: hiçbir
+   REST fallback kodu silinmedi, sadece havuz doluysa atlanacak şekilde
+   sarmalandı.
+
+**Kalanlar (üretimde, gerçek MongoDB + gerçek Binance trafiğiyle
+doğrulanması gereken — bu makineden yapılamaz):**
+- Madde A: Coin Detail paneli gerçek kullanıcı trafiğinde açılıp
+  kapatılırken sunucu network sekmesinde/loglarında `ticker/24hr` ve
+  `premiumIndex` isteklerinin (havuz doluyken) gerçekten düşüp
+  düşmediği gözlemlenmeli.
+- Madde B: bir sonraki Kom1 saatlik evren yenilemesinden sonra (a)
+  evren boyutu/katman dağılımının önceki turlarla tutarlı kaldığı
+  (regresyon yok), (b) sunucu loglarında Kom1'in artık ikinci bir
+  `ticker/24hr` isteği atmadığı doğrulanmalı.
+
+**Bu turda BİLİNÇLİ olarak kapsam dışı bırakılanlar (değişmedi):**
+- Bybit'in tamamı (kullanıcı kararı, ban riskine katkısı yok).
+- Screener'ın 60sn'lik tam-liste REST'i (Görev-16'da "kısmen makul"
+  değerlendirilmişti).
+- **Grafiğin 2sn'lik REST canlı-mum polling'i** (`chart-data.js`,
+  `BinanceFeed.connectLive`) — en büyük ban-riski kazancı olacak
+  değişiklik ama en riskli olanı da bu; ayrı, dikkatli bir iş olarak
+  bir sonraki Görev-17 alt maddesi (ör. Görev-17.1) olarak planlanmalı,
+  bu oturumda dokunulmadı.
