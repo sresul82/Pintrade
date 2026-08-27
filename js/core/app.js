@@ -649,8 +649,16 @@ const App = {
     };
 
     // ── Önce screener'dan oku, bulunamazsa HTTP fallback ─────────────
+    // [DÜZELTME 2026-08-27, kullanıcı bulgusu] Watchlist'in KENDİ bağımsız
+    // borsa dropdown'u var (State.screenerExchange) — istenen `exchange`
+    // ile AYNI olduğu garanti değil. Önceden bu kontrol edilmiyordu:
+    // Watchlist Binance'te dururken bir Bybit paneli için çağrılırsa,
+    // ScreenerCore._rows'daki (o an Binance'e ait) satır sessizce alınıp
+    // "BB Fr(%)" etiketiyle gösteriliyordu — yanlış borsanın sayıları
+    // doğru borsanın etiketiyle. Artık ScreenerCore.getExchange() ile
+    // eşleşme kontrol ediliyor; eşleşmezse HTTP fallback'e düşülüyor.
     const fetchNavbarStats = async (symbol, exchange = 'binance') => {
-      if (window.ScreenerCore) {
+      if (window.ScreenerCore && ScreenerCore.getExchange?.() === exchange.toLowerCase()) {
         const row = ScreenerCore.getRow(symbol);
         if (row) { _applyRowToNavbar(row, exchange); return; }
       }

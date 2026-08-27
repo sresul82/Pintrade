@@ -180,7 +180,7 @@ const LSMetrics = mongoose.model('LSMetrics', lsMetricsSchema);
 // endpoint'leri gerçek Binance API key gerektirdiği için (doğrulandı:
 // -2008 Invalid Api-Key ID) kullanılmadı — bu, dolaylı ama public bir yöntem.
 const symbolStatusSchema = new mongoose.Schema({
-  exchange: { type: String, required: true },   // şimdilik sadece 'binance'
+  exchange: { type: String, required: true },   // 'binance' | 'bybit' (2026-08-27)
   market:   { type: String, required: true },   // 'spot' | 'futures'
   symbol:   { type: String, required: true },
   status:   { type: String, required: true },   // TRADING/SETTLING/PENDING_TRADING/BREAK/...
@@ -768,15 +768,25 @@ async function collectBybitLSData() {
   }
 }
 
-// ── Sembol Durum Taraması (Görev 8) — delist/yeni-listelenme algılama ──
-// Sadece Binance (spot + futures) — Bybit için aynı public status mekanizması
-// araştırılmadı, faz 2 olarak bırakıldı (bkz. gorevler2.md Görev 8 notu).
+// ── Sembol Durum Taraması (Görev 8, 2026-08-27 Bybit'e genişletildi) ──
+// delist/yeni-listelenme algılama. Binance (spot + futures) + Bybit
+// (sadece futures/linear — bu projede Bybit SPOT hiç yok, bkz.
+// SpotDataStore notu). Önceden "Bybit için aynı public status mekanizması
+// araştırılmadı" deniyordu — araştırıldı: Bybit'in `instruments-info`
+// endpoint'i de aynı şekilde bir `status` alanı döndürüyor (zaten
+// screener-core.js:_getBybitSymbols bunu sembol filtrelemek için
+// kullanıyordu), sadece değerler farklı string'ler ('Trading'/'PreLaunch'/
+// 'Settling'/'Closed'/'Delivering' — Binance'in 'TRADING'/'PENDING_TRADING'/
+// 'SETTLING'/'BREAK'ından farklı casing+kelime). Bu yüzden kategori mantığı
+// artık borsaya özel bir `categoryFn(status, prevStatus)` callback'i ile
+// parametrize edildi — iki borsa aynı fonksiyonu PAYLAŞMIYOR, kopya değil,
+// gerçekten farklı sözlükler.
 // Delisting duyuruları saatlerce/günlerce önceden gelir, bu yüzden 15dk'lık
 // bir tarama periyodu fazlasıyla yeterli — ağırlık bütçesine etkisi ihmal
-// edilebilir (2 exchangeInfo çağrısı, ~toplam 40 weight).
-async function _processSymbolStatusMarket(market, symbolObjs, statusOf, isRelevant, events, now) {
+// edilebilir (3 istek: 2 Binance exchangeInfo + 1 Bybit instruments-info).
+async function _processSymbolStatusMarket(exchange, market, symbolObjs, statusOf, isRelevant, categoryFn, events, now) {
   const relevant = symbolObjs.filter(isRelevant);
-  const existing = await SymbolStatus.find({ exchange: 'binance', market }).lean();
+  const existing = await SymbolStatus.find({ exchange, market }).lean();
   const prevMap = new Map(existing.map(d => [d.symbol, d.status]));
   const isBootstrap = existing.length === 0; // ilk tur — geçmişi olmayan turda olay üretme
 
@@ -788,24 +798,18 @@ async function _processSymbolStatusMarket(market, symbolObjs, statusOf, isReleva
 
     if (!isBootstrap) {
       if (prevStatus === undefined) {
-        events.push({ exchange: 'binance', market, symbol, fromStatus: null, toStatus: status, category: 'new_listing', timestamp: now, createdAt: now });
+        events.push({ exchange, market, symbol, fromStatus: null, toStatus: status, category: 'new_listing', timestamp: now, createdAt: now });
       } else if (prevStatus !== status) {
-        let category = null;
-        if (market === 'futures') {
-          if (status === 'SETTLING') category = 'delist_warning';
-          else if (status === 'TRADING' && prevStatus === 'PENDING_TRADING') category = 'new_listing';
-        } else if (status === 'BREAK') {
-          category = 'delist_warning';
-        }
+        const category = categoryFn(status, prevStatus);
         if (category) {
-          events.push({ exchange: 'binance', market, symbol, fromStatus: prevStatus, toStatus: status, category, timestamp: now, createdAt: now });
+          events.push({ exchange, market, symbol, fromStatus: prevStatus, toStatus: status, category, timestamp: now, createdAt: now });
         }
       }
     }
 
     bulkOps.push({
       updateOne: {
-        filter: { exchange: 'binance', market, symbol },
+        filter: { exchange, market, symbol },
         update: { $set: { status, updatedAt: now } },
         upsert: true,
       }
@@ -814,34 +818,55 @@ async function _processSymbolStatusMarket(market, symbolObjs, statusOf, isReleva
   if (bulkOps.length > 0) await SymbolStatus.bulkWrite(bulkOps, { ordered: false });
 }
 
+const _binanceFuturesCategory = (status, prevStatus) => {
+  if (status === 'SETTLING') return 'delist_warning';
+  if (status === 'TRADING' && prevStatus === 'PENDING_TRADING') return 'new_listing';
+  return null;
+};
+const _binanceSpotCategory = (status) => status === 'BREAK' ? 'delist_warning' : null;
+// Bybit v5 instruments-info status değerleri: PreLaunch/Trading/Settling/Delivering/Closed.
+const _bybitLinearCategory = (status, prevStatus) => {
+  if (status === 'Settling' || status === 'Delivering' || status === 'Closed') return 'delist_warning';
+  if (status === 'Trading' && prevStatus === 'PreLaunch') return 'new_listing';
+  return null;
+};
+
 async function collectSymbolStatusChanges() {
   if (mongoose.connection.readyState !== 1) return;
   try {
-    const [futuresInfo, spotInfo] = await Promise.all([
+    const [futuresInfo, spotInfo, bybitInfo] = await Promise.all([
       fetchJson('fapi.binance.com', '/fapi/v1/exchangeInfo'),
       fetchJson('api.binance.com', '/api/v3/exchangeInfo'),
+      fetchJsonUrl('https://api.bybit.com/v5/market/instruments-info?category=linear&limit=1000'),
     ]);
 
     const now = new Date();
     const events = [];
 
     if (Array.isArray(futuresInfo?.symbols)) {
-      await _processSymbolStatusMarket('futures', futuresInfo.symbols,
+      await _processSymbolStatusMarket('binance', 'futures', futuresInfo.symbols,
         s => s.status,
         s => s.quoteAsset === 'USDT' && s.contractType === 'PERPETUAL',
-        events, now);
+        _binanceFuturesCategory, events, now);
     }
     if (Array.isArray(spotInfo?.symbols)) {
-      await _processSymbolStatusMarket('spot', spotInfo.symbols,
+      await _processSymbolStatusMarket('binance', 'spot', spotInfo.symbols,
         s => s.status,
         s => s.quoteAsset === 'USDT',
-        events, now);
+        _binanceSpotCategory, events, now);
+    }
+    const bybitList = bybitInfo?.result?.list;
+    if (Array.isArray(bybitList)) {
+      await _processSymbolStatusMarket('bybit', 'futures', bybitList,
+        s => s.status,
+        s => s.quoteCoin === 'USDT' && s.contractType === 'LinearPerpetual',
+        _bybitLinearCategory, events, now);
     }
 
     if (events.length > 0) {
       await SymbolStatusEvent.insertMany(events, { ordered: false }).catch(() => {});
     }
-    console.log(`[Collector] Sembol durum taraması: ${events.length} yeni olay (futures ${futuresInfo?.symbols?.length || 0}, spot ${spotInfo?.symbols?.length || 0} sembol tarandı)`);
+    console.log(`[Collector] Sembol durum taraması: ${events.length} yeni olay (BN futures ${futuresInfo?.symbols?.length || 0}, BN spot ${spotInfo?.symbols?.length || 0}, Bybit linear ${bybitList?.length || 0} sembol tarandı)`);
   } catch (e) {
     console.error('[Collector] Sembol durum tarama hatası:', e.message);
   }

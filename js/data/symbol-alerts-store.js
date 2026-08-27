@@ -7,18 +7,20 @@
    yüzden BotEngine kuyruğuna gerek yok (BotEngine sadece Binance IP
    rate-limit bütçesini paylaşan istekler için).
 
-   Kapsam: sadece Binance (spot + futures) — Bybit için aynı public
-   status mekanizması araştırılmadı, faz 2. `getAlert()` Bybit sembolleri
-   için her zaman null döner (veri yok, sessizce yanlış göstermek yerine).
+   Kapsam (2026-08-27 genişletildi): Binance (spot+futures) VE Bybit
+   (sadece futures/linear — bu projede Bybit SPOT hiç yok). Aynı sembol
+   (ör. BTCUSDT) iki borsada da var olabileceği için maps artık
+   `exchange` ile de ayrılıyor — aksi halde Binance'teki bir delist olayı
+   Bybit'in aynı isimli sembolüne yanlışlıkla sızardı.
 
    EventBus Events:
      'symbolAlerts:updated' → {} (yeni veri geldiğinde)
 
    Public API:
      SymbolAlertsStore.start()
-     SymbolAlertsStore.getAlert(pairSym, market) → 'delist_warning' | 'new_listing' | null
-     SymbolAlertsStore.getDelistSymbols(market)      → string[]
-     SymbolAlertsStore.getNewListingSymbols(market)  → string[]
+     SymbolAlertsStore.getAlert(pairSym, market, exchange='binance') → 'delist_warning' | 'new_listing' | null
+     SymbolAlertsStore.getDelistSymbols(market, exchange='binance')      → string[]
+     SymbolAlertsStore.getNewListingSymbols(market, exchange='binance')  → string[]
      SymbolAlertsStore.isLoaded()
    ============================================================ */
 
@@ -26,9 +28,10 @@ const SymbolAlertsStore = (() => {
 
   const REFRESH_MS = 5 * 60 * 1000; // 5dk — kendi backend'imiz, ağır değil
 
-  // market ('spot'|'futures') -> Map<pairSymbol, { category, timestamp }>
-  const _delist     = { spot: new Map(), futures: new Map() };
-  const _newListing = { spot: new Map(), futures: new Map() };
+  const _emptyBucket = () => ({ spot: new Map(), futures: new Map() });
+  // exchange -> { spot: Map<pairSymbol,{category,timestamp}>, futures: Map<...> }
+  const _delist     = { binance: _emptyBucket(), bybit: _emptyBucket() };
+  const _newListing = { binance: _emptyBucket(), bybit: _emptyBucket() };
   let _loaded = false;
   let _timer  = null;
 
@@ -45,22 +48,23 @@ const SymbolAlertsStore = (() => {
       const events = await res.json();
       if (!Array.isArray(events)) return;
 
-      const delist     = { spot: new Map(), futures: new Map() };
-      const newListing = { spot: new Map(), futures: new Map() };
+      const delist     = { binance: _emptyBucket(), bybit: _emptyBucket() };
+      const newListing = { binance: _emptyBucket(), bybit: _emptyBucket() };
 
       // Sunucu timestamp DESC sıralı döndürüyor — ilk görülen (en yeni)
       // olay kalır, Map.has ile üzerine yazılmıyor.
       events.forEach(e => {
+        const exch = delist[e.exchange] ? e.exchange : 'binance'; // bilinmeyen exchange gelirse sessizce binance'e düşür
         const target = e.category === 'delist_warning' ? delist
           : e.category === 'new_listing' ? newListing
           : null;
-        const map = target?.[e.market];
+        const map = target?.[exch]?.[e.market];
         if (!map || map.has(e.symbol)) return;
         map.set(e.symbol, { category: e.category, timestamp: e.timestamp });
       });
 
-      _delist.spot = delist.spot;         _delist.futures = delist.futures;
-      _newListing.spot = newListing.spot; _newListing.futures = newListing.futures;
+      _delist.binance = delist.binance;         _delist.bybit = delist.bybit;
+      _newListing.binance = newListing.binance; _newListing.bybit = newListing.bybit;
       _loaded = true;
       if (typeof EventBus !== 'undefined') EventBus.emit('symbolAlerts:updated', {});
     } catch (e) {
@@ -75,14 +79,14 @@ const SymbolAlertsStore = (() => {
   }
 
   /** @returns {'delist_warning'|'new_listing'|null} */
-  function getAlert(pairSym, market) {
-    if (_delist[market]?.has(pairSym)) return 'delist_warning';
-    if (_newListing[market]?.has(pairSym)) return 'new_listing';
+  function getAlert(pairSym, market, exchange = 'binance') {
+    if (_delist[exchange]?.[market]?.has(pairSym)) return 'delist_warning';
+    if (_newListing[exchange]?.[market]?.has(pairSym)) return 'new_listing';
     return null;
   }
 
-  function getDelistSymbols(market)     { return [...(_delist[market]?.keys() || [])]; }
-  function getNewListingSymbols(market) { return [...(_newListing[market]?.keys() || [])]; }
+  function getDelistSymbols(market, exchange = 'binance')     { return [...(_delist[exchange]?.[market]?.keys() || [])]; }
+  function getNewListingSymbols(market, exchange = 'binance') { return [...(_newListing[exchange]?.[market]?.keys() || [])]; }
   function isLoaded() { return _loaded; }
 
   return { start, refresh: _refresh, getAlert, getDelistSymbols, getNewListingSymbols, isLoaded };

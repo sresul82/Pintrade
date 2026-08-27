@@ -883,3 +883,84 @@ BİLEREK atlandı.
   indikatörünü üretimde ekleyip çift-tıklayarak yeni Inputs/Style
   sekmelerinin göründüğünü ve Ok'a basınca renklerin/Length'in doğru
   uygulandığını doğrulamak.
+
+**16 — "Neden hep Binance deniyorsun, Bybit'i denemiyorsun?" (kullanıcı
+sorusu, 2026-08-27) — sitedeki TÜM veri çekme noktalarının haritası.**
+Kullanıcının bu sorusu üzerine `Explore` agent'ı ile sitedeki HER
+Binance/Bybit veri çekme noktası (browser-direkt, browser→server proxy,
+sunucu-taraflı arka plan collector'ları) çıkarıldı. Öne çıkan bulgular:
+- Sitede "şu an aktif borsa hangisi" sorusunun cevabını tutan **3 bağımsız
+  durum** var: `ChartPane.exchange` (pane başına), `State.screenerExchange`
+  (Watchlist'in kendi dropdown'u), `State.activeExchange` (global — Detail
+  Panel/Navbar/L-S). Üçü de kendi içinde doğru çalışıyor ama birbirinden
+  habersiz.
+- `MarketDataStore`'un canlı WS'i (Watchlist'in tik/FR/OI akışı) bu 3
+  durumdan HİÇBİRİNE bakmıyor, HER ZAMAN Binance'e bağlı — bilinen bir
+  eksik, bu turda dokunulmadı (kapsam dışı bırakıldı, ayrı bir iş).
+- Bybit'in HİÇBİR isteği server.js'ten geçmiyor — `/api/bybit/*` proxy'si
+  YOK, her Bybit isteği tarayıcıdan doğrudan `api.bybit.com`'a gidiyor
+  (kullanıcının kendi IP'si). Binance'in TÜM browser-taraflı istekleri
+  `/api/binance/*` proxy'sinden, TEK Render IP'sinden geçiyor — paylaşılan
+  ban riski sadece Binance'te var.
+- Bu turda YEREL sandbox'ta Binance ucu 502 verdiği için (bilinen kısıtlama)
+  Bybit'e geçilerek test edildi — LinReg indikatörü + yeni ayar penceresi
+  Bybit grafiğinde sorunsuz çalıştığı doğrulandı (bkz. Görev-15.2'nin
+  doğrulama notu).
+
+**16.1 — DÜZELTME (kullanıcı isteği): Delist/yeni-listeleme takibi artık
+Bybit'i de kapsıyor.** Önceki kod "Bybit için araştırılmadı, faz 2"
+diyordu — araştırıldı: Bybit'in `instruments-info` uç noktası da Binance'in
+`exchangeInfo`'su gibi bir `status` alanı döndürüyor (`Trading`/`PreLaunch`/
+`Settling`/`Delivering`/`Closed` — Binance'in `TRADING`/`PENDING_TRADING`/
+`SETTLING`/`BREAK`'inden farklı string'ler). Değişiklikler:
+- `server.js`: `_processSymbolStatusMarket` artık `exchange` parametresi
+  + borsaya özel bir `categoryFn(status, prevStatus)` callback'i alıyor
+  (Binance futures/spot ve Bybit linear için AYRI kategori sözlükleri —
+  kopya değil, gerçekten farklı status string'leri). `collectSymbolStatusChanges()`
+  artık 3. bir istek olarak Bybit'in `instruments-info?category=linear`
+  uç noktasını da tarıyor (toplamda hâlâ hafif: 3 istek/15dk).
+- `js/data/symbol-alerts-store.js`: `_delist`/`_newListing` map'leri artık
+  `exchange` ile de ayrılıyor (önceden sadece `market` ile ayrılıyordu —
+  aynı sembol iki borsada da varsa Binance'teki bir delist olayı Bybit'in
+  aynı isimli sembolüne YANLIŞLIKLA sızabilirdi). `getAlert`/`getDelistSymbols`/
+  `getNewListingSymbols` üçüncü parametre olarak `exchange` alıyor
+  (varsayılan `'binance'`, geriye dönük uyumlu).
+- `js/screener/screener-core.js`: `_alertBadgeHtml`/`_tickerRows`'taki
+  `_exchange === 'binance'` kapıları `'binance' || 'bybit'`e genişletildi,
+  `getAlert` çağrılarına `_exchange` eklendi.
+- Bybit'te SPOT kapsanmadı (bu projede Bybit SPOT hiç yok, bilinçli).
+
+**16.2 — DÜZELTME (kullanıcı bulgusu, ÖNCEKİ turumdaki yanlış teşhisimi
+düzeltiyor): Navbar'ın "screener'dan sıfır HTTP ile oku" yolu HİÇ
+çalışmıyormuş.** Kullanıcı "zaten screener'da bu bilgi var, neden ayrı
+istek atıyorsun" diye sorunca kodu okuyup "zaten cache'den okuyor, sorun
+yok" demiştim — YANLIŞTI, canlı testte ortaya çıktı: `js/screener/screener-core.js`
+modülü hiçbir zaman `window.ScreenerCore`'a atanmıyordu (sadece top-level
+`const ScreenerCore = ...` — klasik `<script>`'te bu otomatik `window`'a
+eklenmez, projenin geri kalanındaki `window.X = X` deseninden farklı olarak
+bu dosyada o satır hiç yazılmamıştı). Sonuç: `app.js`'teki
+`if (window.ScreenerCore) {...}` kontrolü HER ZAMAN `false` dönüyordu,
+navbar'ın 30sn'lik zamanlayıcısı sessizce HER SEFERİNDE gerçek bir HTTP
+isteği atıyordu — kullanıcının şüphesi doğruydu, benim ilk cevabım yanlıştı.
+Düzeltildi: dosyanın sonuna `window.ScreenerCore = ScreenerCore;` eklendi.
+- **Ayrıca ikinci, daha ciddi bir hata bulundu ve düzeltildi:** cache-okuma
+  yolu, okuduğu satırın HANGİ borsaya ait olduğunu hiç kontrol etmiyordu.
+  Watchlist'in kendi dropdown'u (`State.screenerExchange`) Binance'teyken
+  navbar bir Bybit paneli için çağrılırsa, `ScreenerCore._rows`'daki (o an
+  Binance'e ait) satır sessizce alınıp "BB Fr(%)" (Bybit) etiketiyle
+  gösteriliyordu — **yanlış borsanın sayıları doğru borsanın etiketiyle.**
+  `js/screener/screener-core.js`'e `getExchange()` eklendi,
+  `js/core/app.js:fetchNavbarStats`'a `ScreenerCore.getExchange?.() ===
+  exchange.toLowerCase()` eşleşme kontrolü eklendi — uyuşmazsa cache
+  kullanılmıyor, doğru borsaya gerçek bir HTTP fallback atılıyor.
+- Canlı tarayıcıda doğrulandı: `EventBus.emit('symbol:change', {symbol:'BTCUSDT',
+  exchange:'bybit'})` tetiklendiğinde (Watchlist Binance'teyken) navbar'ın
+  Bybit ticker fallback'i (`api.bybit.com/v5/market/tickers?...symbol=BTCUSDT`)
+  gerçekten atıldığı `fetch` interceptor'ıyla gözlemlendi — yanlış veri
+  sızıntısı artık yok.
+- `node -c server.js`, `node -c js/screener/screener-core.js`,
+  `node -c js/data/symbol-alerts-store.js`, `node -c js/core/app.js` ile
+  sözdizimi doğrulandı. Delist/yeni-listeleme tarafı (16.1) bu ortamda
+  MongoDB bağlantısı olmadığı için canlı test edilemedi — üretimde bir
+  sonraki `collectSymbolStatusChanges` turundan sonra `/api/symbol-status/events`
+  yanıtında `exchange:'bybit'` kayıtların çıktığı kontrol edilmeli.

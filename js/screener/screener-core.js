@@ -177,17 +177,20 @@ const ScreenerCore = (() => {
     return `<span style="margin-left:4px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:${b.bg}; color:${b.color}; border:${b.dashed ? '1px dashed' : '1px solid'} ${b.border};">${b.label}</span>`;
   }
 
-  /* ── Delist / Yeni Liste / En Yükselen rozetleri (Görev 8) ─────────
-     Delist ve yeni-liste sadece Binance için veri kaynağı var
-     (SymbolAlertsStore, server.js'in sembol durum taramasından besleniyor).
+  /* ── Delist / Yeni Liste / En Yükselen rozetleri (Görev 8, genişletildi
+     2026-08-27) ─────────────────────────────────────────────────────
+     Delist/yeni-liste artık Binance VE Bybit için var (SymbolAlertsStore,
+     server.js'in sembol durum taramasından besleniyor — collectSymbolStatusChanges
+     artık Bybit'in instruments-info'sunu da tarıyor). Bybit'te bu SADECE
+     futures/linear (SPOT Bybit bu projede hiç yok, bkz. SpotDataStore notu).
      En yükselen borsa fark etmeksizin, mevcut pct24h'ten client-side
      hesaplanıyor (bkz. _computeTopGainers). Hem SPOT hem FUTURES'ta çalışır. */
   function _alertBadgeHtml(sym) {
     let html = '';
-    if (_exchange === 'binance' && typeof SymbolAlertsStore !== 'undefined') {
-      const alert = SymbolAlertsStore.getAlert(sym + 'USDT', _market);
+    if ((_exchange === 'binance' || _exchange === 'bybit') && typeof SymbolAlertsStore !== 'undefined') {
+      const alert = SymbolAlertsStore.getAlert(sym + 'USDT', _market, _exchange);
       if (alert === 'delist_warning') {
-        html += '<span title="Delisting sinyali algılandı (Binance durum değişimi)" style="margin-left:3px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:rgba(249,115,22,0.15); color:#f97316; border:1px solid #f97316;">DELIST</span>';
+        html += `<span title="Delisting sinyali algılandı (${_exchange === 'binance' ? 'Binance' : 'Bybit'} durum değişimi)" style="margin-left:3px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:rgba(249,115,22,0.15); color:#f97316; border:1px solid #f97316;">DELIST</span>`;
       } else if (alert === 'new_listing') {
         html += '<span title="Yakın zamanda listelendi" style="margin-left:3px; flex-shrink:0; font-size:8px; font-weight:700; padding:1px 5px; border-radius:8px; background:rgba(34,197,94,0.15); color:#22c55e; border:1px solid #22c55e;">NEW</span>';
       }
@@ -355,14 +358,14 @@ const ScreenerCore = (() => {
 
   /** Grafik altı bandın kayan şeridi için ayrı bir küme — Watchlist'in
    *  kendisini ETKİLEMEZ (kullanıcı geri bildirimi, 2026-08-08: "liste
-   *  değişmesin, sadece alt bantta gösterilsin"). 'delistings'/'new'
-   *  Binance dışı borsalarda veri olmadığı için boş döner. */
+   *  değişmesin, sadece alt bantta gösterilsin"). 2026-08-27: artık
+   *  Binance VE Bybit'te veri var (bkz. _alertBadgeHtml başlığındaki not). */
   function _tickerRows() {
     let arr = [..._rows];
     if (_previewFilter === 'delistings' || _previewFilter === 'new') {
       const category = _previewFilter === 'delistings' ? 'delist_warning' : 'new_listing';
-      if (_exchange !== 'binance' || typeof SymbolAlertsStore === 'undefined') return [];
-      return arr.filter(d => SymbolAlertsStore.getAlert(d.sym + 'USDT', _market) === category);
+      if ((_exchange !== 'binance' && _exchange !== 'bybit') || typeof SymbolAlertsStore === 'undefined') return [];
+      return arr.filter(d => SymbolAlertsStore.getAlert(d.sym + 'USDT', _market, _exchange) === category);
     }
     if (_previewFilter === 'gainers') {
       return arr.filter(d => d.pct !== null && d.pct !== undefined && d.pct > 0)
@@ -1047,5 +1050,20 @@ const ScreenerCore = (() => {
     return _rows.find(r => r.sym === s) || null;
   }
 
-  return { init, getRow };
+  // Public: _rows'un şu an HANGİ borsaya ait olduğu (Watchlist'in kendi
+  // dropdown'u — Navbar'ın kendi `exchange` isteğiyle aynı mı diye
+  // karşılaştırmak için, bkz. app.js:fetchNavbarStats).
+  function getExchange() { return _exchange; }
+
+  return { init, getRow, getExchange };
 })();
+
+// [DÜZELTME 2026-08-27, kullanıcı bulgusu] Bu satır HİÇ yoktu — modül
+// hiçbir zaman `window.ScreenerCore`'a atanmıyordu (sadece top-level
+// `const`, klasik script'te window'a otomatik eklenmez). Sonuç:
+// app.js:fetchNavbarStats'taki `if (window.ScreenerCore)` kontrolü HER
+// ZAMAN false dönüyordu — "screener'dan sıfır HTTP ile oku" yolu hiç
+// çalışmıyordu, navbar sessizce her 30sn'de gerçek bir HTTP isteği
+// atıyordu. Projenin geri kalanındaki AYNI dışa-açma deseni (ör.
+// `window.SymbolAlertsStore = SymbolAlertsStore;`) burada da uygulandı.
+window.ScreenerCore = ScreenerCore;
