@@ -1727,14 +1727,20 @@ const App = {
 
     function _maRenderTab(tab, cfg) {
       const label = cfg.type === 'ema' ? 'EMA' : 'DEMA';
+      // [2026-08-27 DÜZELTME, kullanıcı bulgusu] Offset ve Smoothing SADECE
+      // EMA'nın gerçek TV ekran görüntüsünde vardı — DEMA'nın kendi
+      // paylaşılan Pine kodunda/ekran görüntüsünde bu ikisi HİÇ YOK.
+      // Önceden ikisine de aynı sekme çiziliyordu ("DEMA ayarlarını başka
+      // bir indikatörden kopyalama" hatası) — artık `isEma` ile ayrılıyor.
+      const isEma = cfg.type === 'ema';
       if (tab === 'inputs') {
         return `
           ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-period" min="1" step="1" value="${cfg.period}"/>`)}
           ${_rsiRow('Source', _rsiSelect('ma-source', MA_SOURCE_OPTIONS, cfg.source))}
-          ${_rsiRow('Offset', `<input type="number" class="dsd-input" id="ma-offset" step="1" value="${cfg.offset ?? 0}"/>`)}
-          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Smoothing</div>
+          ${isEma ? _rsiRow('Offset', `<input type="number" class="dsd-input" id="ma-offset" step="1" value="${cfg.offset ?? 0}"/>`) : ''}
+          ${isEma ? `<div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Smoothing</div>
           ${_rsiRow('Type', _rsiSelect('ma-ma-type', RSI_MA_TYPE_OPTIONS, cfg.maType))}
-          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-ma-length" min="1" step="1" value="${cfg.maLength}"/>`)}
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-ma-length" min="1" step="1" value="${cfg.maLength}"/>`)}` : ''}
           <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Calculation</div>
           ${_rsiRow('Timeframe', _rsiSelect('ma-calc-tf', RSI_TIMEFRAME_OPTIONS, cfg.calcTimeframe))}
           ${_rsiCheck('ma-wait-tf-close', 'Wait for timeframe closes', cfg.waitForTfClose)}`;
@@ -1742,7 +1748,7 @@ const App = {
       // style
       return `
         ${_rsiToggleRow('ma-show-line', cfg.showLine, label, _rsiLineCombo('ma-combo-line', cfg.color, cfg.width, cfg.lineStyle))}
-        ${_rsiToggleRow('ma-show-ma', cfg.showMA, `${label}-based MA`, _rsiLineCombo('ma-combo-ma', cfg.maColor, cfg.maWidth, cfg.maStyle))}
+        ${isEma ? _rsiToggleRow('ma-show-ma', cfg.showMA, `${label}-based MA`, _rsiLineCombo('ma-combo-ma', cfg.maColor, cfg.maWidth, cfg.maStyle)) : ''}
         <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Output values</div>
         ${_rsiRow('Precision', _rsiSelect('ma-precision', RSI_PRECISION_OPTIONS, cfg.precision == null ? '' : String(cfg.precision)))}
         ${_rsiCheck('ma-price-labels', 'Labels on price scale', cfg.showPriceLabels)}
@@ -1762,7 +1768,7 @@ const App = {
       const tabsHtml = () => MA_TABS.map(t => `<button class="dsd-tab ${t === _maActiveTab ? 'active' : ''}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('');
 
       overlay.innerHTML = `
-        <div class="dsd-dialog" id="dsd-dialog" style="width:320px;">
+        <div class="dsd-dialog" id="dsd-dialog" style="width:340px;">
           <div class="dsd-header">
             <span class="dsd-title">${label}</span>
             <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>
@@ -1907,7 +1913,7 @@ const App = {
         ${_rsiRow('Upper / Lower', _rsiSwatch('lr-color-upper', c.colorUpper) + _rsiSwatch('lr-color-lower', c.colorLower))}`;
 
       overlay.innerHTML = `
-        <div class="dsd-dialog" id="dsd-dialog" style="width:320px;">
+        <div class="dsd-dialog" id="dsd-dialog" style="width:340px;">
           <div class="dsd-header">
             <span class="dsd-title">Linear Regression Channel</span>
             <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>

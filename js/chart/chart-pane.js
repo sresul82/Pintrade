@@ -925,8 +925,6 @@ class ChartPane {
   static MA_DEFAULTS_APPLY(cfg) {
     if (cfg.type !== 'ema' && cfg.type !== 'dema') return cfg;
     cfg.source ??= 'close';
-    // TV: "Offset" — çizilen çizgiyi N bar sağa(+)/sola(-) kaydırır.
-    cfg.offset ??= 0;
     cfg.width ??= 2;
     cfg.lineStyle ??= 'solid';
     cfg.showLine ??= true; // Style sekmesindeki "DEMA"/"EMA" checkbox'ı
@@ -938,16 +936,26 @@ class ChartPane {
     // 'chart' fonksiyonel, paylaşılan Binance bütçesi riski yüzünden.
     cfg.calcTimeframe ??= 'chart';
     cfg.waitForTfClose ??= true;
-    // TV Inputs sekmesi — SMOOTHING (RSI'daki AYNI seçenekler/varsayılanlar,
-    // "Bollinger Bands" tipi + BB StdDev HARİÇ — kullanıcı RSI'da bunu
-    // istemedi, aynı karar burada da geçerli: "RSI bak, orda hangi
-    // seçenekler varsa onları kullan", 2026-08-27).
-    cfg.maType ??= 'none'; // 'none' | 'sma' | 'ema' | 'smma' | 'wma'
-    cfg.maLength ??= 14;
-    cfg.maColor ??= '#f7c948';
-    cfg.maWidth ??= 1;
-    cfg.maStyle ??= 'solid';
-    cfg.showMA ??= true;
+    // [2026-08-27 DÜZELTME, kullanıcı bulgusu] Offset ve Smoothing SADECE
+    // EMA'nın gerçek TV ekran görüntüsünde vardı — DEMA'nın kendi
+    // paylaşılan Pine kodu (`length`+`src` dışında hiçbir input yok) ve
+    // ekran görüntüsünde bu ikisi HİÇ YOK. Önceden ikisine de uygulanıyordu
+    // ("DEMA ayarlarını başka bir indikatörden kopyalama" hatası) —
+    // artık SADECE `cfg.type === 'ema'` iken ekleniyor.
+    if (cfg.type === 'ema') {
+      // TV: "Offset" — çizilen çizgiyi N bar sağa(+)/sola(-) kaydırır.
+      cfg.offset ??= 0;
+      // TV Inputs sekmesi — SMOOTHING (RSI'daki AYNI seçenekler/varsayılanlar,
+      // "Bollinger Bands" tipi + BB StdDev HARİÇ — kullanıcı RSI'da bunu
+      // istemedi, aynı karar burada da geçerli: "RSI bak, orda hangi
+      // seçenekler varsa onları kullan", 2026-08-27).
+      cfg.maType ??= 'none'; // 'none' | 'sma' | 'ema' | 'smma' | 'wma'
+      cfg.maLength ??= 14;
+      cfg.maColor ??= '#f7c948';
+      cfg.maWidth ??= 1;
+      cfg.maStyle ??= 'solid';
+      cfg.showMA ??= true;
+    }
     return cfg;
   }
 
@@ -1110,7 +1118,9 @@ class ChartPane {
           const p = this.chart.panes()[this._indPaneIndex[cfg.id]];
           if (p) p.setStretchFactor(0.3);
         }
-        if (isMA) this._rebuildMASmoothing(cfg);
+        // [2026-08-27 DÜZELTME] Smoothing SADECE EMA'da var (bkz.
+        // MA_DEFAULTS_APPLY başlığındaki not) — DEMA'da hiç çağrılmamalı.
+        if (cfg.type === 'ema') this._rebuildMASmoothing(cfg);
         return;
       }
       if (isSubpane) {
@@ -1161,7 +1171,8 @@ class ChartPane {
           priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
           lastValueVisible: cfg.showPriceLabels !== false, priceLineVisible: false,
         });
-        this._rebuildMASmoothing(cfg);
+        // [2026-08-27 DÜZELTME] bkz. yukarıdaki AYNI not — Smoothing SADECE EMA'da.
+        if (cfg.type === 'ema') this._rebuildMASmoothing(cfg);
       }
     });
 

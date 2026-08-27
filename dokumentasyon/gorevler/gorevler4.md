@@ -815,3 +815,36 @@ doğrula. Eğer kullanıcı gerçek TV ayar penceresinin ekran görüntüsünü
 paylaşırsa (DEMA/EMA'da olduğu gibi) sekme yapısı/Style kontrolleri
 buna göre düzeltilebilir. Dolgu (linefill) ayrı bir iş olarak
 değerlendirilmeli — custom-series gerektiriyor.
+
+**15.1 — DÜZELTME (kullanıcı bulgusu, 2026-08-27): DEMA'ya yanlışlıkla
+EMA'nın alanları uygulanmıştı.** Kullanıcı DEMA ayar penceresinin ekran
+görüntüsünü paylaşıp "RSI'dan/başka bir indikatörden birebir kopyalamışsın,
+bu doğru değil" dedi — haklı: `MA_DEFAULTS_APPLY`/`_maRenderTab` EMA/DEMA'yı
+TEK bir fonksiyonla kapsıyordu, ama DEMA'nın kendi paylaşılan Pine kodunda
+(`length`+`src` dışında hiçbir `input()` yok) ve ilk ekran görüntüsünde
+**Offset** ve **Smoothing** hiç yoktu — bunlar SADECE EMA'nın kendi ekran
+görüntüsünde vardı. Düzeltildi: `MA_DEFAULTS_APPLY`'de `offset`/`maType`/
+`maLength`/`maColor`/`maWidth`/`maStyle`/`showMA` artık SADECE
+`cfg.type === 'ema'` iken uygulanıyor; `_rebuildMASmoothing` çağrıları
+(hem update hem creation yolunda) aynı şekilde `ema`'ya kısıtlandı;
+`app.js`'teki `_maRenderTab` Inputs'ta Offset/Smoothing bölümünü, Style'da
+"{label}-based MA" satırını `isEma` şartına bağladı. Ayrıca dialog genişliği
+320px→340px (RSI ile aynı) — DEMA'nın ekran görüntüsünde görülen yatay
+scrollbar taşması muhtemelen buradan kaynaklanıyordu.
+
+**Henüz çözülmeyen, kullanıcıdan ek bilgi bekleyen 2 madde:**
+- **"Visibility" sekmesi eksik** — kullanıcının ekran görüntüsü DEMA/EMA
+  ikisinde de "Inputs | Style | Visibility" 3 sekmesi olduğunu gösteriyor,
+  şu anki dialog sadece 2 sekmeli (Inputs/Style). İçeriğini bilmeden
+  (Status Line'da olduğu gibi) sahte bir sekme eklemek istemedim —
+  kullanıcıdan Visibility sekmesinin ekran görüntüsü istenmeli.
+  RSI'nın "Visibility" sekmesi (band/fill toggle'ları) DEMA/EMA için
+  anlamsız, farklı bir içerik olacaktır.
+- **DEMA çizgi swatch'ı beyaz görünüyordu** (ekran görüntüsünde "DEMA-based
+  MA" satırının sarı swatch'ı DOĞRU render oldu ama "DEMA" satırının kendi
+  swatch'ı beyaz/soluk görünüyordu — AYNI `_rsiLineCombo` fonksiyonu,
+  sadece farklı `cfg.color` değeriyle çağrılıyor, kod seviyesinde bariz bir
+  hata bulunamadı). Muhtemelen bu SPESİFİK DEMA örneği bugünkü düzeltmelerden
+  ÖNCE (eski "Length+Color" modalıyla) eklenmiş, kayıtlı `cfg.color`'ı o
+  zamandan kalma olabilir — kullanıcıya soruldu, kod seviyesinde
+  KANITLANMADAN düzeltme yapılmadı.
