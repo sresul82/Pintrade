@@ -1727,6 +1727,9 @@ const App = {
           ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-period" min="1" step="1" value="${cfg.period}"/>`)}
           ${_rsiRow('Source', _rsiSelect('ma-source', MA_SOURCE_OPTIONS, cfg.source))}
           ${_rsiRow('Offset', `<input type="number" class="dsd-input" id="ma-offset" step="1" value="${cfg.offset ?? 0}"/>`)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Smoothing</div>
+          ${_rsiRow('Type', _rsiSelect('ma-ma-type', RSI_MA_TYPE_OPTIONS, cfg.maType))}
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="ma-ma-length" min="1" step="1" value="${cfg.maLength}"/>`)}
           <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Calculation</div>
           ${_rsiRow('Timeframe', _rsiSelect('ma-calc-tf', RSI_TIMEFRAME_OPTIONS, cfg.calcTimeframe))}
           ${_rsiCheck('ma-wait-tf-close', 'Wait for timeframe closes', cfg.waitForTfClose)}`;
@@ -1734,6 +1737,7 @@ const App = {
       // style
       return `
         ${_rsiToggleRow('ma-show-line', cfg.showLine, label, _rsiLineCombo('ma-combo-line', cfg.color, cfg.width, cfg.lineStyle))}
+        ${_rsiToggleRow('ma-show-ma', cfg.showMA, `${label}-based MA`, _rsiLineCombo('ma-combo-ma', cfg.maColor, cfg.maWidth, cfg.maStyle))}
         <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Output values</div>
         ${_rsiRow('Precision', _rsiSelect('ma-precision', RSI_PRECISION_OPTIONS, cfg.precision == null ? '' : String(cfg.precision)))}
         ${_rsiCheck('ma-price-labels', 'Labels on price scale', cfg.showPriceLabels)}
@@ -1788,10 +1792,18 @@ const App = {
           draft.width = parseInt(combo.dataset.width, 10) || draft.width;
           draft.lineStyle = combo.dataset.linestyle || draft.lineStyle;
         }
+        const maCombo = overlay.querySelector('#ma-combo-ma');
+        if (maCombo) {
+          draft.maColor = maCombo.dataset.color;
+          draft.maWidth = parseInt(maCombo.dataset.width, 10) || draft.maWidth;
+          draft.maStyle = maCombo.dataset.linestyle || draft.maStyle;
+        }
         const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
         if (document.getElementById('ma-period')) draft.period = Math.max(1, Math.round(num('ma-period') ?? draft.period));
         if (document.getElementById('ma-source')) draft.source = document.getElementById('ma-source').value;
         if (document.getElementById('ma-offset')) draft.offset = Math.round(num('ma-offset') ?? draft.offset ?? 0);
+        if (document.getElementById('ma-ma-type')) draft.maType = document.getElementById('ma-ma-type').value;
+        if (document.getElementById('ma-ma-length')) draft.maLength = Math.max(1, Math.round(num('ma-ma-length') ?? draft.maLength));
         if (document.getElementById('ma-calc-tf')) draft.calcTimeframe = document.getElementById('ma-calc-tf').value;
         if (document.getElementById('ma-precision')) {
           const raw = document.getElementById('ma-precision').value;
@@ -1800,6 +1812,7 @@ const App = {
         const chk = (id) => document.getElementById(id)?.checked;
         if (document.getElementById('ma-wait-tf-close')) draft.waitForTfClose = chk('ma-wait-tf-close');
         if (document.getElementById('ma-show-line')) draft.showLine = chk('ma-show-line');
+        if (document.getElementById('ma-show-ma')) draft.showMA = chk('ma-show-ma');
         if (document.getElementById('ma-price-labels')) draft.showPriceLabels = chk('ma-price-labels');
         if (document.getElementById('ma-status-values')) draft.showValuesInStatusLine = chk('ma-status-values');
         if (document.getElementById('ma-status-inputs')) draft.showInputsInStatusLine = chk('ma-status-inputs');
@@ -1848,6 +1861,8 @@ const App = {
         close();
         pane.updateIndicatorSettings(indicatorId, {
           period: draft.period, source: draft.source, offset: draft.offset,
+          maType: draft.maType, maLength: draft.maLength,
+          maColor: draft.maColor, maWidth: draft.maWidth, maStyle: draft.maStyle, showMA: draft.showMA,
           calcTimeframe: draft.calcTimeframe, waitForTfClose: draft.waitForTfClose,
           color: draft.color, width: draft.width, lineStyle: draft.lineStyle,
           showLine: draft.showLine, precision: draft.precision,

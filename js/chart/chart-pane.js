@@ -746,7 +746,9 @@ class ChartPane {
    *  gibi sabit 0-100 eksen + 30/70 referans çizgileri. */
   addIndicator(type, opts = {}) {
     const DEFAULT_COLOR = { ema: '#2962ff', dema: '#ff9800', rsi: '#a855f7' };
-    const DEFAULT_PERIOD = { ema: 20, dema: 9, rsi: 14 };
+    // [2026-08-27, kullanıcı ekran görüntüsü] TV'nin gerçek EMA varsayılanı
+    // 9 — burada yanlışlıkla 20 idi (DEMA zaten doğruydu, 9).
+    const DEFAULT_PERIOD = { ema: 9, dema: 9, rsi: 14 };
     const cfg = {
       id: 'ind_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       type,
@@ -921,6 +923,16 @@ class ChartPane {
     // 'chart' fonksiyonel, paylaşılan Binance bütçesi riski yüzünden.
     cfg.calcTimeframe ??= 'chart';
     cfg.waitForTfClose ??= true;
+    // TV Inputs sekmesi — SMOOTHING (RSI'daki AYNI seçenekler/varsayılanlar,
+    // "Bollinger Bands" tipi + BB StdDev HARİÇ — kullanıcı RSI'da bunu
+    // istemedi, aynı karar burada da geçerli: "RSI bak, orda hangi
+    // seçenekler varsa onları kullan", 2026-08-27).
+    cfg.maType ??= 'none'; // 'none' | 'sma' | 'ema' | 'smma' | 'wma'
+    cfg.maLength ??= 14;
+    cfg.maColor ??= '#f7c948';
+    cfg.maWidth ??= 1;
+    cfg.maStyle ??= 'solid';
+    cfg.showMA ??= true;
     return cfg;
   }
 
@@ -973,11 +985,13 @@ class ChartPane {
         try { this.chart.removeSeries(this._indSeries[id]); } catch (_) {}
         delete this._indSeries[id];
         delete this._indPaneIndex[id];
-        // OB/OS yardımcı serileri + bant-arası dolgu div'i (bkz. aşağı) da temizle.
+        // OB/OS yardımcı serileri (RSI'ya özel) + MA smoothing (RSI/EMA/DEMA
+        // ortak, bkz. _rebuildMASmoothing) + bant-arası dolgu div'i (bkz.
+        // aşağı) da temizle.
         const aux = this._indAuxSeries[id];
         if (aux) {
-          try { this.chart.removeSeries(aux.ob); } catch (_) {}
-          try { this.chart.removeSeries(aux.os); } catch (_) {}
+          if (aux.ob) { try { this.chart.removeSeries(aux.ob); } catch (_) {} }
+          if (aux.os) { try { this.chart.removeSeries(aux.os); } catch (_) {} }
           if (aux.ma) { try { this.chart.removeSeries(aux.ma); } catch (_) {} }
           delete this._indAuxSeries[id];
         }
@@ -1042,6 +1056,7 @@ class ChartPane {
           const p = this.chart.panes()[this._indPaneIndex[cfg.id]];
           if (p) p.setStretchFactor(0.3);
         }
+        if (isMA) this._rebuildMASmoothing(cfg);
         return;
       }
       if (isSubpane) {
@@ -1092,10 +1107,38 @@ class ChartPane {
           priceFormat: { type: 'price', precision: decimals, minMove: 1 / Math.pow(10, decimals) },
           lastValueVisible: cfg.showPriceLabels !== false, priceLineVisible: false,
         });
+        this._rebuildMASmoothing(cfg);
       }
     });
 
     this._updateIndicatorLegend();
+  }
+
+  /** EMA/DEMA (ana panel overlay) için TV'nin "Smoothing" çizgisi — RSI'daki
+   *  `aux.ma`'nın (bkz. _rebuildSubpaneAux) HAFİF bir eşi: OB/OS dolgu
+   *  serileri YOK (o kavram burada anlamsız), sadece tek bir yardımcı
+   *  LineSeries. Ana EMA/DEMA seriyle AYNI ölçeği (_mainScaleId) paylaşır —
+   *  RSI'daki sabit 0-100 autoscaleInfoProvider'a gerek yok, doğrudan fiyat
+   *  skalası. `this._indAuxSeries[cfg.id] = { ma }` şeklinde saklanır —
+   *  temizlik (_rebuildIndicatorOverlays'in en üstündeki kaldırma bloğu)
+   *  zaten `aux.ma`'yı GENEL olarak kontrol ediyor, ek bir değişiklik gerekmedi. */
+  _rebuildMASmoothing(cfg) {
+    const maVisible = cfg.maType !== 'none' && cfg.showMA;
+    const existing = this._indAuxSeries[cfg.id];
+    if (existing?.ma) {
+      existing.ma.applyOptions({
+        color: maVisible ? cfg.maColor : 'rgba(0,0,0,0)',
+        lineWidth: cfg.maWidth, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.maStyle),
+      });
+      return;
+    }
+    const ma = this.chart.addSeries(LightweightCharts.LineSeries, {
+      color: maVisible ? cfg.maColor : 'rgba(0,0,0,0)',
+      lineWidth: cfg.maWidth, lineStyle: ChartPane.LWC_LINE_STYLE(cfg.maStyle),
+      priceScaleId: this._mainScaleId(),
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+    });
+    this._indAuxSeries[cfg.id] = { ma };
   }
 
   /** RSI (subpane) için: 30/70 referans çizgileri (cfg.bandColor) + overbought/
@@ -1361,11 +1404,18 @@ class ChartPane {
       const aux = this._indAuxSeries[cfg.id];
       if (aux) {
         const lastPoint = points.length && points[points.length - 1].time === lastTime ? points[points.length - 1] : null;
-        if (tickOnly && lastPoint) { aux.ob.update(lastPoint); aux.os.update(lastPoint); }
-        else { aux.ob.setData(points); aux.os.setData(points); }
-        // TV paritesi — RSI-based MA (Smoothing sekmesinde seçilen tip/uzunluk).
+        // 2026-08-27 — EMA/DEMA'nın aux'unda (bkz. _rebuildMASmoothing)
+        // SADECE `ma` var, ob/os RSI'ya özel (overbought/oversold dolgusu
+        // EMA/DEMA'da anlamsız) — varlık kontrolü eklendi, aksi halde
+        // `aux.ob.update is not a function` hatası fırlardı.
+        if (aux.ob && aux.os) {
+          if (tickOnly && lastPoint) { aux.ob.update(lastPoint); aux.os.update(lastPoint); }
+          else { aux.ob.setData(points); aux.os.setData(points); }
+        }
+        // TV paritesi — RSI-based/EMA-based/DEMA-based MA (Smoothing
+        // sekmesinde seçilen tip/uzunluk) — artık RSI'ya özel değil.
         if (aux.ma) {
-          if (cfg.type === 'rsi' && cfg.maType !== 'none') {
+          if (cfg.maType && cfg.maType !== 'none') {
             const maArr = IndicatorEngine.calcMAOfSeries(arr, cfg.maLength, cfg.maType);
             const maPoints = [];
             for (let i = 0; i < maArr.length; i++) {

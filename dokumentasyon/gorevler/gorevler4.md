@@ -695,11 +695,7 @@ Precision'ı değiştirip ondalık sayısının değiştiğini, VE DEMA çizgisi
 ana panelde çift tıklayınca ayar penceresinin açıldığını (ama grafiğin
 başka bir yerine çift tıklayınca normal fitContent-sıfırlama davranışının
 bozulmadığını) doğrulamak (yerel sandbox'ta test edilemedi). Sonra
-kullanıcıyla birlikte **EMA**'ya geçilecek
-— bu turda `MA_DEFAULTS_APPLY`/`_openMovingAverageSettings` zaten EMA/DEMA
-ikisini de kapsayacak şekilde genel yazıldığı için EMA'nın kendi payı
-muhtemelen çok küçük kalacak (aynı Length/Period varsayılanı DEFAULT_PERIOD.ema=20
-zaten doğru, TV'nin EMA'sı da aynı formülü/ayar setini kullanıyor).
+kullanıcıyla birlikte **EMA**'ya geçilecek.
 
 **14.1 — Phantom/mumlar-sola-kayması bug'ı DEMA ayarlarında da bulundu
 (kullanıcı bulgusu, aynı gün):** Görev-13.2'de düzeltilen "Settings > OK
@@ -723,3 +719,32 @@ kullanıcılar için varsayılan yine 12, davranış değişmiyor).
 bas — mumların sağ kenarda kaldığını, phantom'ın görünmediğini doğrula.
 Aynısını genel Chart Settings'te de (herhangi bir ayarı değiştirip OK)
 tekrarla.
+
+**14.2 — EMA de aynı turda tamamlandı (kullanıcı ekran görüntüleri, aynı
+gün):** `MA_DEFAULTS_APPLY`/`_openMovingAverageSettings` zaten EMA/DEMA'yı
+BİRLİKTE kapsayacak şekilde genel yazılmıştı, EMA'nın kendi payı gerçekten
+küçük kaldı — ama iki gerçek fark bulundu/eklendi:
+- **Varsayılan Length hatası:** `DEFAULT_PERIOD.ema` yanlışlıkla `20`'ydi
+  (DEMA zaten doğruydu, `9`) — kullanıcının paylaştığı ekran görüntüsü
+  TV'nin gerçek EMA varsayılanının **9** olduğunu doğruladı, düzeltildi.
+- **SMOOTHING bölümü (TV'nin EMA Inputs sekmesinde var, DEMA'da YOK):**
+  Type (None/SMA/EMA/SMMA/WMA) + Length — kullanıcı "RSI'da hangi
+  seçenekler varsa onları kullan" dedi (RSI'daki "Bollinger Bands" tipi +
+  BB StdDev alanı BİLİNÇLİ olarak hariç tutuldu, RSI'da da aynı sebeple
+  yoktu). RSI'nın `aux.ma` (Smoothing çizgisi) mimarisi ana panel overlay'leri
+  için YENİDEN KULLANILDI — yeni `_rebuildMASmoothing(cfg)` metodu, RSI'nın
+  `_rebuildSubpaneAux`'undaki `ma` serisinin HAFİF bir eşi (OB/OS dolgu
+  serileri yok, ana panelin kendi fiyat skalasını paylaşır). `_recomputeAllIndicators`'daki
+  smoothing hesaplama bloğu (`IndicatorEngine.calcMAOfSeries`) artık RSI'ya
+  özel değil, `cfg.maType` alanı olan HERHANGİ bir gösterge için çalışıyor.
+  **Yan düzeltme:** aynı blokta `aux.ob`/`aux.os`'a EMA/DEMA'nın aux'unda
+  hiç var olmadığı halde koşulsuz erişiliyordu (yeni `aux.ma`-only nesnesiyle
+  `aux.ob.update is not a function` hatası fırlatırdı) — varlık kontrolü
+  eklendi.
+- Style sekmesine "{EMA/DEMA}-based MA" göster/gizle + çizgi combo satırı
+  eklendi (RSI'daki "RSI-based MA" satırıyla BİREBİR aynı desen).
+
+**Sonraki oturumda ilk iş (ek 2):** production'da bir EMA ekle, Length'in
+varsayılan 9 geldiğini, Smoothing > Type'ı SMA/EMA/vb. yapıp ikinci bir
+çizginin (varsayılan sarı, `#f7c948`) belirdiğini, None'a dönünce
+kaybolduğunu doğrulamak.
