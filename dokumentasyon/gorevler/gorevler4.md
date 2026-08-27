@@ -832,19 +832,54 @@ görüntüsünde vardı. Düzeltildi: `MA_DEFAULTS_APPLY`'de `offset`/`maType`/
 320px→340px (RSI ile aynı) — DEMA'nın ekran görüntüsünde görülen yatay
 scrollbar taşması muhtemelen buradan kaynaklanıyordu.
 
-**Henüz çözülmeyen, kullanıcıdan ek bilgi bekleyen 2 madde:**
-- **"Visibility" sekmesi eksik** — kullanıcının ekran görüntüsü DEMA/EMA
-  ikisinde de "Inputs | Style | Visibility" 3 sekmesi olduğunu gösteriyor,
-  şu anki dialog sadece 2 sekmeli (Inputs/Style). İçeriğini bilmeden
-  (Status Line'da olduğu gibi) sahte bir sekme eklemek istemedim —
-  kullanıcıdan Visibility sekmesinin ekran görüntüsü istenmeli.
-  RSI'nın "Visibility" sekmesi (band/fill toggle'ları) DEMA/EMA için
-  anlamsız, farklı bir içerik olacaktır.
-- **DEMA çizgi swatch'ı beyaz görünüyordu** (ekran görüntüsünde "DEMA-based
-  MA" satırının sarı swatch'ı DOĞRU render oldu ama "DEMA" satırının kendi
-  swatch'ı beyaz/soluk görünüyordu — AYNI `_rsiLineCombo` fonksiyonu,
-  sadece farklı `cfg.color` değeriyle çağrılıyor, kod seviyesinde bariz bir
-  hata bulunamadı). Muhtemelen bu SPESİFİK DEMA örneği bugünkü düzeltmelerden
-  ÖNCE (eski "Length+Color" modalıyla) eklenmiş, kayıtlı `cfg.color`'ı o
-  zamandan kalma olabilir — kullanıcıya soruldu, kod seviyesinde
-  KANITLANMADAN düzeltme yapılmadı.
+**Kullanıcı kararıyla kapatıldı (2026-08-27):** "visibilitiye gerek yok.
+inputs ve style icindeki bilgiler ayni olsun, ve her fonksiyonun alti dolu
+olmasi yeterli" — yani:
+- "Visibility" sekmesi eklenmeyecek (2 sekmeli — Inputs/Style — yapı kalıcı
+  olarak yeterli kabul edildi, TV'nin 3. sekmesiyle piksel-piksel eşleşme
+  şartı değil).
+- Inputs/Style içeriğinin TV ile tutarlı olması ve her alanın gerçekten
+  çalışır (fonksiyonel) olması yeterli — DEMA'nın beyaz görünen swatch'ı gibi
+  kanıtlanamamış kozmetik detaylar için ayrıca kanıt aranmayacak, kod
+  seviyesinde bariz bir hata yoksa kapatılmış sayılır.
+- Commit `23f370c` bu haliyle nihai/doğru kabul edildi.
+
+**15.2 — DÜZELTME (kullanıcı bulgusu, 2026-08-27): LinReg ayar penceresi
+TV'ninkine benzemiyordu.** Kullanıcı 5 ekran görüntüsü paylaştı (3'ü TV,
+2'si Pintrade) — TV'nin gerçek "Linear Regression Channel" dialogu da
+RSI/EMA/DEMA gibi SEKMELİ (Inputs | Style | Visibility), önceki turda
+(Görev-14 civarı) bunun kanıtı olmadığı için BİLEREK tek-sayfa (sekmesiz)
+bırakılmıştı — o karar artık yanlış çıktı, kanıt geldi. Chart üzerindeki
+kanal çizimi/renk mantığı zaten doğruydu (kullanıcı: "sonuç neredeyse aynı
+gibi") — sadece dialog yapısı geride kalmıştı.
+
+Düzeltildi (`js/core/app.js`, `_openLinRegSettings`): RSI/EMA-DEMA ile
+BİREBİR aynı `dsd-tabs` sekme-geçiş deseni kuruldu (`LINREG_TABS =
+['inputs','style']`, `_linregActiveTab`, draft-sync + tab yeniden render
+akışı) — Visibility sekmesi, [[15.1]]'deki aynı kullanıcı kararıyla
+BİLEREK atlandı.
+- **Inputs:** Length, Source, Channel Settings (Upper/Lower Deviation
+  toggle+çarpan), Display Settings (Show Pearson's R, Extend Lines
+  Left/Right) — önceki tek-sayfa sürümüyle aynı alanlar, sadece taşındı.
+- **Style:** "Lines" toggle satırı (`_rsiLineCombo` — renk+kalınlık+stil,
+  RSI/EMA/DEMA'daki AYNI combo, `cfg.colorLower`/`width`/`lineStyle`'a
+  bağlı — orta/base çizginin rengi), altında Color Settings (Upper/Lower
+  swatch çifti, `cfg.colorUpper`/`colorLower`).
+- Dialog başlığı "Linear Regression Channel" yerine kısa ad "LinReg"
+  yapıldı (TV'nin sekmeli görünümündeki başlıkla, ekran görüntüsü ile
+  tutarlı — RSI/EMA/DEMA da kendi kısa adlarını kullanıyor).
+- `_indAuxSeries`/`_rebuildLinRegChannel`'daki üst/alt çizgi renk
+  atamasındaki (colorUpper hem üst hem alt sınırda, colorLower sadece
+  orta/base çizgide) Pine-kaynaklı tuhaflığa DOKUNULMADI — bu, Görev-15'te
+  kullanıcının paylaştığı gerçek Pine kodundan iki kez doğrulanmıştı, UI
+  yeniden yapılandırması bu hesaplama mantığını değiştirmedi.
+- `node -c js/core/app.js` ile sözdizimi doğrulandı. Canlı tarayıcı
+  doğrulaması bu ortamda YAPILAMADI — yerel önizleme sunucusu açıldı
+  (`pintrade-server`, port 5500) ama Binance `exchangeInfo` uçları
+  aralıklı 502 döndürdü ve bu da sayfanın render thread'ini kilitledi
+  (muhtemelen hızlı yeniden-deneme döngüsü) — bilinen bir sandbox ağ
+  kısıtlaması (bkz. önceki oturumlardaki aynı not), yeni bir regresyon
+  değil. **Sonraki oturumda ilk iş / kullanıcı kontrolü:** LinReg
+  indikatörünü üretimde ekleyip çift-tıklayarak yeni Inputs/Style
+  sekmelerinin göründüğünü ve Ok'a basınca renklerin/Length'in doğru
+  uygulandığını doğrulamak.

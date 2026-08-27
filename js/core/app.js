@@ -1885,40 +1885,53 @@ const App = {
     }
 
     // ── Linear Regression Channel ayar penceresi (2026-08-27, kullanıcı
-    // isteği — TV'nin GERÇEK built-in "Linear Regression Channel"
-    // indikatörünün Pine kaynağı birebir paylaşıldı). Kaynak kodun kendi
-    // `input()` çağrılarıyla BİREBİR eşleşen alanlar dışında hiçbir şey
-    // İCAT EDİLMEDİ (ör. genel çizgi kalınlığı/stili için ayrı bir kontrol
-    // eklenmedi — Pine'da öyle bir input yok, TV'nin gerçek Style
-    // sekmesinin var olup olmadığına dair bir kanıtım yok). Tek bölüm
-    // (tab yok) — Pine kaynağı zaten Inputs/Channel/Display/Color diye
-    // 4 GRUBA ayrılmış durumda, ayrıca sekmelere bölmek gerekmedi.
+    // isteği — TV'nin GERÇEK ekran görüntüsü kanıtladı: dialog RSI/EMA/DEMA
+    // ile AYNI sekmeli (Inputs/Style/Visibility) yapıyı kullanıyor, önceki
+    // "tek bölüm, tab yok" tasarımı yanlıştı (o zaman kanıt yoktu, TAHMİN
+    // edilmişti). Visibility sekmesi diğer indikatörlerdeki kararla aynı
+    // gerekçeyle atlandı (kullanıcı: "visibilitiye gerek yok. inputs ve
+    // style icindeki bilgiler ayni olsun, ve her fonksiyonun alti dolu
+    // olmasi yeterli") — MA_TABS ile birebir aynı 2-sekme deseni.
+    const LINREG_TABS = ['inputs', 'style'];
+    let _linregActiveTab = 'inputs';
+
+    function _linregRenderTab(tab, cfg) {
+      if (tab === 'inputs') {
+        return `
+          ${_rsiRow('Length', `<input type="number" class="dsd-input" id="lr-length" min="1" step="1" value="${cfg.period}"/>`)}
+          ${_rsiRow('Source', _rsiSelect('lr-source', MA_SOURCE_OPTIONS, cfg.source))}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Channel Settings</div>
+          ${_rsiToggleRow('lr-upper-dev', cfg.upperDevEnabled, 'Upper Deviation', `<input type="number" class="dsd-input" id="lr-upper-mult" step="0.1" value="${cfg.upperMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
+          ${_rsiToggleRow('lr-lower-dev', cfg.lowerDevEnabled, 'Lower Deviation', `<input type="number" class="dsd-input" id="lr-lower-mult" step="0.1" value="${cfg.lowerMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
+          <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Display Settings</div>
+          ${_rsiCheck('lr-show-pearson', "Show Pearson's R", cfg.showPearson)}
+          ${_rsiCheck('lr-extend-left', 'Extend Lines Left', cfg.extendLeft)}
+          ${_rsiCheck('lr-extend-right', 'Extend Lines Right', cfg.extendRight)}`;
+      }
+      // style
+      return `
+        ${_rsiToggleRow('lr-show-line', cfg.showLine, 'Lines', _rsiLineCombo('lr-combo-line', cfg.colorLower, cfg.width, cfg.lineStyle))}
+        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Color Settings</div>
+        ${_rsiRow('Upper / Lower', _rsiSwatch('lr-color-upper', cfg.colorUpper) + _rsiSwatch('lr-color-lower', cfg.colorLower))}`;
+    }
+
     function _openLinRegSettings(pane, cfg, indicatorId) {
       document.getElementById('dsd-overlay')?.remove();
+      _linregActiveTab = 'inputs';
       const overlay = document.createElement('div');
       overlay.id = 'dsd-overlay';
       overlay.className = 'dsd-overlay';
 
-      const renderBody = (c) => `
-        ${_rsiRow('Length', `<input type="number" class="dsd-input" id="lr-length" min="1" step="1" value="${c.period}"/>`)}
-        ${_rsiRow('Source', _rsiSelect('lr-source', MA_SOURCE_OPTIONS, c.source))}
-        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Channel Settings</div>
-        ${_rsiToggleRow('lr-upper-dev', c.upperDevEnabled, 'Upper Deviation', `<input type="number" class="dsd-input" id="lr-upper-mult" step="0.1" value="${c.upperMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
-        ${_rsiToggleRow('lr-lower-dev', c.lowerDevEnabled, 'Lower Deviation', `<input type="number" class="dsd-input" id="lr-lower-mult" step="0.1" value="${c.lowerMult}" style="max-width:64px; flex:0 0 64px;"/>`)}
-        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Display Settings</div>
-        ${_rsiCheck('lr-show-pearson', "Show Pearson's R", c.showPearson)}
-        ${_rsiCheck('lr-extend-left', 'Extend Lines Left', c.extendLeft)}
-        ${_rsiCheck('lr-extend-right', 'Extend Lines Right', c.extendRight)}
-        <div class="dsd-section-title" style="margin:10px 0 6px; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Color Settings</div>
-        ${_rsiRow('Upper / Lower', _rsiSwatch('lr-color-upper', c.colorUpper) + _rsiSwatch('lr-color-lower', c.colorLower))}`;
+      const tabsHtml = () => LINREG_TABS.map(t => `<button class="dsd-tab ${t === _linregActiveTab ? 'active' : ''}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('');
 
       overlay.innerHTML = `
         <div class="dsd-dialog" id="dsd-dialog" style="width:340px;">
           <div class="dsd-header">
-            <span class="dsd-title">Linear Regression Channel</span>
+            <span class="dsd-title">LinReg</span>
             <button class="dsd-close-btn" id="dsd-close-btn" title="Close">✕</button>
           </div>
-          <div class="dsd-body" id="dsd-lr-body">${renderBody(cfg)}</div>
+          <div class="dsd-tabs" id="dsd-lr-tabs">${tabsHtml()}</div>
+          <div class="dsd-body" id="dsd-lr-body">${_linregRenderTab(_linregActiveTab, cfg)}</div>
           <div class="dsd-footer">
             <div class="dsd-footer-left">
               <button class="dsd-tmpl-btn" id="dsd-btn-remove">Remove</button>
@@ -1939,12 +1952,65 @@ const App = {
         }
       }
 
-      overlay.querySelectorAll('.dsd-color-swatch').forEach(box => {
-        box.addEventListener('click', () => {
-          window.DSDColorPicker.showColorPalette(box, box.dataset.color, (newColor) => {
-            box.dataset.color = newColor;
-            box.style.background = newColor;
+      const draft = { ...cfg };
+      function _linregSyncDraftFromDom() {
+        const combo = overlay.querySelector('#lr-combo-line');
+        if (combo) {
+          draft.colorLower = combo.dataset.color;
+          draft.width = parseInt(combo.dataset.width, 10) || draft.width;
+          draft.lineStyle = combo.dataset.linestyle || draft.lineStyle;
+        }
+        overlay.querySelectorAll('.dsd-color-swatch[id]').forEach(sw => {
+          if (sw.id === 'lr-color-upper') draft.colorUpper = sw.dataset.color;
+          if (sw.id === 'lr-color-lower') draft.colorLower = sw.dataset.color;
+        });
+        const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
+        if (document.getElementById('lr-length')) draft.period = Math.max(1, Math.round(num('lr-length') ?? draft.period));
+        if (document.getElementById('lr-source')) draft.source = document.getElementById('lr-source').value;
+        if (document.getElementById('lr-upper-mult')) draft.upperMult = num('lr-upper-mult') ?? draft.upperMult;
+        if (document.getElementById('lr-lower-mult')) draft.lowerMult = num('lr-lower-mult') ?? draft.lowerMult;
+        const chk = (id) => document.getElementById(id)?.checked;
+        if (document.getElementById('lr-upper-dev')) draft.upperDevEnabled = chk('lr-upper-dev');
+        if (document.getElementById('lr-lower-dev')) draft.lowerDevEnabled = chk('lr-lower-dev');
+        if (document.getElementById('lr-show-pearson')) draft.showPearson = chk('lr-show-pearson');
+        if (document.getElementById('lr-extend-left')) draft.extendLeft = chk('lr-extend-left');
+        if (document.getElementById('lr-extend-right')) draft.extendRight = chk('lr-extend-right');
+        if (document.getElementById('lr-show-line')) draft.showLine = chk('lr-show-line');
+      }
+      function _linregBindBody() {
+        overlay.querySelectorAll('.dsd-color-swatch').forEach(box => {
+          box.addEventListener('click', () => {
+            window.DSDColorPicker.showColorPalette(box, box.dataset.color, (newColor) => {
+              box.dataset.color = newColor;
+              box.style.background = newColor;
+            });
           });
+        });
+        overlay.querySelectorAll('.dsd-reg-line-combo').forEach(combo => {
+          const swatch = combo.querySelector('.dsd-reg-swatch');
+          combo.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const curColor = combo.dataset.color;
+            const curW = parseInt(combo.dataset.width, 10) || 1;
+            const curS = combo.dataset.linestyle || 'solid';
+            window.DSDColorPicker.showCombinedLineSettings(combo, curColor, curW, curS, true, (res) => {
+              combo.dataset.color = res.color;
+              combo.dataset.width = res.width;
+              combo.dataset.linestyle = res.style;
+              swatch.style.background = res.color;
+            });
+          });
+        });
+      }
+      _linregBindBody();
+
+      overlay.querySelectorAll('.dsd-tab').forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          _linregSyncDraftFromDom();
+          _linregActiveTab = tabBtn.dataset.tab;
+          overlay.querySelectorAll('.dsd-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === _linregActiveTab));
+          overlay.querySelector('#dsd-lr-body').innerHTML = _linregRenderTab(_linregActiveTab, draft);
+          _linregBindBody();
         });
       });
 
@@ -1959,18 +2025,15 @@ const App = {
         });
       });
       document.getElementById('dsd-btn-ok')?.addEventListener('click', () => {
-        const num = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : undefined; };
-        const chk = (id) => document.getElementById(id)?.checked;
-        const swatch = (id) => overlay.querySelector(`#${id}`)?.dataset.color;
+        _linregSyncDraftFromDom();
         close();
         pane.updateIndicatorSettings(indicatorId, {
-          period: Math.max(1, Math.round(num('lr-length') ?? cfg.period)),
-          source: document.getElementById('lr-source')?.value ?? cfg.source,
-          upperDevEnabled: chk('lr-upper-dev'), upperMult: num('lr-upper-mult') ?? cfg.upperMult,
-          lowerDevEnabled: chk('lr-lower-dev'), lowerMult: num('lr-lower-mult') ?? cfg.lowerMult,
-          showPearson: chk('lr-show-pearson'), extendLeft: chk('lr-extend-left'), extendRight: chk('lr-extend-right'),
-          colorUpper: swatch('lr-color-upper') ?? cfg.colorUpper,
-          colorLower: swatch('lr-color-lower') ?? cfg.colorLower,
+          period: draft.period, source: draft.source,
+          upperDevEnabled: draft.upperDevEnabled, upperMult: draft.upperMult,
+          lowerDevEnabled: draft.lowerDevEnabled, lowerMult: draft.lowerMult,
+          showPearson: draft.showPearson, extendLeft: draft.extendLeft, extendRight: draft.extendRight,
+          showLine: draft.showLine, width: draft.width, lineStyle: draft.lineStyle,
+          colorUpper: draft.colorUpper, colorLower: draft.colorLower,
         });
       });
     }
