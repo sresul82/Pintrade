@@ -974,16 +974,29 @@ const DetailPanel = (() => {
         } catch {}
 
       } else {
-        // ── BINANCE ──
-        try {
-          const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
-          if (tk.ok) {
-            const d = await tk.json();
-            price     = parseFloat(d.lastPrice);
-            changePct = parseFloat(d.priceChangePercent);
-            vol24h    = parseFloat(d.quoteVolume);
-          }
-        } catch {}
+        // ── BINANCE — Ticker ve FR: önce MarketDataStore havuzundan bak
+        // (_pollDetailData'daki ile aynı desen), havuz henüz hazır değilse
+        // (ör. sayfa yeni açıldıysa) mevcut REST fallback'e düş ──
+        const mdsTicker = typeof MarketDataStore !== 'undefined'
+          ? MarketDataStore.getTicker(pairSym) : null;
+        const mdsFR     = typeof MarketDataStore !== 'undefined'
+          ? MarketDataStore.getFR(pairSym)     : null;
+
+        if (mdsTicker) {
+          price     = mdsTicker.price;
+          changePct = mdsTicker.pct24h;
+          vol24h    = mdsTicker.volume24h;
+        } else {
+          try {
+            const tk = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/ticker/24hr?symbol=${pairSym}`);
+            if (tk.ok) {
+              const d = await tk.json();
+              price     = parseFloat(d.lastPrice);
+              changePct = parseFloat(d.priceChangePercent);
+              vol24h    = parseFloat(d.quoteVolume);
+            }
+          } catch {}
+        }
 
         try {
           const spotSym = pairSym.replace(/^1000000/, '').replace(/^10000/, '').replace(/^1000/, '');
@@ -991,14 +1004,20 @@ const DetailPanel = (() => {
           if (sp.ok) { const d = await sp.json(); if (d.price) spotPrice = parseFloat(d.price); }
         } catch {}
 
-        try {
-          const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
-          if (fr.ok) {
-            const d = await fr.json();
-            frPct = parseFloat(d.lastFundingRate || 0) * 100;
-            nextFundingTime = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
-          }
-        } catch {}
+        if (mdsFR) {
+          frPct = mdsFR.rate; // MarketDataStore zaten % cinsinden tutuyor
+          nextFundingTime = mdsFR.nextFundingTime ||
+            ExchangeRouter.getNextFundingTime(pairSym, 'binance');
+        } else {
+          try {
+            const fr = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/premiumIndex?symbol=${pairSym}`);
+            if (fr.ok) {
+              const d = await fr.json();
+              frPct = parseFloat(d.lastFundingRate || 0) * 100;
+              nextFundingTime = ExchangeRouter.getNextFundingTime(pairSym, 'binance') || parseInt(d.nextFundingTime || 0);
+            }
+          } catch {}
+        }
 
         try {
           const frHist = await fetch(`${AppConfig.API.binance.restFutures}/fapi/v1/fundingRate?symbol=${pairSym}&limit=2`);
