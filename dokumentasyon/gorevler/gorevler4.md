@@ -600,3 +600,13 @@ mumları tamamlayan "gap fill", `chart-data.js:630`) görünümü SIFIRLAMIYOR
 yapıp OK'a basıp hem grafikte hem ayarlara geri dönünce doğru göründüğünü,
 (2) herhangi bir Settings ayarını değiştirip OK'a basınca mumların
 ekranın sağında kalıp phantom'a kaymadığını doğrulamak.
+
+**13.3 — "Bid and ask" tamamen kaldırıldı (kullanıcı kararı, 2026-08-27):**
+bu platformda kullanışsız bir özellik bulundu. Scales sekmesindeki satır
+(checkbox + Value/Line multiselect + iki renk swatch'ı) ve gear-menüsündeki
+"Bid and ask lines" toggle'ı `chart-settings.js`'den, `lineBidAsk`/
+`baValue`/`baLine`/`bidColor`/`askColor` (constructor/applySettings/
+getState) ve `_updateVisualLines()`'taki Ask/Bid çizgi çizim bloğu
+`chart-pane.js`'den tamamen silindi. `js/` genelinde bu isimlere sıfır
+referans kaldığı doğrulandı (order book'taki AYRI/ilgisiz `bidAskRatio`
+alanına dokunulmadı — o L/S verisiyle ilgili, farklı bir özellik).

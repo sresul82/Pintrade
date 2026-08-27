@@ -81,15 +81,12 @@ class ChartPane {
     this.lblCountdown = s.lblCountdown ?? true;
     this.linePrevDayClose = s.linePrevDayClose ?? false; // Issue #5
     this.lineHighLow = s.lineHighLow ?? false; // Issue #6
-    this.lineBidAsk = s.lineBidAsk ?? false; // Issue #7
     // [2026-08-27, kullanıcı bulgusu] Ayarlar penceresindeki renk seçiciler
-    // (prevDayColor/hlColor/bidColor/askColor) vardı ama _updateVisualLines()
-    // HİÇBİRİNİ okumuyordu, her zaman hardcoded '#787b86'/'#f23645'/'#2962ff'
-    // kullanıyordu — kullanıcı OK'a bassa da çizgi rengi hiç değişmiyordu.
+    // (prevDayColor/hlColor) vardı ama _updateVisualLines() HİÇBİRİNİ
+    // okumuyordu, her zaman hardcoded '#787b86'/'#f23645' kullanıyordu —
+    // kullanıcı OK'a bassa da çizgi rengi hiç değişmiyordu.
     this.prevDayColor = s.prevDayColor ?? '#787b86';
     this.hlColor      = s.hlColor      ?? '#f23645';
-    this.bidColor     = s.bidColor     ?? '#2962ff';
-    this.askColor     = s.askColor     ?? '#f23645';
     
     // Timezone & Formatting (Issue: Timezone change)
     this.timezone  = s.timezone  ?? 'UTC';
@@ -105,7 +102,6 @@ class ChartPane {
     // kaydedilmiyordu — kullanıcı değiştirince anında çalışıyor gibi
     // görünüyordu ama sayfa yenilenince sessizce sıfırlanıyordu.
     this.hlValue = s.hlValue ?? true;    this.hlLine = s.hlLine ?? true;
-    this.baValue = s.baValue ?? true;    this.baLine = s.baLine ?? true;
     this.pdValue = s.pdValue ?? false;   this.pdLine = s.pdLine ?? true;
     this.symName = s.symName ?? true;    this.symValue = s.symValue ?? true;    this.symLine = s.symLine ?? true;
     this.watermarkMode = s.watermarkMode ?? 'Ticker';
@@ -1912,13 +1908,6 @@ class ChartPane {
         addLine('low', low, 'Low', showLine ? this.hlColor : 'transparent', LightweightCharts.LineStyle.Dashed, showVal);
       } else { removeLine('high'); removeLine('low'); }
     } else { removeLine('high'); removeLine('low'); }
-
-    if (this.lineBidAsk && this._lastPrice) {
-      const showLine = this.baLine !== false;
-      const showVal  = this.baValue !== false;
-      addLine('ask', this._lastPrice + 0.5, 'Ask', showLine ? this.askColor : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
-      addLine('bid', this._lastPrice - 0.5, 'Bid', showLine ? this.bidColor : 'transparent', LightweightCharts.LineStyle.Solid, showVal);
-    } else { removeLine('ask'); removeLine('bid'); }
   }
 
   // gorevler2.md Görev 11 (2026-08-10) — AlertStore'daki (js/screener/alert-store.js)
@@ -2294,8 +2283,6 @@ class ChartPane {
     // Checkboxes array configuration
     if (s.hlValue != null) this.hlValue = s.hlValue;
     if (s.hlLine  != null) this.hlLine  = s.hlLine;
-    if (s.baValue != null) this.baValue = s.baValue;
-    if (s.baLine  != null) this.baLine  = s.baLine;
     if (s.pdValue != null) this.pdValue = s.pdValue;
     if (s.pdLine  != null) this.pdLine  = s.pdLine;
     if (s.symName != null) this.symName = s.symName;
@@ -2317,13 +2304,10 @@ class ChartPane {
     let _linesDirty = false;
     if (s.prevDayClose != null) { this.linePrevDayClose = s.prevDayClose; _linesDirty = true; }
     if (s.highLow != null)      { this.lineHighLow = s.highLow;           _linesDirty = true; }
-    if (s.bidAsk != null)       { this.lineBidAsk = s.bidAsk;             _linesDirty = true; }
     // [2026-08-27, kullanıcı bulgusu] Renk seçiciler değişince de çizgiler
     // yeniden çizilmeli — bkz. constructor'daki not.
     if (s.prevDayColor != null) { this.prevDayColor = s.prevDayColor; _linesDirty = true; }
     if (s.hlColor != null)      { this.hlColor      = s.hlColor;      _linesDirty = true; }
-    if (s.bidColor != null)     { this.bidColor     = s.bidColor;     _linesDirty = true; }
-    if (s.askColor != null)     { this.askColor     = s.askColor;     _linesDirty = true; }
     if (_linesDirty) this._updateVisualLines(this.candlesData || []);
     
     if (s.timezone != null) {
@@ -2693,15 +2677,13 @@ class ChartPane {
       lblCountdown: this.lblCountdown, lblNoOverlap: this.lblNoOverlap,
       priceLine: this.priceLine, linePrevDayClose: this.linePrevDayClose,
       linePrePost: this.linePrePost, lineHighLow: this.lineHighLow,
-      lineBidAsk: this.lineBidAsk, plusButton: this.plusButton,
+      plusButton: this.plusButton,
       // [2026-08-27, kullanıcı bulgusu] bkz. constructor'daki not.
       prevDayColor: this.prevDayColor, hlColor: this.hlColor,
-      bidColor: this.bidColor, askColor: this.askColor,
       // gorevler2.md Görev 11 (2026-08-10) — eskiden canlı uygulanıp hiç
       // kaydedilmeyen ayarlar (bkz. constructor'daki not).
       timezone: this.timezone,
       hlValue: this.hlValue, hlLine: this.hlLine,
-      baValue: this.baValue, baLine: this.baLine,
       pdValue: this.pdValue, pdLine: this.pdLine,
       symName: this.symName, symValue: this.symValue, symLine: this.symLine,
       watermarkMode: this.watermarkMode, watermarkColor: this.watermarkColor,

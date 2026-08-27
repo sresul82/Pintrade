@@ -188,7 +188,6 @@ function buildPriceScaleMenu(pane) {
         { label: 'Previous day close price line', checked: pane.linePrevDayClose, action: toggle('linePrevDayClose') },
         { label: 'Pre/post market price line', checked: pane.linePrePost, action: toggle('linePrePost') },
         { label: 'High and low price lines', checked: pane.lineHighLow, action: toggle('lineHighLow') },
-        { label: 'Bid and ask lines', checked: pane.lineBidAsk, action: toggle('lineBidAsk') },
       ]
     },
     { label: 'Plus button', checked: pane.plusButton, action: toggle('plusButton') },
@@ -341,7 +340,6 @@ function tabScales() {
     ${buildSection('PRICE LINES')}
     ${buildRow(buildCheck('Previous day close', false, {key:'prevDayClose'}), buildMultiSelect([{label:'Value', key:'pdValue', checked:false}, {label:'Line', key:'pdLine', checked:true}]) + buildLineToolBtn('prevDayColor', '#787b86', 1, 'solid', false))}
     ${buildRow(buildCheck('High and low', false, {key:'highLow'}), buildMultiSelect([{label:'Value', key:'hlValue', checked: true}, {label:'Line', key:'hlLine', checked: true}]) + buildLineToolBtn('hlColor', '#f23645', 1, 'solid', false))}
-    ${buildRow(buildCheck('Bid and ask', false, {key:'bidAsk'}), buildMultiSelect([{label:'Value', key:'baValue', checked: true}, {label:'Line', key:'baLine', checked: true}]) + buildLineToolBtn('bidColor', '#2962ff', 1, 'solid', false) + buildLineToolBtn('askColor', '#f23645', 1, 'solid', false))}
 
     ${buildSection('TIME SCALE')}
     ${buildRow(buildCheck('Day of week on labels', true, {key:'dayOfWeekLabels'}), '')}
@@ -563,8 +561,6 @@ function initSettings() {
       // div'inden geliyor, setColor'ın etkisi görünmüyordu).
       setLineTool('prevDayColor', s.prevDayColor);
       setLineTool('hlColor', s.hlColor);
-      setLineTool('bidColor', s.bidColor);
-      setLineTool('askColor', s.askColor);
 
       // Selects
       if (s.bgType)          setSelect('bgType',          s.bgType);
@@ -576,13 +572,10 @@ function initSettings() {
       
       setCheck('prevDayClose', s.linePrevDayClose);
       setCheck('highLow', s.lineHighLow);
-      setCheck('bidAsk', s.lineBidAsk);
-      
+
       // Multi-select internal checkboxes
       setCheck('hlValue', s.hlValue ?? true);
       setCheck('hlLine',  s.hlLine  ?? true);
-      setCheck('baValue', s.baValue ?? true);
-      setCheck('baLine',  s.baLine  ?? true);
       setCheck('pdValue', s.pdValue ?? false);
       setCheck('pdLine',  s.pdLine  ?? true);
       setCheck('symName', s.symName ?? true);
