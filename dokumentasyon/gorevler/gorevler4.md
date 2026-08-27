@@ -964,3 +964,84 @@ Düzeltildi: dosyanın sonuna `window.ScreenerCore = ScreenerCore;` eklendi.
   MongoDB bağlantısı olmadığı için canlı test edilemedi — üretimde bir
   sonraki `collectSymbolStatusChanges` turundan sonra `/api/symbol-status/events`
   yanıtında `exchange:'bybit'` kayıtların çıktığı kontrol edilmeli.
+
+## Görev-17 — Veri havuzu / istek tekilleştirme planı (2026-08-27, PLANLAMA — henüz kod yazılmadı)
+
+**Bağlam:** Görev-16 kapsamındaki veri-çekme haritasının devamında kullanıcı
+FR (funding rate) özelinde şu soruyu sordu: "Coin Detail'deki FR ile
+Screener'daki FR ayrı ayrı mı istek atmakta?" — cevap EVET çıktı (aşağıda
+detay). Kullanıcının bunun üzerine kendi çıkardığı sonuç ve talebi (kendi
+sözleriyle, PARAFRAZE değil, aynen not düşülüyor çünkü bu tasarım kararının
+gerekçesi):
+
+> "belliki screenerin istek atma araligi ile coin detailin istek atma
+> sikligi farkli... amacim istek sayisini azaltip BAN riskini azaltmak...
+> minimum aralikta hangisi istek atiyorsa o istekten olusan bir havuz
+> olusturulsa, bu herhangi veri icin gecerli, ve diger servislermiz bu
+> veri havuzundan gerekli olan kismi cekse"
+
+Yani kullanıcı, genel bir mimari ilke öneriyor: **her veri tipi için TEK bir
+"en sık çeken" kaynak olsun, geri kalan tüm tüketiciler (Screener, Coin
+Detail, Navbar, botlar) o kaynaktan okusun, kendi ayrı isteklerini
+atmasınlar.** Ayrıca açıkça "genel sistemi bozmaktan korkuyorum" dedi —
+**bu maddenin altında yatan ZORUNLU kısıt: her adım küçük, izole, ve hata
+çıkarsa geri alınabilir (revert edilebilir) olmalı. Büyük, tek seferlik bir
+"mimari birleştirme" YAPILMAYACAK.**
+
+**Doğrulanmış bulgu — bu havuz Binance'te ZATEN VAR:** `js/data/market-data-store.js`
+("Merkezi Piyasa Veri Havuzu") tam olarak kullanıcının tarif ettiği şey —
+tek bir WebSocket (`!miniTicker@arr` 1sn + `!markPrice@arr` 3sn, TÜM market)
++ 60sn'lik toplu OI REST'i, `MarketDataStore.getTicker/getFR/getOI` ile
+herkesin okuyabileceği bir önbellek. Sorun havuzun YOKLUĞU değil, bazı
+tüketicilerin bu havuzu ATLAMASI:
+- ✅ Havuzu kullananlar: FR botu (`binanceFRPoller`, sıfır REST), Coin
+  Detail'in panel-açıkken 10sn'lik otomatik yenilemesi (`_pollDetailData`),
+  Navbar (Görev-16.2 düzeltmesinden sonra).
+- ❌ Havuzu atlayanlar: Screener'ın kendi 60sn'lik tam-liste REST'i (kısmen
+  makul — WS ile aradaki senkron farkını kapatıyor), **Coin Detail'in
+  "coin'e tıklama anı" fonksiyonu `loadSymbol()`** (havuz zaten hazırken
+  bile HER TIKLAMADA kendi taze isteğini atıyor — bu en net, en düşük
+  riskli düzeltme adayı).
+
+**Bybit'te bu havuz HİÇ YOK** — Screener'ın kendi 5sn'lik taraması,
+`bybitFRPoller`'ın bağımsız 60sn'lik taraması (AYNI endpoint, iki ayrı
+zamanlayıcı — Görev'in ilk turunda bulunan somut çakışma), Coin Detail'in
+10sn'lik yenilemesi, Navbar'ın 30sn'lik yenilemesi — hepsi birbirinden
+habersiz, kendi ayrı isteklerini atıyor.
+
+**Kullanıcıya iletilen önemli düzeltme (kullanıcının varsayımını netleştiren
+kısım):** Ban riskini azaltma hedefiyle Bybit'i optimize etmenin doğrudan
+faydası YOK — Bybit istekleri sunucu proxy'sinden hiç geçmiyor (bkz.
+Görev-16'nın "İstek Yolu" bulgusu), ban riski tamamen paylaşılan Binance IP
+bütçesinden kaynaklanıyor. Binance tarafında da FR zaten büyük ölçüde
+havuzlanmış durumda — **asıl büyük ban-riski kaynağı FR değil, grafiğin
+canlı mum güncellemesi:** `chart-data.js`'teki `BinanceFeed.connectLive()`
+gerçek bir WebSocket DEĞİL, her **2 saniyede bir** REST isteği atıyor, hem
+de açık her grafik penceresi için AYRI AYRI (bkz. Görev-16'nın (A) tablosu,
+madde 6).
+
+**Üzerinde anlaşılan öncelik sırası (kullanıcı henüz onaylamadı, sadece
+tartışıldı — HİÇBİRİ UYGULANMADI):**
+1. **Coin Detail `loadSymbol()`'ı havuza bağla** — `_pollDetailData`'daki
+   ZATEN ÇALIŞAN "önce `MarketDataStore.getTicker/getFR` dene, yoksa REST'e
+   düş" desenini `loadSymbol()`'a da uygulamak. Yeni bir mimari değil,
+   200 satır aşağıdaki mevcut kodun aynısının tekrar kullanılması — bu
+   yüzden en düşük riskli adım olarak önerildi.
+2. **Grafiğin 2sn'lik REST polling'ini gerçek WebSocket'e çevirmek** — en
+   büyük ban-riski kazancı ama en riskli değişiklik (chart-pane.js'in canlı
+   mum güncelleme akışının merkezinde), dikkatli/izole yapılmalı.
+3. **Bybit'te tek havuz kurmak** — temizlik + hız kazancı, ban riskine
+   etkisi YOK (yukarıdaki netleştirme). Dikkat: `bybitFRPoller`'ı doğrudan
+   silip Screener'ın verisine bağlamak YETMEZ — Screener'ın kendi borsa
+   dropdown'u Binance'teyken (bkz. Görev-16'daki "3 bağımsız borsa durumu"
+   bulgusu) Bybit taraması durur, ama FR botunun (ScalpFRMonitor/Kom
+   botları) sinyal üretimi Screener'ın hangi sekmede durduğundan bağımsız
+   çalışmalı — yani yeni havuz Screener'ın dropdown'undan TAMAMEN bağımsız
+   kendi zamanlayıcısını tutmalı (bu, `bybitFRPoller`'ın şu anki tasarımının
+   zaten doğru yaptığı şey — kaldırılırken bu özellik kaybedilmemeli).
+
+**Sonraki oturumda ilk iş:** Kullanıcı hangi maddeyle başlamak istediğini
+onaylamadı — 1 numaralı madde (en düşük risk) önerildi ama yanıt
+beklenmekte. Her madde AYRI bir commit olarak yapılmalı ki biri sorun
+çıkarırsa diğerlerini etkilemeden geri alınabilsin (kullanıcının açık
+isteği: "geri dönülebilir olmalı, hata olustugu zaman").
