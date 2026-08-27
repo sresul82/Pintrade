@@ -1020,28 +1020,147 @@ gerçek bir WebSocket DEĞİL, her **2 saniyede bir** REST isteği atıyor, hem
 de açık her grafik penceresi için AYRI AYRI (bkz. Görev-16'nın (A) tablosu,
 madde 6).
 
-**Üzerinde anlaşılan öncelik sırası (kullanıcı henüz onaylamadı, sadece
-tartışıldı — HİÇBİRİ UYGULANMADI):**
-1. **Coin Detail `loadSymbol()`'ı havuza bağla** — `_pollDetailData`'daki
-   ZATEN ÇALIŞAN "önce `MarketDataStore.getTicker/getFR` dene, yoksa REST'e
-   düş" desenini `loadSymbol()`'a da uygulamak. Yeni bir mimari değil,
-   200 satır aşağıdaki mevcut kodun aynısının tekrar kullanılması — bu
-   yüzden en düşük riskli adım olarak önerildi.
-2. **Grafiğin 2sn'lik REST polling'ini gerçek WebSocket'e çevirmek** — en
-   büyük ban-riski kazancı ama en riskli değişiklik (chart-pane.js'in canlı
-   mum güncelleme akışının merkezinde), dikkatli/izole yapılmalı.
-3. **Bybit'te tek havuz kurmak** — temizlik + hız kazancı, ban riskine
-   etkisi YOK (yukarıdaki netleştirme). Dikkat: `bybitFRPoller`'ı doğrudan
-   silip Screener'ın verisine bağlamak YETMEZ — Screener'ın kendi borsa
-   dropdown'u Binance'teyken (bkz. Görev-16'daki "3 bağımsız borsa durumu"
-   bulgusu) Bybit taraması durur, ama FR botunun (ScalpFRMonitor/Kom
-   botları) sinyal üretimi Screener'ın hangi sekmede durduğundan bağımsız
-   çalışmalı — yani yeni havuz Screener'ın dropdown'undan TAMAMEN bağımsız
-   kendi zamanlayıcısını tutmalı (bu, `bybitFRPoller`'ın şu anki tasarımının
-   zaten doğru yaptığı şey — kaldırılırken bu özellik kaybedilmemeli).
+**KULLANICI KARARI (2026-08-27, ONAYLANDI — kapsam netleşti):**
 
-**Sonraki oturumda ilk iş:** Kullanıcı hangi maddeyle başlamak istediğini
-onaylamadı — 1 numaralı madde (en düşük risk) önerildi ama yanıt
-beklenmekte. Her madde AYRI bir commit olarak yapılmalı ki biri sorun
-çıkarırsa diğerlerini etkilemeden geri alınabilsin (kullanıcının açık
-isteği: "geri dönülebilir olmalı, hata olustugu zaman").
+> "eger Bybitte sorun yoksa, ban riski yoksa, performans, ve veri yukleme
+> sorunu yoksa oldugu gibi kalabilir. ama Binance tarafinda eger botlar,
+> coin detail, screener ayri istekler atip istek sayisini artirip ban
+> riski olusturuyorsa, genel bir havuz sistemi mumkunse o sekilde yapmayi
+> oneriyorum. ama uzman olarak sen dogrusunu bilirsin"
+
+Yani: **Bybit tarafına HİÇ DOKUNULMAYACAK** (madde 3 — "Bybit'te tek havuz
+kurmak" — iptal edildi, kapsam dışı, sebep: Bybit istekleri sunucu
+proxy'sinden geçmediği için ban riskine katkısı yok, oradaki tekrar sadece
+bir verimlilik meselesi ve kullanıcı bunu önemsemiyor). **Sadece Binance
+tarafındaki gerçek tekrarlar** ele alınacak. Kullanıcı nihai teknik kararı
+bana bıraktı ("uzman olarak sen doğrusunu bilirsin") — bu yüzden aşağıdaki
+2 madde benim (Claude) uzman önerim olarak netleşti ve sıradaki oturumda
+DOĞRUDAN uygulanmaya hazır durumda.
+
+---
+
+### SIRADAKİ OTURUMDA UYGULANACAK — 2 madde, bu sırayla, HER BİRİ AYRI COMMIT
+
+#### Madde A — Coin Detail `loadSymbol()`'ı MarketDataStore havuzuna bağla
+**Dosya:** `js/screener/detail-panel.js`
+**Dokunulacak yer:** `loadSymbol()` fonksiyonunun BİNANCE dalı (yaklaşık
+satır 976-1020 civarı — `else { // ── BINANCE ── ...}` bloğu). Şu an bu
+blok şartsız olarak `ticker/24hr`, `premiumIndex`, `fundingRate` (interval
+metni için), `openInterest` REST çağrılarını atıyor.
+
+**Ne yapılacak:** Aynı dosyada ~200 satır aşağıda (`_pollDetailData`
+fonksiyonunun Binance dalı, satır ~730-805) ZATEN ÇALIŞAN desen buraya da
+uygulanacak: önce `MarketDataStore.getTicker(pairSym)` ve
+`MarketDataStore.getFR(pairSym)` ile havuzda veri var mı diye bakılacak,
+VARSA oradan okunacak (sıfır REST), YOKSA (havuz henüz hazır değilse, ör.
+sayfa yeni açıldıysa) mevcut REST fallback'i AYNEN kalacak. Yani mevcut
+REST kod SİLİNMEYECEK, sadece bir `if (mdsTicker) {...} else { /* mevcut
+REST kod */ }` sarmalayıcısına alınacak — `_pollDetailData`'daki yapının
+birebir kopyası, yeni bir mimari İCAT EDİLMİYOR.
+
+**Neden dokunuyoruz:** Havuz (`MarketDataStore`) zaten var ve zaten çalışan
+kanıtlanmış bir desen var (`_pollDetailData`) — sadece `loadSymbol()`
+(kullanıcı her coin'e tıkladığında tetiklenir) bu deseni kullanmıyor,
+kendi taze REST'ini atıyor. Kullanıcı Watchlist'te gezinirken çok sık coin
+değiştirdiği için (screenshot'larda görülen davranış) bu, en sık tetiklenen
+gereksiz istek kaynaklarından biri.
+
+**Dokunulmayacak / değişmeyecek:**
+- OI geçmişi (`openInterestHist`) — havuzda YOK (havuz sadece anlık OI
+  tutuyor, `_pollDetailData` de bunu REST'ten çekiyor), bu REST çağrısı
+  AYNEN kalacak.
+- Spot fiyat — havuzda yok, aynı kalacak.
+- `fundingRate` geçmişi (interval metni, "8h" gibi) — havuzda yok, aynı
+  kalacak (zaten hafif, tek seferlik, düşük öncelik).
+- Bybit dalı (satır ~895-935) — kullanıcı kararıyla HİÇ dokunulmayacak.
+- `_pollDetailData` fonksiyonunun kendisi — zaten doğru çalışıyor,
+  değiştirilmeyecek, sadece REFERANS alınacak.
+
+**Test/doğrulama planı:** `node -c js/screener/detail-panel.js` sözdizimi
+kontrolü + yerel preview'da (Bybit'e geçilerek, çünkü sandbox'ta Binance
+502 veriyor — bkz. Görev-16'nın test notları) `EventBus.emit('symbol:change',
+{symbol:'BTCUSDT', exchange:'binance'})` benzeri bir tetikleme ile fetch
+interceptor'la havuz hazırken `premiumIndex`/`ticker/24hr` isteklerinin
+ARTIK atılmadığı doğrulanmalı (bu turda kullandığımız AYNI test yöntemi,
+bkz. Görev-16.2'nin doğrulama notu).
+
+#### Madde B — Kom1ServerWatcher'ın kendi `ticker/24hr` isteğini kaldır, `collectBinanceData`'nın verisini paylaş
+**Dosyalar:** `server.js`, `js/screener/kom1-server-watcher.js`
+**Dokunulacak yer:** `kom1-server-watcher.js:186-190`, `_refreshUniverse()`
+fonksiyonu — `Promise.all([fetchJson('/fapi/v1/exchangeInfo'),
+fetchJson('/fapi/v1/ticker/24hr')])` ile kendi başına ikili bir istek
+atıyor. **DÜZELTME (ilk yazımda yanlış yazmıştım):** bu, Kom1'in ana
+`tick()`'i her 5 dakikada çalışsa da, KENDİSİ sadece `UNIVERSE_REFRESH_MS`
+(satır 84: `60*60*1000`, yani **saatte bir**) aştıysa tetikleniyor
+(`_maybeRefreshUniverse()`, satır 236-243 üzerinden). Yani bu tek başına
+büyük bir istek hacmi değil (saatte 1 kez) — ama yine de `collectBinanceData`'nın
+zaten her 1 DAKİKADA tuttuğu aynı veriyle (`_latestPrices.binance`) TAM
+ÖRTÜŞEN, teknik olarak gereksiz bir tekrar. Küçük ama kolay ve risksiz bir
+kazanç olduğu için hâlâ Madde B olarak öneriliyor — büyük bir ban-riski
+kazancı beklenmemeli, asıl değeri "doğru mimari" olması.
+
+**Ne yapılacak:** `Kom1ServerWatcher`'ın DB-agnostic/modüler yapısı
+korunarak (bkz. proje kuralı: server-taraflı toplayıcılar `BotEngine`
+kullanamaz, kendi pacing'i olmalı — bkz. proje CLAUDE.md'sindeki
+bot-architecture notu), `collectBinanceData`'nın topladığı ticker Map'i
+(veya ondan türetilen sade bir `{symbol: {price, volume, ...}}` snapshot'ı)
+`server.js`'ten `_refreshUniverse()`'e bir fonksiyon parametresi olarak
+GEÇİRİLECEK (imza değişikliği modülün `tick(onConfirmed)`/`module.exports`
+yapısına uyumlu şekilde tasarlanmalı — `module.exports` satır 463 civarı,
+önce okunup mevcut export şekli bozulmadan genişletilmeli). `exchangeInfo`
+çağrısı (sembol listesi/durumu için, farklı bir veri, ticker değil) AYNEN
+kalabilir, sadece `ticker/24hr` kısmı kaldırılacak. Kom1'in kendi bağımsız
+pacing/stagger mekanizması DEĞİŞMEYECEK — sadece bu tek REST çağrısı, zaten
+var olan bir veriyle değiştirilecek.
+
+**Neden dokunuyoruz:** Sunucu tarafında (ban riskinin GERÇEK kaynağı —
+paylaşılan tek Render IP'si) doğrulanmış, somut bir tekrar. Kullanıcının
+"botlar... ayrı istek atıp istek sayısını artırıyorsa" diye özellikle
+belirttiği kategoriye giriyor — etkisi küçük olsa da (saatte 1 istek),
+doğru mimari ilkeyi (havuzdan oku, tekrar çekme) sunucu tarafında da
+uygulamış oluyoruz.
+
+**Dokunulmayacak / değişmeyecek:**
+- Kom1'in `exchangeInfo` çağrısı — farklı bir veri türü (sembol durumu),
+  `collectBinanceData`'da karşılığı yok, AYNEN kalacak.
+- Kom1'in `klines` çağrıları (asıl sinyal hesaplama verisi) — havuzda yok,
+  AYNEN kalacak, bu göreve dahil DEĞİL.
+- Kom1'in kendi tarama mantığı, kademeli evren (tier) sistemi, sinyal
+  üretim algoritması — HİÇBİRİNE dokunulmayacak, sadece veri KAYNAĞI
+  değişiyor, sonuç aynı kalmalı.
+- Kom2ServerWatcher — bu görevde İNCELENMEDİ, ayrı bir iş (Kom1'de
+  kanıtlanan yaklaşım işe yararsa Kom2'ye de bakılabilir, ama şimdi
+  kapsam dışı).
+- `_staggeredStart` gecikmeleri (`server.js:929` vb.) — DEĞİŞMEYECEK,
+  sadece istek SAYISI azalıyor, zamanlama mimarisine dokunulmuyor.
+
+**Test/doğrulama planı:** `node -c server.js`, `node -c js/screener/kom1-server-watcher.js`
+sözdizimi kontrolü. Canlı doğrulama bu ortamda ZOR (MongoDB bağlantısı
+yok, bkz. Görev-16.1'in aynı kısıtlaması) — üretimde bir sonraki Kom1
+tarama turundan sonra sinyal sayısının/evren boyutunun ÖNCEKİ turlarla
+tutarlı kaldığı (regresyon yok) kontrol edilmeli, ayrıca sunucu loglarında
+Kom1'in artık kendi `ticker/24hr` isteğini atmadığı doğrulanmalı.
+
+---
+
+### BU TURDA KESİNLİKLE DOKUNULMAYACAKLAR (kapsam dışı, gerekçesiyle)
+- **Bybit'in her şeyi** (Screener'ın 5sn taraması, `bybitFRPoller`'ın 60sn
+  taraması, Coin Detail/Navbar'ın Bybit dalları) — kullanıcı kararı: ban
+  riski yok, performans sorunu bildirmedi, olduğu gibi kalacak.
+- **Grafiğin 2sn'lik REST canlı-mum polling'i** (`BinanceFeed.connectLive`,
+  `chart-data.js`) — en büyük ban-riski kazancı olacak değişiklik ama en
+  riskli olanı da o; bu turda YAPILMAYACAK, ayrı, dikkatli bir iş olarak
+  ele alınmalı (muhtemelen bir sonraki Görev-17 alt maddesi).
+- **Screener'ın kendi 60sn'lik tam-liste REST'i** (`_loadBinance`) —
+  Görev-16'da zaten "kısmen makul" (WS ile arada senkron farkını kapatan
+  bir tasarım, saf tekrar değil) olarak değerlendirilmişti, bu karar
+  DEĞİŞMEDİ.
+- **Kom2ServerWatcher, M1Hammer, diğer botlar** — bu turda incelenmedi.
+
+### Uygulama sırası ve geri-dönülebilirlik kuralı
+Kullanıcının AÇIK isteği: "geri dönülebilir olmalı, hata oluştuğu zaman."
+Bu yüzden: Madde A ve Madde B **ayrı ayrı commit** edilecek (aynı PR/anda
+tek commit'te BİRLEŞTİRİLMEYECEK) — biri üretimde sorun çıkarırsa diğerini
+etkilemeden `git revert` ile geri alınabilsin diye. Önerilen sıra: önce A
+(tarayıcı taraflı, daha kolay canlı doğrulanabilir), sonra B (sunucu
+taraflı, MongoDB'siz test edilemediği için daha temkinli ilerlenmeli).
