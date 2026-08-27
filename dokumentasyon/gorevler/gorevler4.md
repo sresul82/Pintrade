@@ -700,3 +700,26 @@ kullanıcıyla birlikte **EMA**'ya geçilecek
 ikisini de kapsayacak şekilde genel yazıldığı için EMA'nın kendi payı
 muhtemelen çok küçük kalacak (aynı Length/Period varsayılanı DEFAULT_PERIOD.ema=20
 zaten doğru, TV'nin EMA'sı da aynı formülü/ayar setini kullanıyor).
+
+**14.1 — Phantom/mumlar-sola-kayması bug'ı DEMA ayarlarında da bulundu
+(kullanıcı bulgusu, aynı gün):** Görev-13.2'de düzeltilen "Settings > OK
+sonrası mumlar sola kayıp phantom görünür oluyor" hatası, indikatör ayar
+penceresinde (RSI/EMA/DEMA, `updateIndicatorSettings`) VE genel Chart
+Settings'te (`applySettings`) TEKRAR ortaya çıktı. Kök neden: Görev-13.2'nin
+düzeltmesi SADECE `_loadData()`→`_onFeedCandles` akışına (8sn'lik pencere)
+bağlıydı — ama `updateIndicatorSettings`/`applySettings` çoğu durumda veri
+YENİDEN ÇEKMEDEN (`_loadData()`'ya hiç uğramadan) çalışıyor, bu yüzden o
+pencere hiç açılmıyordu. Düzeltme: görünüm-düzeltme mantığı `_onFeedCandles`
+içinden **`_restoreCandleView()`** adlı ayrı bir metoda çıkarıldı ("son 150
+gerçek bar + sağ marj"), hem `_onFeedCandles` (eskisi gibi) hem
+`updateIndicatorSettings` hem `applySettings`'in SONUNDA doğrudan çağrılıyor
+— artık HANGİ akıştan gelirse gelsin (veri yeniden çekilsin ya da
+çekilmesin) Settings/OK sonrası görünüm düzeltiliyor. Yan bulgu: eski kod
+sağ marjı hep hardcoded `+12` kullanıyordu, Görev-6.5'te eklenen
+`this.marginRight` ayarını hiç okumuyordu — artık onu okuyor (ayarlamayan
+kullanıcılar için varsayılan yine 12, davranış değişmiyor).
+
+**Sonraki oturumda ilk iş (ek):** production'da DEMA ekle/düzenle, OK'a
+bas — mumların sağ kenarda kaldığını, phantom'ın görünmediğini doğrula.
+Aynısını genel Chart Settings'te de (herhangi bir ayarı değiştirip OK)
+tekrarla.

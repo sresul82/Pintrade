@@ -789,6 +789,10 @@ class ChartPane {
     this._rebuildIndicatorOverlays();
     this._recomputeAllIndicators();
     EventBus.emit('pane:indicatorsChanged', { paneIdx: this.idx });
+    // [2026-08-27, kullanıcı bulgusu] bkz. _restoreCandleView() başlığı —
+    // bu akış _loadData()'ya hiç uğramadığı için phantom-düzeltme penceresi
+    // hiç açılmıyordu.
+    this._restoreCandleView();
   }
 
   // Subpane (ana panelden ayrı, kendi eksenli) gösterge türleri — şimdilik
@@ -1740,18 +1744,37 @@ class ChartPane {
       // gerçek mumlar görünmeyecek kadar sola sıkışır, sadece zaman/fiyat
       // cetveline çift tıklayınca (aşağıdaki dblclick handler'ı) düzeliyordu.
       // Aynı mantığı ilk yüklemede de doğrudan uygula — çift tıklamayı bekleme.
-      try {
-        const ts         = this.chart.timeScale();
-        const totalBars  = this.candlesData.length;
-        const visibleBars = 150;
-        const toBar      = totalBars - 1;
-        const fromBar    = Math.max(0, toBar - visibleBars);
-        ts.setVisibleLogicalRange({ from: fromBar, to: toBar + 12 }); // +12 rightOffset
-      } catch(_) {
-        this.chart.timeScale().fitContent(); // beklenmedik hata olursa eski davranışa düş
-      }
+      this._restoreCandleView();
     }
 
+  }
+
+  /** Görünümü "son 150 gerçek bar + sağ marj" olarak düzeltir — phantom'ın
+   *  (ChartPhantom, sağa uzattığı görünmez seri) fitContent/otomatik
+   *  yeniden-hesaplamayla ekrana dahil olup gerçek mumları sola sıkıştırmasını
+   *  önler. Önceden SADECE `_onFeedCandles`'ın 8sn'lik penceresinde
+   *  (`_loadData()` sonrası) çalışıyordu — 2026-08-27 kullanıcı bulgusu:
+   *  Settings (Chart Settings VEYA indikatör ayarları) OK'a basınca veri
+   *  YENİDEN ÇEKİLMEDEN de (updateIndicatorSettings, applySettings gibi
+   *  _loadData()'ya hiç uğramayan akışlar) aynı "mumlar sola kaybolup
+   *  phantom görünüyor" sorunu ortaya çıktı — bu akışlar o 8sn'lik
+   *  pencereden hiç geçmiyordu. Artık bu iki akışın SONUNDA da doğrudan
+   *  çağrılıyor (bkz. applySettings/updateIndicatorSettings). */
+  _restoreCandleView() {
+    if (!this.candlesData || !this.candlesData.length) return;
+    try {
+      const ts         = this.chart.timeScale();
+      const totalBars  = this.candlesData.length;
+      const visibleBars = 150;
+      const toBar      = totalBars - 1;
+      const fromBar    = Math.max(0, toBar - visibleBars);
+      // marginRight (Canvas > MARGINS > Right, gorevler4.md Görev-6.5) — kullanıcı
+      // ayarladıysa onu, ayarlamadıysa chart'ın kendi varsayılanını (12) kullanır.
+      const rightOffset = this.marginRight ?? 12;
+      ts.setVisibleLogicalRange({ from: fromBar, to: toBar + rightOffset });
+    } catch (_) {
+      this.chart.timeScale().fitContent(); // beklenmedik hata olursa eski davranışa düş
+    }
   }
 
   // Called when feed:tick arrives (live candle update)
@@ -2495,6 +2518,11 @@ class ChartPane {
       const n = parseInt(s.marginRight, 10);
       if (!isNaN(n)) this.chart.timeScale().applyOptions({ rightOffset: n });
     }
+
+    // [2026-08-27, kullanıcı bulgusu] bkz. _restoreCandleView() başlığı —
+    // Settings > OK sonrası (setVolume gibi _loadData() tetikleyen bir alan
+    // değişmese bile) mumların sola kayıp phantom'ın görünür olması sorunu.
+    this._restoreCandleView();
   }
 
   // ── Timezone Formatter ────────────────────────────────────
