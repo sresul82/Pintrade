@@ -174,6 +174,13 @@ window.DrawingManager = (() => {
         showVAL: false, valColor: '#787b86',
       };
     }
+    // Brush — ince, tam opak serbest-el kalemi (TV: kırmızımsı ton).
+    if (tool === 'brush') return { color: '#f23645', width: 3 };
+    // Highlighter — kalın, yarı saydam vurgu kalemi (TV: sarı, düşük opaklık).
+    // Opaklık AYRI bir alan DEĞİL — DSDColorPicker'ın projede zaten var olan
+    // konvansiyonuyla (bkz. RSI fillColor notu) doğrudan rgba() içine
+    // gömülü, swatch'ın kendi opaklık kaydırıcısı bunu değiştirir.
+    if (tool === 'highlighter') return { color: 'rgba(247,201,72,0.4)', width: 20 };
     return { color: '#2962ff', width: 1, lineStyle: 'solid' };
   }
 
@@ -397,6 +404,18 @@ window.DrawingManager = (() => {
       });
 
       _lastPointerdownClaimed = true;
+      return true;
+    }
+
+    // ── Brush / Highlighter (serbest-el, sürükle-bırak) ────────
+    // pathtool'un click-click akışından FARKLI: tek mousedown ile başlar,
+    // mousemove sırasında (buton basılıyken) sürekli nokta eklenir, mouseup
+    // ile biter — TV'nin fırça aracının gerçek davranışı. Aşağıdaki
+    // onMouseMove/onMouseUp'taki eşleşen bloklarla birlikte çalışır.
+    if (['brush', 'highlighter'].includes(_activeTool)) {
+      _inProgress = { tool: _activeTool, symbol: pane.symbol, points: [pt], id: _uid(), style: _getToolStyle(_activeTool), paneKey: activePaneKey };
+      _lastPointerdownClaimed = true;
+      requestRedrawAll();
       return true;
     }
 
@@ -1118,7 +1137,18 @@ window.DrawingManager = (() => {
       let isNoMagnet = false;
 
       if (_inProgress && _inProgress.symbol === pane.symbol && !_inProgress.finished) {
-        if (_inProgress.points) {
+        if (['brush', 'highlighter'].includes(_inProgress.tool)) {
+          // Serbest-el — pathtool'un "son nokta imleci takip eder" mantığının
+          // AKSİNE, her harekette YENİ bir nokta EKLENİR (magnet/snap YOK —
+          // fırça imleci birebir takip etmeli). Çok sık nokta birikmesin diye
+          // sadece son noktadan piksel-mesafesi eşiği aşılınca eklenir.
+          const lastP = _inProgress.points[_inProgress.points.length - 1];
+          const lastX = _timeToX(pane, lastP.time);
+          const lastY = lastP && inProgSeries ? inProgSeries.priceToCoordinate(lastP.price) + inProgOffsetY : null;
+          if (lastX == null || lastY == null || Math.hypot(x - lastX, y - lastY) > 3) {
+            _inProgress.points.push({ time: rawTime, price: rawPrice });
+          }
+        } else if (_inProgress.points) {
           // Multi-point tool: last point tracks mouse
           _inProgress.points[_inProgress.points.length - 1] = { time, price };
         } else if (_inProgress.p4 !== undefined && _inProgress.p4 !== null) {
@@ -1167,6 +1197,20 @@ window.DrawingManager = (() => {
   }
 
   function onMouseUp(pane, e) {
+    // Brush/Highlighter — serbest-el çizim mousedown'da başlayıp burada
+    // (fare bırakılınca) biter; pathtool'un click-click bitirişinden farklı.
+    if (_inProgress && !_inProgress.finished && ['brush', 'highlighter'].includes(_inProgress.tool)) {
+      const finished = { ..._inProgress };
+      _inProgress = null;
+      _snapCrosshair = null;
+      if (finished.points && finished.points.length >= 2) {
+        _finishDrawing(finished.symbol, finished, pane);
+      } else {
+        requestRedrawAll();
+      }
+      return;
+    }
+
     const ds = _dragState;
     const wasDragging = !!ds && (Math.abs(e.clientX - (pane.cvs.getBoundingClientRect().left + ds.startX)) > 3 || Math.abs(e.clientY - (pane.cvs.getBoundingClientRect().top + ds.startY)) > 3);
 
@@ -2033,7 +2077,12 @@ window.DrawingManager = (() => {
   }
 
   function _renderAnchors(ctx, d, pane) {
-    const noGenericAnchors = ['note', 'callout', 'pricenote', 'pricelabel', 'tableanno', 'texttool', 'regression'];
+    // brush/highlighter: d.points onlarca/yüzlerce nokta içerebilir (her
+    // 3px'te bir eklenir, bkz. onMouseMove) — genel "her noktaya tutamaç"
+    // mantığı (aşağıdaki d.points fallback'i) burada yoğun bir nokta
+    // zinciri çizerdi, bu yüzden BİLEREK hariç tutuldu (pathtool'un tersine,
+    // freehand çizgide tek tek nokta düzenlemenin bir anlamı da yok).
+    const noGenericAnchors = ['note', 'callout', 'pricenote', 'pricelabel', 'tableanno', 'texttool', 'regression', 'brush', 'highlighter'];
     if (noGenericAnchors.includes(d.tool)) return;
 
     const pts = [];
@@ -2767,7 +2816,13 @@ window.DrawingManager = (() => {
       return false;
     }
 
-    if (d.points && d.points.length > 0) {
+    // brush/highlighter HARİÇ — bunların onlarca/yüzlerce yakın-aralıklı
+    // noktası var (bkz. onMouseMove'daki 3px eşiği), bu yüzden bu genel
+    // "her noktaya tek tek tıkla" kontrolü NEREDEYSE HER tıklamayı
+    // yakalayıp aşağıdaki segment/'line' kontrolüne (tüm-şekil sürükleme)
+    // hiç sıra bırakmıyordu — bulundu+düzeltildi (canlı testte fark edildi:
+    // sürükleme hep sadece TEK noktayı taşıyordu, tüm çizgiyi değil).
+    if (!['brush', 'highlighter'].includes(d.tool) && d.points && d.points.length > 0) {
       for (let i = 0; i < d.points.length; i++) {
         const ptXY = _pt2xy(d.points[i], pane);
         if (ptXY && Math.hypot(x - ptXY.x, y - ptXY.y) <= tolerance) return 'p' + (i + 1);
@@ -3055,7 +3110,7 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (d.tool === 'pathtool' && d.points && d.points.length >= 2) {
+    if (['pathtool', 'brush', 'highlighter'].includes(d.tool) && d.points && d.points.length >= 2) {
       const pts = d.points.map(pt => _pt2xy(pt, pane)).filter(Boolean);
       for (let i = 0; i < pts.length - 1; i++) {
         if (_distToSegment(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) <= tolerance) return 'line';

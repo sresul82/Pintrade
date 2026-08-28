@@ -45,6 +45,8 @@ const DrawingSettingsDialog = (() => {
     triangle:      'Triangle',
     arc:           'Arc',
     pathtool:      'Path',
+    brush:         'Brush',
+    highlighter:   'Highlighter',
     note:          'Note',
     callout:       'Callout',
     pricenote:     'Price Note',
@@ -98,6 +100,10 @@ const DrawingSettingsDialog = (() => {
     'triangle':   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
     'arc':        { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
     'pathtool':   { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:true, hasFill:false, hasText:false, coordsMode:'multi' },
+    // Brush/Highlighter — pathtool ile AYNI çok-nokta veri modeli, ama
+    // capArrows anlamsız (serbest-el çizgi, uç oku yok).
+    'brush':       { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:false, coordsMode:'multi' },
+    'highlighter': { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:false, hasText:false, coordsMode:'multi' },
     'texttool':   { isTextTool:true, hasText:true, coordsMode:'p1only' },
     'note':       { isAnnotation:true, hasText:true, coordsMode:'p2' },
     'callout':    { isAnnotation:true, hasText:true, coordsMode:'p2' },

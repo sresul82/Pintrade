@@ -542,13 +542,31 @@ function _drawArrowHead(ctx, from, to) {
     }
 
 
-  function _drawBrush(ctx, d, pane) {
-    // Placeholder for Brush tool
+  // gorevler4.md Görev-18 sonrası — Brush/Highlighter (2026-08-28).
+  // İkisi de serbest-el çoklu-nokta çizgi (drawing-core.js'teki d.points
+  // dizisi, pathtool ile AYNI veri modeli — sadece yerleştirme akışı
+  // sürükle-bırak, click-click değil). Tek fark stil: Brush ince/opak,
+  // Highlighter kalın/yarı-saydam — TV'nin gerçek varsayılan karakterine
+  // uygun (bkz. _getToolStyle'daki varsayılanlar).
+  function _drawFreehandPath(ctx, d, pane) {
+    if (!d.points || d.points.length < 2) return;
+    const pts = d.points.map(p => _pt2xy(p, pane)).filter(Boolean);
+    if (pts.length < 2) return;
+    const s = d.style || {};
+    ctx.save();
+    ctx.strokeStyle = s.color || '#f23645';
+    ctx.lineWidth = s.width || 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  function _drawHighlighter(ctx, d, pane) {
-    // Placeholder for Highlighter tool
-  }
+  function _drawBrush(ctx, d, pane) { _drawFreehandPath(ctx, d, pane); }
+  function _drawHighlighter(ctx, d, pane) { _drawFreehandPath(ctx, d, pane); }
 
   return {
     drawRect: _drawRect,

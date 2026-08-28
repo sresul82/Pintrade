@@ -1568,3 +1568,88 @@ görev olarak ele alınmalı; Brush/Highlighter (serbest-el çizim, çok daha
 düşük karmaşıklık) daha güvenli bir sonraki adım adayı. Bu karar
 gerekçesiyle birlikte kullanıcıya bildirildi, bu turda kod YAZILMADI —
 sırada.
+
+---
+
+## Görev-19 — 2026-08-28: Brush / Highlighter serbest-el çizim araçları
+
+Kullanıcı "1. Brush/Highlighter, 2. Kom1 tier3, 3. Bot sağlık" sırasıyla
+istedi — bu bölüm 1. madde.
+
+**Mimari karar:** `pathtool`'un (click-click çoklu-nokta) veri modeliyle
+AYNI (`d.points` dizisi) ama yerleştirme akışı TAMAMEN FARKLI — TV'nin
+gerçek fırça davranışı sürükle-bırak (tek mousedown başlatır, mousemove
+sürekli nokta ekler, mouseup biter), click-click DEĞİL. Bu yüzden
+drawing-core.js'e pathtool'dan bağımsız YENİ bir yerleştirme bloğu
+eklendi, ama hit-test/sürükleme/ayarlar penceresi tarafında pathtool ile
+PAYLAŞILAN genel mekanizmalar (segment hit-test, `d.points` tüm-şekil
+translate, generic Style tab) olduğu gibi kullanıldı — kopya yazılmadı.
+
+**Değişiklikler:**
+- `drawing-core.js`: `onMouseDown`'a brush/highlighter için tek-nokta
+  başlatma bloğu; `onMouseMove`'a (pathtool'un "son nokta imleci takip
+  eder" mantığından FARKLI olarak) her 3px'te bir YENİ nokta ekleyen
+  serbest-el takip bloğu (magnet/snap YOK — TV'de fırça candle'a
+  yapışmaz); `onMouseUp`'a bitirme mantığı (pathtool'un çift-tık
+  bitirişinden farklı, `_finishDrawing` üzerinden "keep drawing" modu
+  otomatik destekleniyor — ayrı kod gerekmedi). `_getToolStyle`'a
+  varsayılanlar: Brush ince/opak kırmızı, Highlighter kalın/%40 opak sarı
+  (opaklık AYRI bir alan değil, projenin `DSDColorPicker` konvansiyonuyla
+  rgba() içine gömülü — RSI'nın fillColor'ıyla AYNI desen).
+- `drawing-shapes.js`: `_drawFreehandPath` — `d.points`'i `_pt2xy` ile
+  piksele çevirip `lineCap:round`/`lineJoin:round` ile tek bir stroke
+  çiziyor, Brush ve Highlighter aynı fonksiyonu paylaşıyor.
+- `drawing-settings-dialog.js`: `TOOL_NAMES`/`TOOL_CAPS`'e girişler
+  (hasText:false — metin özelliği yok), generic Style tab (`DSDStandardTabs.
+  renderStyleTab`) zaten capArrows/midpoint/priceLabel hepsi false olan bir
+  aracı destekliyordu, YENİ kod gerekmedi — sadece "Line" (renk+kalınlık+
+  stil) satırı gösteriyor.
+- `property-toolbar.js`: `hasText` listesine eklendi (anlamsız "T" düğmesi
+  çıkmasın diye).
+- `_renderAnchors`: brush/highlighter `noGenericAnchors`'a eklendi —
+  onlarca/yüzlerce noktanın HER birine tutamaç çizmek (genel `d.points`
+  fallback'i) aşırı görsel gürültü olurdu, freehand çizgide tek tek nokta
+  düzenlemenin de bir anlamı yok.
+
+**BULUNUP DÜZELTİLEN GERÇEK HATA (canlı testte yakalandı):** Genel
+"her noktaya tek tek tıkla" hit-test kontrolü (`d.points` üzerinde
+`tolerance=10`px döngü) pathtool için sorun değildi (az sayıda, geniş
+aralıklı nokta) ama brush/highlighter için (3px aralıklarla yüzlerce
+nokta) NEREDEYSE HER tıklamayı yakalayıp aşağıdaki segment/'line'
+kontrolüne (tüm-şekli-sürükleme) hiç sıra bırakmıyordu — kullanıcı tüm
+çizgiyi taşımaya çalıştığında sadece TEK bir nokta hareket ediyordu.
+Düzeltildi: bu genel kontrol artık `!['brush','highlighter'].includes(d.tool)`
+şartıyla korunuyor, segment-tabanlı 'line' hit-test (zaten pathtool için
+var olan) öne çıkıyor.
+
+**Doğrulama:** `pintrade-server` + Bybit'te canlı test edildi:
+- Serbest-el yerleştirme JS-API ile simüle edildi (mousedown + 15-20
+  mousemove + mouseup), doğru sayıda nokta State'e yazıldı.
+- **Render doğrudan State enjeksiyonuyla (koordinat hesaplama sorunları
+  bu ortamda ayrı bir engel çıkardığı için, aşağıya bkz.) ekran
+  görüntüsüyle doğrulandı** — kırmızı ince Brush çizgisi ve sarı/turuncu
+  kalın yarı-saydam Highlighter çizgisi doğru renklerde, doğru şekilde
+  (dalgalı sinüs eğrisi olarak enjekte edildi, öyle render oldu) çizildi.
+- Seçim (hit-test) canlı doğrulandı (bir noktaya tıklayınca `r1:true`
+  döndü, floating toolbar açıldı — sade, sadece drag/template/pencil/
+  width/style/gear/lock/delete, TV'nin özel bir toolbar'ı YOK).
+- Ayarlar penceresi (`DrawingSettingsDialog.open`) doğrudan API ile
+  açıldı — başlık "Brush", sekmeler "Style | Coordinates | Visibility"
+  (Inputs/Text yok, doğru), Style'da tek "Line" satırı + kırmızı swatch —
+  Pintrade'in KENDİ tasarım dili (kullanıcının "menü/renk paleti/combo
+  bizim standartta olmalı" şartı karşılandı, TV'nin arayüzü hiç
+  kopyalanmadı).
+- **Tüm-şekil sürükleme (bulunan hit-test hatasının düzeltmesi) bu turda
+  EKRAN GÖRÜNTÜSÜYLE doğrulanamadı** — bu sandbox'ta o sırada Faz 1/2'de
+  belgelenen "phantom future" görünür-aralık hatası (chart'ın zaman
+  ekseni gerçek veriden ~40 gün ileride takılı kalıyor,
+  `coordinateToTime`/`Price` null dönüyor) bu turda `pane.goToRealtime()`/
+  `fitContent()` ile bile düzelmedi — bilinen, önceki oturumlarda da
+  görülmüş bir sandbox kısıtlaması, YENİ bir regresyon değil. Düzeltmenin
+  kendisi (`!['brush','highlighter'].includes(d.tool)` koşulu) kod
+  okuma yoluyla yüksek güvenle doğru bulundu (tolerance/sıra mantığı net),
+  ama gerçek fare sürüklemesiyle ekran görüntüsü alınamadı.
+  **Sonraki oturumda/production'da ilk iş:** Bir Brush çizip TÜM çizgiyi
+  (bir noktaya değil, çizgi boyunca herhangi bir yere) sürükleyerek tüm
+  şeklin birlikte hareket ettiğini doğrulamak.
+- `node -c` ile tüm dosyalar sözdizimi temiz.
