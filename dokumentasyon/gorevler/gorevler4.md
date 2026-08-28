@@ -217,10 +217,33 @@ gerektiriyor).
 
 ## Görev-4 — Kom1 Görev 6: tier3 rotasyon doğrulaması
 
-**Durum: Sadece pasif gözlem gerekiyor, aktif iş yok.** Hacme göre 3
-katmanlı rotasyonun (tier3 = en düşük hacimli ~200 coin, 3 saatte bir
-taranmalı) fiilen çalıştığı henüz doğrulanmadı — birkaç saatlik gözlemle
-`/api/kom1/status` üzerinden kontrol edilebilir.
+**Durum: ✅ DOĞRULANDI (2026-08-28).** Production'daki gerçek
+`/api/kom1/status` yanıtı kontrol edildi (`https://pintrade-uwg9.onrender.com/api/kom1/status`
+— önemli not: LOKAL dev server'ın AYNI endpoint'i boş döner, çünkü
+`Kom1ServerWatcher`'ın evren/tier durumu process-içi bellekte tutuluyor,
+DB'den değil — sadece production'ın kendi sürekli çalışan process'i
+anlamlı):
+
+```json
+{"universe":{"total":514,"tier1":100,"tier2":200,"tier3":214,
+  "tierLastScanAgoMs":{"1":1510,"2":133,"3":4377285}},
+ "lastTickAt":1787925986211}
+```
+
+- **Tier3 son taramadan ~73 dakika (4.377.285ms) önce taranmış** —
+  beklenen 3 saatlik rotasyon penceresinin İÇİNDE, ne takılı kalmış ne de
+  gecikmiş. Rotasyon fiilen çalışıyor.
+- Tier1 (1.5sn önce) ve Tier2 (133ms önce) neredeyse anlık — beklenen,
+  bunlar en sık taranan katmanlar.
+- `universe.total: 514` — Görev-17'nin otomatik günlük takip notundaki
+  (`gorevler3.md`, 2026-08-28) "universe.total 514" rakamıyla BİREBİR
+  tutarlı, ayrı bir doğrulama kaynağı.
+- `lastTickAt` güncel (sorgu anına göre birkaç dakika içinde) — bot
+  heartbeat'i canlı, takılı/çökmüş değil.
+- 1 aktif `pending` sinyal (RIVERUSDT, 4h) — bot gerçekten çalışıyor,
+  boşta durmuyor.
+
+Aktif bir iş kalmadı, kapatıldı.
 
 ---
 
@@ -428,12 +451,27 @@ artık `lastTickAt` şu andan **>20 dakika** eskiyse (normal tur aralığı
 ~5dk) kullanıcıya hemen bildiriyor — botun tick döngüsünün sessizce
 öldüğünün en erken işareti bu olacak.
 
-**Sonraki oturumda ilk iş:**
-1. Production'da `/api/kom1/status` ve `/api/kom2/status`'un artık
-   `lastTickAt` döndürdüğünü doğrula.
-2. Kom2'nin cloud routine'ine (yukarıdaki link) AYNI heartbeat kontrolünü
-   elle eklemek gerekiyor — bu oturumda o routine'i düzenleyecek bir araç
-   yoktu, sadece Kom1'in yerel zamanlanmış görevi güncellenebildi.
+**Durum güncellemesi (2026-08-28): HER İKİ madde de tamamlandı.**
+
+1. ✅ Doğrulandı — production'da hem `/api/kom1/status` hem `/api/kom2/status`
+   artık `lastTickAt` döndürüyor (canlı kontrol edildi, ikisi de güncel/taze
+   epoch ms değerleri veriyordu, bkz. Görev-4'ün doğrulama notu — aynı
+   sorguda ikisi birlikte teyit edildi).
+2. ✅ Kom2'nin cloud routine'ine (`trig_01VgVBbSCSctroyujARwGxR7`,
+   `RemoteTrigger` aracıyla) Kom1'in `kom1-daily-signal-check` şablonundaki
+   AYNI heartbeat mantığı eklendi (>20dk eski `lastTickAt` → açıkça uyar).
+
+   **Bonus bulgu (routine'i incelerken fark edildi, İLGİSİZ ama gerçek bir
+   hata):** Bu routine'in prompt'u hâlâ **`pintrade-0sb6.onrender.com`**
+   (bu konuşmanın en başında kullanıcının "deprecated" dediği ESKİ backend)
+   kontrol ediyordu — `pintrade-uwg9.onrender.com` DEĞİL. Yani routine
+   20 Ağustos'tan beri her gün YANLIŞ/eski sunucuyu kontrol ediyor
+   olabilirdi (0sb6 hâlâ ayakta mı, hangi veriyi döndürüyordu bilinmiyor —
+   ama en iyi ihtimalle yanıltıcı, en kötü ihtimalle sürekli hata veriyordu).
+   Bu turda ikisiyle birlikte düzeltildi: `pintrade-uwg9.onrender.com`'a
+   güncellendi. **Sonraki oturumda/production'da ilk iş:** yarınki
+   (2026-08-29 06:03 UTC) otomatik çalışmasını bekleyip raporun artık
+   doğru sunucudan geldiğini ve heartbeat satırının göründüğünü doğrulamak.
 
 ---
 
