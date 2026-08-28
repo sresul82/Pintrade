@@ -1495,3 +1495,76 @@ geldikçe (WebSocket tick'i) otomatik yeniden çizilip çizilmediği —
 kodun mantığı bunu HER `requestRedrawAll()` çağrısında otomatik
 yapıyor (candlesData'nın son elemanını okuyor), ama gerçek canlı bir
 WS akışıyla saatlerce açık kalan bir grafikte doğrulanmadı.
+
+---
+
+### Görev-18 tam denetim (2026-08-28) — kullanıcı isteği: "7 aracın hepsi
+### TV ile aynı mı (fonksiyon + ayar penceresi görseli + chart görseli +
+### anchor noktaları + tıklama davranışı) kontrol et"
+
+**Yöntem:** Gerçek TV hesabında (kullanıcı login) Long Position yerleştirilip
+canlı callout metinleri okundu; Pintrade tarafında `pintrade-server` + Bybit
+üzerinden `DrawingManager` JS-API'siyle (bkz. Faz 1'in kurduğu test yöntemi)
+longpos/shortpos/pricerange/daterange/datepricerange yerleştirilip ekran
+görüntüsüyle karşılaştırıldı.
+
+**BULUNAN VE DÜZELTİLEN GERÇEK HATA (commit `[aşağıda]`):**
+`drawing-forecast.js`'in `_drawPosition` fonksiyonunda Target/Stop
+satırlarının "price offset" (TV'nin kendi alan adı, `dsd-position-
+tabs.js`'teki `STAT_ITEMS`'ta da `tpPriceOffset`/`slPriceOffset` olarak
+geçiyor) kısmı **mutlak fiyatı** (`tp`/`sp`, ör. BTC için ~80083) basıyordu
+— TV'nin ekranında görülen sayı ("401.8" gibi, BTC'nin ~80000'lik mutlak
+fiyatından ÇOK küçük) bunun aslında entry'den FARK (offset) olduğunu
+kanıtlıyordu. Kanıt zaten kod İÇİNDE de vardı: AYNI satırdaki kardeş alan
+(`ticksTgt = priceToTicks(tp - ep)`) doğru şekilde farkı kullanıyordu, sadece
+price-offset alanı unutulmuştu. Düzeltildi: `_fmtPrice(tp)`→
+`_fmtPrice(targetDist)`, `_fmtPrice(sp)`→`_fmtPrice(stopDist)`. Canlı
+doğrulandı: düzeltme öncesi Stop etiketi "76176.989" (mutlak fiyat)
+gösterirken, sonrası "1953.077" (gerçek fark) gösterdi.
+
+**Kontrol edilip DOĞRU bulunanlar (değişiklik gerekmedi):**
+- Price Range / Date Range / Date and Price Range — üç kutu da SADECE
+  kendi istatistiğini gösteriyor (Price Range sadece fiyat farkı/%/tick,
+  Date Range sadece bar sayısı/süre, Date+Price ikisi birden) — TV'nin
+  dokümante edilmiş davranışıyla birebir, çapraz sızma yok.
+  Yerleştirme/sürükleme/8-tutamaçlı resize (rect ile paylaşılan mekanizma)
+  hatasız çalıştı.
+- Long/Short Position'ın callout metin FORMATI ("Closed PnL: X, Qty: Y" /
+  "Risk/reward ratio: Z" / "Target|Stop: <fark> (<%>) <tick>, Amount: <$>")
+  — TV'nin gerçek ekran görüntüsüyle birebir örtüşüyor (price-offset
+  düzeltmesi hariç, o da artık örtüşüyor).
+- Ayar penceresi (gear ikonu) mimarisi — `dsd-position-tabs.js`/
+  `dsd-volprof-tabs.js`, RSI/EMA/DEMA/LinReg ile AYNI `dsd-row`/`dsd-label`/
+  `dsd-color-swatch`/`DSDColorPicker.showColorPalette`/
+  `showCombinedLineSettings` bileşenlerini kullanıyor — kullanıcının
+  "araç seçilince çıkan menü, renk paletleri, combo renkler bizim
+  standartta olmalı" şartı zaten baştan sağlanmış durumda (TV'nin kendi
+  renk seçici tasarımı hiç kopyalanmadı, sadece alan adları/varsayılanlar
+  TV'den alındı).
+
+**Bu turda TAM doğrulanamayan (düşük öncelik, not düşüldü):**
+- Long/Short Position'ın TÜM tutamaç senaryoları (entry-sol-daire tüm-şekli-
+  taşıma, sağ-kare genişlik-resize, target/stop-sol-kare seviye-ayarlama) —
+  Faz 1'de canlı test edilmişti (RSI subpane dahil), bu turda TEKRAR tek
+  tek denenmedi, sadece render/yerleştirme/genel sürükleme doğrulandı.
+- TV'nin GERÇEK ayarlar penceresi (Long Position'ın Inputs/Style/
+  Visibility sekmeleri) bu turda YENİDEN açılamadı (TV'nin UI'ında şekli
+  seçmek için gereken pixel-hassas tıklama bu ortamda güvenilir
+  çalışmadı) — Faz 1'in ÖNCEKİ oturumdaki doğrulamasına güvenildi.
+
+**Diğer araç gruplarında BULUNAN, BİLEREK dokunulmayan boş alanlar**
+(`grep Placeholder`):
+- `drawing-patterns.js`: Elliott Impulse/Correction/Triangle/Double Combo/
+  Triple Combo Wave (5 araç) — placeholder.
+- `drawing-shapes.js`: Brush, Highlighter — placeholder.
+- `drawing-annotations.js`: Icon/Emoji tool — placeholder.
+
+Bunlar ÖNCEKİ bir oturumda ("gorevler2.md'de") bilinçli olarak "çok büyük/
+riskli" diye ertelenmişti. Kullanıcı bu turda "gerekirse diğer araç
+gruplarında altı boş kalan araçları TV'ye bakarak aynısını bizde uygula"
+dedi — kapsam kararı: Elliott Wave (gerçek dalga-sayımı/etiketleme mantığı
+gerektiriyor, "Placeholder" listesindeki en karmaşık iş) AYRI, özel bir
+görev olarak ele alınmalı; Brush/Highlighter (serbest-el çizim, çok daha
+düşük karmaşıklık) daha güvenli bir sonraki adım adayı. Bu karar
+gerekçesiyle birlikte kullanıcıya bildirildi, bu turda kod YAZILMADI —
+sırada.

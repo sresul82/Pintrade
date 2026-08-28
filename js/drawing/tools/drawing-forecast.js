@@ -241,7 +241,13 @@ window.DrawingForecast = (() => {
 
         // ── Target callout (yeşil, hedef çizgisinin üstünde, sol-hizalı) ──
         const tParts = [];
-        if (on('tpPriceOffset')) tParts.push(`Target: ${_fmtPrice(tp)}`);
+        // [DÜZELTME 2026-08-28, TV karşılaştırmasında bulundu] Alan adı
+        // "tpPriceOffset" (fark), ama önceden mutlak fiyat (tp) basılıyordu
+        // — TV'de görülen küçük sayı (BTC'de "401.8" gibi, ~80000'lik
+        // mutlak fiyattan çok daha küçük) SADECE entry'den fark olabilir.
+        // Kardeş alan (tick offset) zaten AYNI satırda doğru şekilde farkı
+        // (tp-ep) kullanıyordu — tutarsızlık netti.
+        if (on('tpPriceOffset')) tParts.push(`Target: ${_fmtPrice(targetDist)}`);
         if (on('tpPercentOffset')) tParts.push(`(${pctTgt.toFixed(2)}%)`);
         if (!compact && on('tpTickOffset')) tParts.push(`${ticksTgt}`);
         let tLine1 = tParts.join(' ');
@@ -276,7 +282,9 @@ window.DrawingForecast = (() => {
 
         // ── Stop callout (kırmızı, stop çizgisinin altında, sol-hizalı) ──
         const sParts = [];
-        if (on('slPriceOffset')) sParts.push(`Stop: ${_fmtPrice(sp)}`);
+        // [DÜZELTME 2026-08-28] bkz. Target'taki AYNI not — burada da sp
+        // (mutlak fiyat) yerine stopDist (fark) kullanılmalı.
+        if (on('slPriceOffset')) sParts.push(`Stop: ${_fmtPrice(stopDist)}`);
         if (on('slPercentOffset')) sParts.push(`(${pctStop.toFixed(2)}%)`);
         if (!compact && on('slTickOffset')) sParts.push(`${ticksStop}`);
         let sLine1 = sParts.join(' ');
