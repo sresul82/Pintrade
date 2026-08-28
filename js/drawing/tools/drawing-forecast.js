@@ -418,9 +418,205 @@ window.DrawingForecast = (() => {
   }
 
   // ── VOLUME-BASED (Hacim Tabanlı) ─────────────────────────
+  // gorevler: Forecast & Measurement TV parity, Faz 3 (2026-08-28).
+  // Gerçek TV hesabında doğrulandı (kullanıcı login oldu, canlı test edildi):
+  // Fixed Range Volume Profile'ın "Coordinates" sekmesi SADECE #1/#2 (bar)
+  // içeriyor — HİÇ fiyat alanı yok. Yani p1/p2'nin dikey (fiyat) bileşeni
+  // histogramı HİÇ ETKİLEMİYOR — dikey aralık (Histogram Top/Bottom) o zaman
+  // aralığındaki mumların gerçek high/low'undan hesaplanıyor. Bu yüzden
+  // burada da AYNI şekilde: p1/p2'nin SADECE `time` alanı kullanılıyor,
+  // `price` alanı yerleştirme/sürükleme için saklanıyor ama hesaba hiç
+  // girmiyor. Varsayılanlar (Row Size=24, Value Area=70%, Volume=Up/Down,
+  // Width=%30) gerçek TV ayarlar penceresinden (Inputs/Style sekmeleri)
+  // birebir okundu.
 
-  function _drawFixedVolProf(ctx, d, pane)   { /* Placeholder */ }
-  function _drawAnchVolProf(ctx, d, pane)    { /* Placeholder */ }
+  /** cfg.source'a göre değil — burada tek kaynak candle.volume; her mumun
+   *  hacmi, [low,high] aralığının çakıştığı TÜM satırlara ORANTILI olarak
+   *  dağıtılır (basit "kapanışa ata" yöntemi yerine — gerçek volume profile
+   *  araçlarının kullandığı yöntem, tek satıra atamaktan daha doğru). */
+  function _computeVolumeProfile(candlesAsc, t1, t2, numRows, valueAreaPct) {
+    const inRange = candlesAsc.filter(c => c.time >= t1 && c.time <= t2 && c.high >= c.low);
+    if (!inRange.length) return null;
+    let top = -Infinity, bottom = Infinity;
+    inRange.forEach(c => { if (c.high > top) top = c.high; if (c.low < bottom) bottom = c.low; });
+    if (!isFinite(top) || !isFinite(bottom) || top <= bottom) return null;
+
+    const n = Math.max(1, Math.round(numRows) || 24);
+    const rowH = (top - bottom) / n;
+    const rows = Array.from({ length: n }, (_, i) => ({
+      priceLow: bottom + i * rowH, priceHigh: bottom + (i + 1) * rowH,
+      upVol: 0, downVol: 0, totalVol: 0,
+    }));
+
+    inRange.forEach(c => {
+      const vol = c.volume || 0;
+      if (!vol) return;
+      const range = c.high - c.low;
+      const isUp = c.close >= c.open;
+      if (range <= 0) {
+        // Tek fiyatlı mum (high===low) — tek satıra tam hacim.
+        const idx = Math.max(0, Math.min(n - 1, Math.floor((c.close - bottom) / rowH)));
+        rows[idx].totalVol += vol;
+        if (isUp) rows[idx].upVol += vol; else rows[idx].downVol += vol;
+        return;
+      }
+      const startIdx = Math.max(0, Math.floor((c.low - bottom) / rowH));
+      const endIdx = Math.min(n - 1, Math.floor((c.high - bottom) / rowH));
+      for (let i = startIdx; i <= endIdx; i++) {
+        const rowLo = Math.max(c.low, rows[i].priceLow);
+        const rowHi = Math.min(c.high, rows[i].priceHigh);
+        const overlap = Math.max(0, rowHi - rowLo);
+        if (overlap <= 0) continue;
+        const alloc = vol * (overlap / range);
+        rows[i].totalVol += alloc;
+        if (isUp) rows[i].upVol += alloc; else rows[i].downVol += alloc;
+      }
+    });
+
+    let pocIdx = 0;
+    rows.forEach((r, i) => { if (r.totalVol > rows[pocIdx].totalVol) pocIdx = i; });
+
+    const totalVol = rows.reduce((s, r) => s + r.totalVol, 0);
+    const target = totalVol * (Math.max(1, Math.min(100, valueAreaPct || 70)) / 100);
+    let loIdx = pocIdx, hiIdx = pocIdx, cum = rows[pocIdx].totalVol;
+    while (cum < target && (loIdx > 0 || hiIdx < n - 1)) {
+      const belowVol = loIdx > 0 ? rows[loIdx - 1].totalVol : -1;
+      const aboveVol = hiIdx < n - 1 ? rows[hiIdx + 1].totalVol : -1;
+      if (aboveVol >= belowVol) { hiIdx++; cum += rows[hiIdx].totalVol; }
+      else { loIdx--; cum += rows[loIdx].totalVol; }
+    }
+
+    const maxRowVol = rows.reduce((m, r) => Math.max(m, r.totalVol), 0);
+    return {
+      top, bottom, rows, maxRowVol,
+      pocPrice: (rows[pocIdx].priceLow + rows[pocIdx].priceHigh) / 2,
+      vahPrice: rows[hiIdx].priceHigh,
+      valPrice: rows[loIdx].priceLow,
+      valueAreaLoIdx: loIdx, valueAreaHiIdx: hiIdx,
+    };
+  }
+
+  /** Kutunun x aralığını (zaman → piksel) ve profil hesabını döndürür.
+   *  Fixed Range: p1.time/p2.time arası. Anchored: p1.time'dan pane'in
+   *  SON mumuna kadar — sağ kenar HER render'da yeniden hesaplanır, bu
+   *  yüzden "her yeni barda güncellenir" davranışı ayrıca kod gerektirmez.
+   *  Hem hit-test (drawing-core.js) hem render burayı çağırır — tek kaynak. */
+  function getVolProfBox(d, pane) {
+    if (!d.p1 || !pane.candlesData || !pane.candlesData.length) return null;
+    const isAnchored = d.tool === 'anchvolprof';
+    let t1, t2;
+    if (isAnchored) {
+      t1 = d.p1.time;
+      t2 = pane.candlesData[pane.candlesData.length - 1].time;
+    } else {
+      if (!d.p2) return null;
+      t1 = Math.min(d.p1.time, d.p2.time);
+      t2 = Math.max(d.p1.time, d.p2.time);
+    }
+    const s = d.style || {};
+    const profile = _computeVolumeProfile(pane.candlesData, t1, t2, s.rowSize, s.valueAreaPct);
+    if (!profile) return null;
+    const ax = _pt2xy({ time: t1, price: profile.top }, pane);
+    const bx = _pt2xy({ time: t2, price: profile.bottom }, pane);
+    if (!ax || !bx) return null;
+    return {
+      x1: Math.min(ax.x, bx.x), x2: Math.max(ax.x, bx.x),
+      y1: Math.min(ax.y, bx.y), y2: Math.max(ax.y, bx.y),
+      profile,
+    };
+  }
+
+  function _drawVolumeProfile(ctx, d, pane) {
+    const box = getVolProfBox(d, pane);
+    if (!box) return;
+    const { x1, x2, y1, y2, profile } = box;
+    const s = d.style || {};
+    const upColor   = s.upColor   || '#089981';
+    const downColor = s.downColor || '#f23645';
+    const pocColor  = s.pocColor  || '#d1d4dc';
+    const vahColor  = s.vahColor  || '#787b86';
+    const valColor  = s.valColor  || '#787b86';
+    const widthPct  = (s.widthPct != null ? s.widthPct : 30) / 100;
+    const placement = s.placement || 'left';
+    const volumeMode = s.volumeMode || 'updown';
+    const showBars = s.showBars !== false;
+    const maxBarW = (x2 - x1) * widthPct;
+
+    ctx.save();
+    // Kutu çerçevesi — hafif, sadece seçim/konum referansı (TV'de de
+    // dolgu YOK, sadece histogram çubukları görünür).
+    ctx.strokeStyle = 'rgba(120,123,134,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.setLineDash([]);
+
+    if (showBars && profile.maxRowVol > 0) {
+      profile.rows.forEach((row, i) => {
+        const rowY1 = _pt2xy({ time: d.p1.time, price: row.priceHigh }, pane)?.y;
+        const rowY2 = _pt2xy({ time: d.p1.time, price: row.priceLow }, pane)?.y;
+        if (rowY1 == null || rowY2 == null) return;
+        const barH = Math.max(1, Math.abs(rowY2 - rowY1) - 1);
+        const barY = Math.min(rowY1, rowY2);
+        const inVA = i >= profile.valueAreaLoIdx && i <= profile.valueAreaHiIdx;
+        const alpha = inVA ? 0.9 : 0.4; // Value Area dışı satırlar soluk — Value Area Up/Down renklerinin basitleştirilmiş karşılığı
+        const totalW = (row.totalVol / profile.maxRowVol) * maxBarW;
+        const upW = volumeMode === 'updown' && row.totalVol > 0 ? totalW * (row.upVol / row.totalVol) : (volumeMode !== 'updown' ? totalW : 0);
+        const downW = volumeMode === 'updown' ? totalW - upW : 0;
+        const barX0 = placement === 'right' ? x2 - totalW : x1;
+
+        if (volumeMode === 'updown') {
+          ctx.globalAlpha = alpha;
+          if (placement === 'right') {
+            ctx.fillStyle = downColor; ctx.fillRect(x2 - downW, barY, downW, barH);
+            ctx.fillStyle = upColor;   ctx.fillRect(x2 - downW - upW, barY, upW, barH);
+          } else {
+            ctx.fillStyle = upColor;   ctx.fillRect(x1, barY, upW, barH);
+            ctx.fillStyle = downColor; ctx.fillRect(x1 + upW, barY, downW, barH);
+          }
+        } else {
+          // 'total' / 'delta' — tek renkli, delta ise net yön rengini kullanır
+          const isNetUp = row.upVol >= row.downVol;
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = isNetUp ? upColor : downColor;
+          ctx.fillRect(barX0, barY, totalW, barH);
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // POC — tüm pane genişliğinde yatay çizgi (TV'deki gibi kutunun
+    // dışına da taşar, sadece hesap aralığıyla sınırlı değil).
+    if (s.showPOC !== false) {
+      const py = _pt2xy({ time: d.p1.time, price: profile.pocPrice }, pane)?.y;
+      if (py != null) {
+        const cvsW = pane.drawingCanvas.width / (window.devicePixelRatio || 1);
+        ctx.strokeStyle = pocColor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(cvsW, py); ctx.stroke();
+      }
+    }
+    if (s.showVAH === true) {
+      const vy = _pt2xy({ time: d.p1.time, price: profile.vahPrice }, pane)?.y;
+      if (vy != null) {
+        ctx.strokeStyle = vahColor; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(x1, vy); ctx.lineTo(x2, vy); ctx.stroke();
+      }
+    }
+    if (s.showVAL === true) {
+      const vy = _pt2xy({ time: d.p1.time, price: profile.valPrice }, pane)?.y;
+      if (vy != null) {
+        ctx.strokeStyle = valColor; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(x1, vy); ctx.lineTo(x2, vy); ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function _drawFixedVolProf(ctx, d, pane) { _drawVolumeProfile(ctx, d, pane); }
+  function _drawAnchVolProf(ctx, d, pane)  { _drawVolumeProfile(ctx, d, pane); }
 
   return {
     drawMeasureTool:    _drawMeasureTool,
@@ -430,5 +626,6 @@ window.DrawingForecast = (() => {
     drawDatePriceRange: _drawDatePriceRange,
     drawFixedVolProf:   _drawFixedVolProf,
     drawAnchVolProf:    _drawAnchVolProf,
+    getVolProfBox:      getVolProfBox,
   };
 })();

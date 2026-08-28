@@ -1246,9 +1246,11 @@ doğrulanması gereken — bu makineden yapılamaz):**
 
 ## Görev-18 — 2026-08-28: Forecast & Measurement çizim araçları TV parity
 
-**Durum: 🟡 Faz 1 ve 2 tamamlandı ve commit'lendi, Faz 3 (Volume Profile'lar)
-SADECE ARAŞTIRMA aşamasında — kod yazılmadı, kullanıcı isteğiyle sonraki
-oturuma devredildi.**
+**Durum: 🟢 Faz 1, 2 VE 3 tamamlandı ve commit'lendi — 7 aracın TAMAMI çalışıyor.**
+(Aşağıdaki Faz 3 bölümü önce "SADECE ARAŞTIRMA" olarak yazılmıştı; en altta
+**"Faz 3 — UYGULAMA"** başlığı altında gerçek uygulama notu eklendi, araştırma
+notları OLDUĞU GİBİ bırakıldı çünkü uygulama sırasında hâlâ doğru çıktı.)
+
 
 **Bağlam:** Kullanıcı sidebar'daki "Forecast & Measurement" grubunu (7 araç:
 Long/Short Position, Price Range, Date Range, Date and Price Range, Fixed
@@ -1370,3 +1372,126 @@ sınırlama) not edilmeli.
 `_drawFixedVolProf`/`_drawAnchVolProf` hâlâ `/* Placeholder */`, `drawing-
 core.js`'de bu iki tool adına hiçbir referans (TWO_PT_TOOLS, hit-test, vb.)
 eklenmedi. Sonraki oturum sıfırdan (bu notlardan) başlayabilir.
+
+---
+
+### Faz 3 — UYGULAMA (2026-08-28, aynı oturumun devamı) ✅
+
+Yukarıdaki araştırma planı büyük ölçüde birebir uygulandı. Ek olarak **gerçek
+TV hesabında canlı doğrulama** yapıldı — kullanıcı login oldu, tarayıcıdan
+FRVP/Anchored VP yerleştirilip gerçek ayarlar penceresi (Inputs/Style/
+Coordinates sekmeleri) incelendi. Bu, araştırma aşamasındaki TV destek
+dokümanı okumasından daha güçlü bir doğrulama — birkaç kritik detay ancak
+canlı testte netleşti:
+
+- **En kritik bulgu — "Coordinates" sekmesi SADECE `#1 (bar)`/`#2 (bar)`
+  içeriyor, HİÇ fiyat alanı yok.** Yani p1/p2'nin dikey (fiyat) bileşeni
+  histogramı HİÇ ETKİLEMİYOR — dikey aralık (Histogram Top/Bottom) o zaman
+  aralığındaki mumların gerçek high/low'undan geliyor. Bu, kod tarafında
+  `getVolProfBox`'ın p1/p2'nin SADECE `time`'ını kullanmasını, `price`'ı
+  yerleştirme/sürükleme için saklayıp hesaba hiç katmamasını gerektirdi.
+- **Varsayılanlar gerçek ayarlar penceresinden okundu** (tahmin edilmedi):
+  Rows Layout=Number of Rows, Row Size=**24**, Volume=Up/Down, Value Area
+  Volume=**70**, Width (% of box)=**30**, Placement=Left, POC AÇIK
+  (VAH/VAL kapalı).
+- **Anchored Volume Profile TEK tıkla yerleşiyor**, sağ kenarı HER ZAMAN
+  pane'in son mumuna kadar uzanıyor (canlı doğrulandı: yerleştirdikten sonra
+  grafiği kaydırınca/yeni mum geldikçe otomatik güncelleniyor) — kod
+  tarafında bu, `getVolProfBox`'ın anchored dalında `t2 =
+  pane.candlesData[pane.candlesData.length-1].time` kullanmasıyla HİÇBİR
+  EK KOD OLMADAN elde edildi (her render zaten yeniden hesaplıyor).
+
+**Bilinçli basitleştirmeler (TV'den farklı, gerekçesiyle):**
+- TV'nin "Value Area Up"/"Value Area Down" diye AYRI bir renk çifti var
+  (Value Area dışındaki satırlar farklı renk) — burada bunun yerine AYNI
+  Up/Down renkleri kullanılıp Value Area DIŞI satırlar sadece düşük
+  opaklıkla (%40) çiziliyor. 4 renk alanı yerine 2 — görsel amaç (value
+  area'yı vurgulamak) korunuyor, ayarlar penceresi sadeleşiyor.
+- TV'nin "Values" (sayısal etiket), "Developing POC", "Developing VA",
+  "Histogram Box" (desenli dolgu) seçenekleri bu turda EKLENMEDİ — ikincil/
+  nadir kullanılan özellikler, kapsam bilinçli olarak sadeleştirildi.
+- POC/Up/Down renkleri TV'nin kendi (siyah/cyan/pembe, AÇIK tema) yerine bu
+  projenin KENDİ mum renkleriyle (`COLORS.green` #089981 / `COLORS.red`
+  #f23645, bkz. chart-config.js) ve koyu tema için okunaklı bir POC rengiyle
+  (`#d1d4dc`, TV'nin "nötr ama belirgin" niyetinin koyu temaya uyarlanmış
+  hali) seçildi — icat edilmiş yeni bir renk dili değil, projenin var olan
+  renkleriyle tutarlılık.
+
+**Mimari (dosya bazında):**
+- `js/drawing/tools/drawing-forecast.js`: `_computeVolumeProfile` (hacmi
+  her mumun [low,high] aralığına ORANTILI dağıtan histogram hesaplayıcı,
+  tek satıra atamaktan daha doğru), `getVolProfBox` (kutu sınırları — hem
+  hit-test hem render TEK buradan okur, kopya yok), `_drawVolumeProfile`
+  (paylaşılan render, hem Fixed hem Anchored çağırır).
+- `js/drawing/core/drawing-core.js`: `fixedvolprof` TWO_PT_TOOLS'a eklendi
+  (rect'in click-click akışıyla aynı); `anchvolprof` kendi tek-tıklama
+  bloğuna eklendi (arrowmarker deseniyle aynı). Hit-test tamamen ÖZEL bir
+  blok — rect'in x1/y1/x2/y2 formülü TEKRARLANMADI, `getVolProfBox`
+  çağrılıyor. **Bulunup düzeltilen bir tasarım hatası:** ilk yazımda
+  kutunun İÇİ (body) ve kenar tutamaçları SADECE `isSelected` iken
+  hit-testable yapılmıştı — ama bu döngüsel bir bağımlılık yaratıyordu
+  (seçili olmayan bir şey asla İLK tıklamayla seçilemez, çünkü seçili
+  olmak için önce hit-test geçmesi gerekiyor). Rect'in "kenar/çerçeve HER
+  ZAMAN hit-testable, iç dolgu SADECE seçiliyken" desenine bakılıp
+  `fixedvolprof`'un sol/sağ/üst/alt kenarları KOŞULSUZ hit-testable
+  yapıldı; `anchvolprof` tek nokta olduğu için (kenar/gövde ayrımı
+  anlamsız) `arrowmarker`'daki gibi TÜM kutu KOŞULSUZ hit-testable.
+  Bu hata canlı JS-API testinde (`DrawingManager.onMouseDown` senkron
+  çağrısı, dönüş değeri `false`) yakalandı, düzeltildi, yeniden test
+  edildi.
+- `js/drawing/ui/dsd-tabs/dsd-volprof-tabs.js` (YENİ dosya, `dsd-position-
+  tabs.js`'in birebir aynı deseni): Inputs (Rows Layout/Row Size/Volume/
+  Value Area Volume/Extend Right) + Style (Volume profile toggle/Width%/
+  Placement/Up-Down renkleri/POC-VAH-VAL toggle+renk) sekmeleri.
+  `index.html`'e script etiketi eklendi.
+- `js/drawing/ui/drawing-settings-dialog.js`: `TOOL_NAMES`/`TOOL_CAPS`'e
+  `isVolProf` bayrağı eklendi (Inputs sekmesi tetikleyicisi RSI/EMA/LinReg
+  ile aynı desene genişletildi), `_renderTab` dispatch'i, 5 renk swatch'ı
+  için (`.js-vp-up/down/poc/vah/val`) `_bindBodyEvents`'e yeni bir
+  config-array bloğu (Position tool renk swatch'larıyla AYNI desen).
+- `js/drawing/ui/dsd-tabs/dsd-apply.js`: Inputs+Style alanlarını okuyup
+  `drawing.style`'a yazan tool-özel blok (longpos/shortpos bloğuyla aynı
+  desen).
+- `js/drawing/ui/property-toolbar.js`: `hasText` listesine `fixedvolprof`/
+  `anchvolprof` eklendi (metin özelliği olmayan bu araçlar için anlamsız
+  "T" düğmesi gösterilmesin diye). Genel tekli "color" düğmesi bilinçli
+  olarak dokunulmadı (unused/zararsız — gerçek kontrol gear-icon Style
+  sekmesinde) — 5 rengi kapsayan özel bir floating toolbar bu turda
+  yapılmadı (kapsam bilinçli sadeleştirildi, longpos/shortpos'un aksine).
+- `js/drawing/core/drawing-core.js` `_renderAnchors`: `fixedvolprof` için
+  sadece sol/sağ orta kare tutamaç (üst/alt YOK — dikey boyut otomatik),
+  `anchvolprof` için sadece anchor noktasının kendisi.
+
+**Doğrulama (canlı tarayıcı, `pintrade-server` + Bybit — sandbox'ta Binance
+502 verdiği için, bkz. Görev-16/17'nin aynı kısıtlaması):**
+`DrawingManager.onMouseDown/onMouseMove/onMouseUp`'ı gerçek `pane` nesnesi
+ve senkron sentetik event'lerle çağırarak (Faz 1'de kurulan YÖNTEM, bkz.
+yukarıdaki not) hem FRVP hem Anchored VP:
+1. Yerleştirildi (2 tıkla / 1 tıkla) — `State.get('drawings')`'te doğru
+   `style` varsayılanlarıyla (rowSize:24, valueAreaPct:70, vb.) belirdi.
+2. Render edildi — ekran görüntüsünde yeşil/kırmızı up/down çubukları,
+   tüm pane genişliğinde POC çizgisi, seçili tutamaçlar GÖRSEL olarak
+   doğrulandı.
+3. Ayarlar penceresi (gear ikonu) açıldı — Inputs/Style/Coordinates
+   sekmeleri TV'nin gerçek dialogundaki alan adlarıyla BİREBİR eşleşti;
+   Row Size 24→8 değiştirilip Ok'a basıldığında histogram DOĞRU şekilde
+   8 kalın satıra yeniden hesaplandı (canlı, ekran görüntüsüyle
+   doğrulandı) — ayarlar penceresi → hesaplama → render zinciri uçtan
+   uca çalışıyor.
+4. Sürükleme test edildi: FRVP'nin gövdesinden sürükleme (tüm kutuyu
+   zaman ekseninde taşıma, p1 VE p2 aynı miktarda kaydı, doğrulandı),
+   sol kenar sürüklemesi (SADECE p1 değişti, p2 sabit kaldı, doğrulandı),
+   Anchored'in gövdesinden sürükleme (p1 kaydı, doğrulandı).
+5. Silme (çöp kutusu ikonu) test edildi — hatasız, State'ten kaldırıldı.
+6. Konsol hatası YOK (sadece bilinen arka plan Binance 502 gürültüsü).
+
+`node -c` ile tüm dosyalar (`drawing-forecast.js`, `drawing-core.js`,
+`dsd-volprof-tabs.js`, `dsd-apply.js`, `drawing-settings-dialog.js`,
+`property-toolbar.js`) sözdizimi temiz.
+
+**Üretimde hâlâ doğrulanması gereken (bu sandbox'ın sınırları içinde
+canlı test edilemeyen):** Anchored VP'nin GERÇEK zamanlı yeni mum
+geldikçe (WebSocket tick'i) otomatik yeniden çizilip çizilmediği —
+kodun mantığı bunu HER `requestRedrawAll()` çağrısında otomatik
+yapıyor (candlesData'nın son elemanını okuyor), ama gerçek canlı bir
+WS akışıyla saatlerce açık kalan bir grafikte doğrulanmadı.

@@ -158,6 +158,22 @@ window.DrawingManager = (() => {
     if (['pricerange', 'daterange', 'datepricerange'].includes(tool)) {
       return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(41, 98, 255, 0.15)', textColor: '#ffffff', fontSize: 12 };
     }
+    // gorevler: Forecast & Measurement Faz 3 — değerler gerçek TV ayarlar
+    // penceresinden (Inputs: Row Size=24, Value Area=70, Volume=Up/Down;
+    // Style: Width=%30) birebir okundu. upColor/downColor TV'nin kendi
+    // cyan/pembe'si yerine bu projenin KENDİ mum renkleriyle (COLORS.green/
+    // red, bkz. chart-config.js) tutarlı seçildi — icat edilmiş yeni bir
+    // renk dili değil, projenin var olanıyla eşleştirme.
+    if (['fixedvolprof', 'anchvolprof'].includes(tool)) {
+      return {
+        rowsMode: 'rows', rowSize: 24, volumeMode: 'updown', valueAreaPct: 70, extendRight: false,
+        widthPct: 30, placement: 'left', showBars: true,
+        upColor: '#089981', downColor: '#f23645',
+        showPOC: true, pocColor: '#d1d4dc',
+        showVAH: false, vahColor: '#787b86',
+        showVAL: false, valColor: '#787b86',
+      };
+    }
     return { color: '#2962ff', width: 1, lineStyle: 'solid' };
   }
 
@@ -401,6 +417,15 @@ window.DrawingManager = (() => {
       return true;
     }
 
+    // ── Anchored Volume Profile (tek nokta — TV'de de tek tık: anchor
+    // barından "şu an"a kadar uzanır, sağ kenar her render'da pane'in son
+    // mumundan yeniden hesaplanır, bkz. drawing-forecast.js:getVolProfBox).
+    if (_activeTool === 'anchvolprof') {
+      _finishDrawing(pane.symbol, { tool: 'anchvolprof', p1: pt, id: _uid(), style: _getToolStyle('anchvolprof'), paneKey: activePaneKey });
+      _lastPointerdownClaimed = true;
+      return true;
+    }
+
     // ── Two-point drawing tools (click-click) ──────────
     const TWO_PT_TOOLS = [
       'trendline', 'ray', 'extended', 'rect', 'arrowdraw', 'trendangle',
@@ -414,6 +439,9 @@ window.DrawingManager = (() => {
       // AYNI genel mekanizmadan geçiyor (bkz. _hitTestInner'daki rect bloğu),
       // sadece render (drawing-forecast.js) ve etiket içeriği farklı.
       'pricerange', 'daterange', 'datepricerange',
+      // Faz 3 — Fixed Range Volume Profile de aynı 2-nokta click-click akışını
+      // kullanır (Anchored ise TEK noktalı, yukarıdaki ayrı blokta ele alınıyor).
+      'fixedvolprof',
     ];
     if (TWO_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
@@ -859,6 +887,26 @@ window.DrawingManager = (() => {
           d.p1.price = pane.series.coordinateToPrice(origP1Y + dy);
           d.p2.time = pane.chart.timeScale().coordinateToTime(origP2X + dx);
           d.p2.price = pane.series.coordinateToPrice(origP2Y + dy);
+        } else if (_dragState.hitType === 'volprof_body') {
+          // Fixed Range Volume Profile — kutunun içine sürükleme: SADECE
+          // zaman kayar (fiyat/y bileşeni hesaba hiç girmiyor, bkz.
+          // getVolProfBox başlığındaki TV doğrulama notu), o yüzden price
+          // güncellenmiyor — rect_body'nin aksine.
+          const origP1X = _timeToX(pane, _dragState.origP1.time);
+          const origP2X = _timeToX(pane, _dragState.origP2.time);
+          d.p1.time = pane.chart.timeScale().coordinateToTime(origP1X + dx);
+          d.p2.time = pane.chart.timeScale().coordinateToTime(origP2X + dx);
+        } else if (_dragState.hitType === 'volprof_l' || _dragState.hitType === 'volprof_r') {
+          // Hangisinin p1/p2 olduğu değil, hangisinin SOLDA olduğu önemli
+          // (kullanıcı kutuyu ters çevirmiş olabilir) — rect'in tl/tr
+          // sürüklemesindeki AYNI p1IsLeft deseni.
+          if (rawTime != null) {
+            const origP1X = _timeToX(pane, _dragState.origP1.time);
+            const origP2X = _timeToX(pane, _dragState.origP2.time);
+            const p1IsLeft = origP1X <= origP2X;
+            const movingLeft = _dragState.hitType === 'volprof_l';
+            if (movingLeft === p1IsLeft) d.p1.time = rawTime; else d.p2.time = rawTime;
+          }
         } else if (_dragState.hitType === 'text_resize_r') {
           // Resize text width by dragging right edge
           const a = _pt2xy(d.p1, pane);
@@ -2018,6 +2066,19 @@ window.DrawingManager = (() => {
         pts.push({ x: mx, y: y2, type: 'square', id: 'rect_bm' });
         pts.push({ x: x2, y: y2, id: 'rect_br' });
       }
+    } else if (d.tool === 'fixedvolprof' && window.DrawingForecast) {
+      // Sadece sol/sağ orta tutamaç — üst/alt YOK (dikey aralık otomatik
+      // hesaplanıyor, bkz. getVolProfBox, sürüklenecek bir "yükseklik" yok).
+      const box = window.DrawingForecast.getVolProfBox(d, pane);
+      if (box) {
+        const my = (box.y1 + box.y2) / 2;
+        pts.push({ x: box.x1, y: my, type: 'square', id: 'volprof_l' });
+        pts.push({ x: box.x2, y: my, type: 'square', id: 'volprof_r' });
+      }
+    } else if (d.tool === 'anchvolprof') {
+      // Tek nokta — sadece anchor'ın kendisi (generic 'p1' sürükleme).
+      const a = _pt2xy(d.p1, pane);
+      if (a) pts.push(a);
     } else if (d.tool === 'channel') {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
@@ -2750,6 +2811,48 @@ window.DrawingManager = (() => {
 
       // İç alan: sadece seçiliyken sürüklenebilir
       if (isSelected && x > x1 && x < x2 && y > y1 && y < y2) return 'rect_body';
+      return false;
+    }
+
+    // gorevler: Forecast & Measurement Faz 3 — Volume Profile araçları rect
+    // grubuyla AYNI mantığı paylaşmıyor: dikey sınırlar (top/bottom) p1/p2'nin
+    // fiyatından DEĞİL, o zaman aralığındaki mumların gerçek high/low'undan
+    // geliyor (bkz. drawing-forecast.js:getVolProfBox başlığındaki TV
+    // doğrulama notu) — bu yüzden kutu her zaman getVolProfBox'tan okunuyor,
+    // rect'in x1/y1/x2/y2 formülü burada TEKRARLANMIYOR. Fixed Range'de
+    // sol/sağ kenar (zaman) sürüklenebilir, üst/alt YOK (otomatik hesaplanır).
+    // Anchored'de tek nokta var — kutunun HERHANGİ bir yerine tıklamak
+    // generic 'p1' sürükleme davranışını (drawing-core.js:566) tetikler.
+    if (['fixedvolprof', 'anchvolprof'].includes(d.tool) && d.p1 && window.DrawingForecast) {
+      const box = window.DrawingForecast.getVolProfBox(d, pane);
+      if (!box) return false;
+      const { x1, y1, x2, y2 } = box;
+      const isSelected = (d.id === _selectedId);
+
+      if (d.tool === 'anchvolprof') {
+        // Tek nokta — arrowmarker gibi KOŞULSUZ hit (seçili olmasa bile),
+        // aksi halde ilk tıklamada asla seçilemez (döngüsel bağımlılık:
+        // "seçili olmayan hiçbir şey" body-hit veremez).
+        if (x > x1 && x < x2 && y > y1 && y < y2) return 'p1';
+        return false;
+      }
+
+      // Fixed Range — sol/sağ kenar (zaman sürükleme) VE üst/alt/gövde
+      // (tüm-şekil taşıma) KOŞULSUZ hit-testable (rect'in border 'line'
+      // davranışıyla AYNI ilke) — aksi halde seçili değilken hiçbir yere
+      // tıklanamaz, ilk seçim imkansız olurdu.
+      if (d.p2) {
+        const onLeft  = Math.abs(x - x1) <= tolerance && y >= y1 - tolerance && y <= y2 + tolerance;
+        const onRight = Math.abs(x - x2) <= tolerance && y >= y1 - tolerance && y <= y2 + tolerance;
+        if (onLeft) return 'volprof_l';
+        if (onRight) return 'volprof_r';
+        const onTop = Math.abs(y - y1) <= tolerance && x >= x1 - tolerance && x <= x2 + tolerance;
+        const onBottom = Math.abs(y - y2) <= tolerance && x >= x1 - tolerance && x <= x2 + tolerance;
+        if (onTop || onBottom) return 'volprof_body';
+      }
+      // İç alan: rect'teki gibi sadece seçiliyken sürüklenebilir (border
+      // zaten yukarıda koşulsuz — ilk seçim için yeterli).
+      if (isSelected && x > x1 && x < x2 && y > y1 && y < y2) return 'volprof_body';
       return false;
     }
 

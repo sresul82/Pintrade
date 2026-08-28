@@ -263,6 +263,28 @@ window.DSDApply = (() => {
       if (get('dsd-pos-always')) s.alwaysShowStats = get('dsd-pos-always').checked;
     }
 
+    // ── Volume Profile (Faz 3) — Inputs + Style ──────────────────────
+    if (['fixedvolprof', 'anchvolprof'].includes(drawing.tool)) {
+      if (get('dsd-vp-rowsmode')) s.rowsMode = get('dsd-vp-rowsmode').value;
+      if (get('dsd-vp-rowsize')) s.rowSize = parseFloat(get('dsd-vp-rowsize').value) || 24;
+      if (get('dsd-vp-volmode')) s.volumeMode = get('dsd-vp-volmode').value;
+      if (get('dsd-vp-vapct')) s.valueAreaPct = Math.max(1, Math.min(100, parseFloat(get('dsd-vp-vapct').value) || 70));
+      if (get('dsd-vp-extendright')) s.extendRight = get('dsd-vp-extendright').checked;
+
+      if (get('dsd-vp-showbars')) s.showBars = get('dsd-vp-showbars').checked;
+      if (get('dsd-vp-width')) s.widthPct = Math.max(1, Math.min(100, parseFloat(get('dsd-vp-width').value) || 30));
+      if (get('dsd-vp-placement')) s.placement = get('dsd-vp-placement').value;
+      if (get('dsd-vp-showpoc')) s.showPOC = get('dsd-vp-showpoc').checked;
+      if (get('dsd-vp-showvah')) s.showVAH = get('dsd-vp-showvah').checked;
+      if (get('dsd-vp-showval')) s.showVAL = get('dsd-vp-showval').checked;
+
+      const vpUp = overlay.querySelector('.js-vp-up');     if (vpUp) s.upColor = vpUp.dataset.color;
+      const vpDown = overlay.querySelector('.js-vp-down'); if (vpDown) s.downColor = vpDown.dataset.color;
+      const vpPoc = overlay.querySelector('.js-vp-poc');   if (vpPoc) s.pocColor = vpPoc.dataset.color;
+      const vpVah = overlay.querySelector('.js-vp-vah');   if (vpVah) s.vahColor = vpVah.dataset.color;
+      const vpVal = overlay.querySelector('.js-vp-val');   if (vpVal) s.valColor = vpVal.dataset.color;
+    }
+
 // Visibility tab
     const visCbs = overlay.querySelectorAll('.js-vis-tf');
     if (visCbs.length) {

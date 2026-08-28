@@ -34,6 +34,8 @@ const DrawingSettingsDialog = (() => {
     'fib-speedfan':'Fib Speed Resistance Fan',
     longpos:       'Long Position',
     shortpos:      'Short Position',
+    fixedvolprof:  'Fixed Range Volume Profile',
+    anchvolprof:   'Anchored Volume Profile',
     rotatedrect:   'Rotated Rectangle',
     circle:        'Circle',
     ellipse:       'Ellipse',
@@ -84,6 +86,9 @@ const DrawingSettingsDialog = (() => {
     // Positions
     'longpos':    { isPos:true, coordsMode:'p3' },
     'shortpos':   { isPos:true, coordsMode:'p3' },
+    // Faz 3 — hasText:false Text sekmesini bastırır (bu araçların metni yok).
+    'fixedvolprof': { isVolProf:true, hasText:false, hasFill:false, coordsMode:'p2' },
+    'anchvolprof':  { isVolProf:true, hasText:false, hasFill:false, coordsMode:'p1only' },
     'rotatedrect':{ priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p3' },
     'circle':     { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p2' },
     'ellipse':    { priceLabel:false, extend:false, midpoint:false, stats:false, capArrows:false, hasFill:true, hasText:false, coordsMode:'p2' },
@@ -245,7 +250,7 @@ const DrawingSettingsDialog = (() => {
     const caps = _getCaps(drawing.tool);
     // Callout and Text tools always open on Text tab
     const effectiveTab = (drawing.tool === 'callout' || drawing.tool === 'texttool') ? 'text' : opts.tab;
-    _activeTab = effectiveTab || ((caps.isPos || caps.hasInputs) ? 'inputs' : (caps.isTextTool ? 'text' : 'style'));
+    _activeTab = effectiveTab || ((caps.isPos || caps.hasInputs || caps.isVolProf) ? 'inputs' : (caps.isTextTool ? 'text' : 'style'));
     _onOk = opts.onOk;
     _onCancel = opts.onCancel;
     // Save snapshot for cancel
@@ -274,7 +279,7 @@ const DrawingSettingsDialog = (() => {
         </div>
 
         <div class="dsd-tabs">
-          ${(_getCaps(drawing.tool).isPos || _getCaps(drawing.tool).hasInputs) ? `<button class="dsd-tab ${_activeTab==='inputs'?'active':''}" data-tab="inputs">Inputs</button>` : ''}
+          ${(_getCaps(drawing.tool).isPos || _getCaps(drawing.tool).hasInputs || _getCaps(drawing.tool).isVolProf) ? `<button class="dsd-tab ${_activeTab==='inputs'?'active':''}" data-tab="inputs">Inputs</button>` : ''}
           ${!_getCaps(drawing.tool).isTextTool && drawing.tool !== 'callout' ? `<button class="dsd-tab ${_activeTab==='style'?'active':''}" data-tab="style">Style</button>` : ''}
           ${((!_getCaps(drawing.tool).isFibo && !_getCaps(drawing.tool).isPos && _getCaps(drawing.tool).hasText !== false) || drawing.tool === 'callout') && drawing.tool !== 'pricelabel' && drawing.tool !== 'regression' ? `<button class="dsd-tab ${_activeTab==='text'?'active':''}" data-tab="text">Text</button>` : ''}
           ${(!_getCaps(drawing.tool).isAnnotation && !_getCaps(drawing.tool).isTextTool) || ['callout', 'pricelabel'].includes(drawing.tool) ? `<button class="dsd-tab ${_activeTab==='coords'?'active':''}" data-tab="coords">Coordinates</button>` : ''}
@@ -397,11 +402,13 @@ const DrawingSettingsDialog = (() => {
   function _renderTab(tab, d) {
     if (tab === 'inputs') {
       if (_getCaps(d.tool).isPos) return DSDPositionTabs.renderPositionInputsTab(d);
+      if (_getCaps(d.tool).isVolProf) return DSDVolProfTabs.renderVolProfInputsTab(d);
       if (d.tool === 'regression') return _renderRegressionInputsTab(d);
     }
     if (tab === 'style') {
       if (_getCaps(d.tool).isFibo) return DSDFiboTabs.renderFibStyleTab(d);
       if (_getCaps(d.tool).isPos)  return DSDPositionTabs.renderPositionStyleTab(d);
+      if (_getCaps(d.tool).isVolProf) return DSDVolProfTabs.renderVolProfStyleTab(d);
       if (_getCaps(d.tool).isAnnotation) return DSDAnnotationTabs.renderAnnotationStyleTab(d);
       if (d.tool === 'regression') return _renderRegressionStyleTab(d);
       return DSDStandardTabs.renderStyleTab(d);
@@ -714,6 +721,28 @@ const DrawingSettingsDialog = (() => {
       { selector: '.js-pos-stop',   styleKey: 'stopColor',   fallback: 'rgba(242,54,69,0.2)' },
       { selector: '.js-pos-target', styleKey: 'targetColor', fallback: 'rgba(8,153,129,0.2)' },
       { selector: '.js-pos-text',   styleKey: 'textColor',   fallback: '#ffffff' },
+    ].forEach(({ selector, styleKey, fallback }) => {
+      const sw = overlay.querySelector(selector);
+      if (!sw) return;
+      sw.addEventListener('click', (e) => {
+        e.stopPropagation();
+        DSDColorPicker.showColorPalette(sw, sw.dataset.color || fallback, (newColor) => {
+          sw.style.background = newColor;
+          sw.dataset.color = newColor;
+          drawing.style = drawing.style || {};
+          drawing.style[styleKey] = newColor;
+          EventBus.emit('drawing:settings:saved');
+        });
+      });
+    });
+
+    // Volume Profile color swatches (Faz 3 — Up/Down/POC/VAH/VAL)
+    [
+      { selector: '.js-vp-up',   styleKey: 'upColor',   fallback: '#089981' },
+      { selector: '.js-vp-down', styleKey: 'downColor', fallback: '#f23645' },
+      { selector: '.js-vp-poc',  styleKey: 'pocColor',  fallback: '#d1d4dc' },
+      { selector: '.js-vp-vah',  styleKey: 'vahColor',  fallback: '#787b86' },
+      { selector: '.js-vp-val',  styleKey: 'valColor',  fallback: '#787b86' },
     ].forEach(({ selector, styleKey, fallback }) => {
       const sw = overlay.querySelector(selector);
       if (!sw) return;
