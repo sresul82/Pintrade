@@ -439,7 +439,7 @@ window.PropertyToolbar = (() => {
     const isFibo = _drawing.tool && _drawing.tool.startsWith('fib');
     const isPosition = ['longpos', 'shortpos'].includes(_drawing.tool);
 
-    const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'triangle', 'arc'].includes(_drawing.tool);
+    const hasFill = ['rect', 'rotatedrect', 'circle', 'ellipse', 'channel', 'triangle', 'arc', 'pricerange', 'daterange', 'datepricerange'].includes(_drawing.tool);
     const hasText = !['arrowdraw', 'regression', 'rotatedrect', 'circle', 'ellipse', 'arrowmarker', 'arrowup', 'arrowdown', 'triangle', 'arc', 'pathtool', 'trendangle', 'crossline'].includes(_drawing.tool);
     // gorevler2.md Görev 11 (2026-08-10, kullanıcı onaylı kapsam) — eskiden
     // çoğu araçta görünüyordu ama tıklayınca sadece "yakında" alert'i

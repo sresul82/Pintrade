@@ -301,10 +301,121 @@ window.DrawingForecast = (() => {
     }
 
   // ── PRICE & DATE (Aralıklar) ─────────────────────────────
+  // gorevler: Forecast & Measurement TV parity, Faz 2. Bu 3 araç, TV'de de
+  // olduğu gibi görsel/etkileşim olarak `rect` ile birebir aynı kutu
+  // (2 köşe noktası, 8 tutamaçlı resize/drag — bkz. drawing-core.js'teki
+  // ortak hit-test/drag bloğu) — sadece dolgu/kenarlık rengi ve etiket
+  // içeriği farklı. Resmi TV dokümantasyonuna göre: Price range sadece
+  // fiyat farkını (değer/%/tick), Date range sadece zaman farkını
+  // (bar sayısı + süre), Date and price range ikisini birden gösterir.
 
-  function _drawPriceRange(ctx, d, pane)     { /* Placeholder */ }
-  function _drawDateRange(ctx, d, pane)      { /* Placeholder */ }
-  function _drawDatePriceRange(ctx, d, pane) { /* Placeholder */ }
+  function _boxXY(d, pane) {
+    const a = _pt2xy(d.p1, pane);
+    const b = _pt2xy(d.p2, pane);
+    if (!a || !b) return null;
+    return {
+      a, b,
+      x1: Math.min(a.x, b.x), x2: Math.max(a.x, b.x),
+      y1: Math.min(a.y, b.y), y2: Math.max(a.y, b.y),
+    };
+  }
+
+  function _drawRangeBox(ctx, d, box) {
+    const s = d.style || {};
+    const color = s.color || '#2962ff';
+    const fillColor = s.fillColor || 'rgba(41, 98, 255, 0.15)';
+    const { x1, y1, x2, y2 } = box;
+    ctx.save();
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.lineWidth = s.width || 1;
+    const lineStyle = s.lineStyle || 'solid';
+    if (lineStyle === 'dashed') ctx.setLineDash([5, 5]);
+    else if (lineStyle === 'dotted') ctx.setLineDash([2, 2]);
+    else ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function _drawCenteredLabel(ctx, box, lines, textColor, fontSize) {
+    if (!lines.length) return;
+    const { x1, x2, y1, y2 } = box;
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    ctx.save();
+    ctx.font = `${fontSize}px -apple-system, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const lineH = fontSize + 4;
+    const startY = cy - ((lines.length - 1) * lineH) / 2;
+    // Okunabilirlik için hafif gölge/kontur (kutunun dolgu rengi üstünde)
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    lines.forEach((l, i) => ctx.strokeText(l, cx, startY + i * lineH));
+    ctx.fillStyle = textColor || '#ffffff';
+    lines.forEach((l, i) => ctx.fillText(l, cx, startY + i * lineH));
+    ctx.restore();
+  }
+
+  function _priceStats(d) {
+    const p1 = d.p1.price, p2 = d.p2.price;
+    const diff = p2 - p1;
+    const pct = (diff / Math.max(1e-8, Math.abs(p1))) * 100;
+    const priceToTicks = window.DSDPositionTabs
+      ? window.DSDPositionTabs.priceToTicks
+      : (v) => Math.round(Math.abs(v) * 1000);
+    const ticks = priceToTicks(diff);
+    return `${diff >= 0 ? '+' : ''}${_fmtPrice(diff)} (${diff >= 0 ? '+' : ''}${pct.toFixed(2)}%) ${ticks}`;
+  }
+
+  function _dateStats(d, pane) {
+    let barsCount = 0, tDiffText = '';
+    const t1 = Math.min(d.p1.time, d.p2.time);
+    const t2 = Math.max(d.p1.time, d.p2.time);
+    if (pane.candlesData) {
+      for (const c of pane.candlesData) {
+        if (c.time >= t1 && c.time <= t2) barsCount++;
+      }
+    }
+    const secDiff = t2 - t1;
+    if (secDiff > 0) {
+      const dd = Math.floor(secDiff / 86400);
+      const hh = Math.floor((secDiff % 86400) / 3600);
+      const mm = Math.floor((secDiff % 3600) / 60);
+      if (dd > 0) tDiffText = `${dd}d ${hh}h`;
+      else if (hh > 0) tDiffText = `${hh}h ${mm}m`;
+      else tDiffText = `${mm}m`;
+    }
+    return `${barsCount} bars${tDiffText ? ', ' + tDiffText : ''}`;
+  }
+
+  function _drawPriceRange(ctx, d, pane) {
+    if (!d.p1 || !d.p2) return;
+    const box = _boxXY(d, pane);
+    if (!box) return;
+    _drawRangeBox(ctx, d, box);
+    const s = d.style || {};
+    _drawCenteredLabel(ctx, box, [_priceStats(d)], s.textColor, s.fontSize || 12);
+  }
+
+  function _drawDateRange(ctx, d, pane) {
+    if (!d.p1 || !d.p2) return;
+    const box = _boxXY(d, pane);
+    if (!box) return;
+    _drawRangeBox(ctx, d, box);
+    const s = d.style || {};
+    _drawCenteredLabel(ctx, box, [_dateStats(d, pane)], s.textColor, s.fontSize || 12);
+  }
+
+  function _drawDatePriceRange(ctx, d, pane) {
+    if (!d.p1 || !d.p2) return;
+    const box = _boxXY(d, pane);
+    if (!box) return;
+    _drawRangeBox(ctx, d, box);
+    const s = d.style || {};
+    _drawCenteredLabel(ctx, box, [_priceStats(d), _dateStats(d, pane)], s.textColor, s.fontSize || 12);
+  }
 
   // ── VOLUME-BASED (Hacim Tabanlı) ─────────────────────────
 

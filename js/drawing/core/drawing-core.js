@@ -155,6 +155,9 @@ window.DrawingManager = (() => {
     // textAlignV: 'middle' ("Inside") — kullanıcı isteğiyle varsayılan
     // TradingView'daki gibi kanalın 0.5 (orta) seviyesinin üzerinde.
     if (tool === 'channel') return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(9, 105, 218, 0.2)', textColor: '#ffffff', priceLabel: true, textAlignH: 'center', textAlignV: 'middle' };
+    if (['pricerange', 'daterange', 'datepricerange'].includes(tool)) {
+      return { color: '#2962ff', width: 1, lineStyle: 'solid', fillColor: 'rgba(41, 98, 255, 0.15)', textColor: '#ffffff', fontSize: 12 };
+    }
     return { color: '#2962ff', width: 1, lineStyle: 'solid' };
   }
 
@@ -405,7 +408,12 @@ window.DrawingManager = (() => {
       'fib-ret', 'fib-timezone', 'fib-speedfan',
       'cyclic-lines',
       'circle', 'ellipse',
-      'note', 'callout', 'pricenote'
+      'note', 'callout', 'pricenote',
+      // gorevler: Forecast & Measurement Faz 2 — bunlar da rect gibi 2 köşe
+      // noktasıyla tanımlanan bir kutu; yerleştirme/hit-test/drag'i rect ile
+      // AYNI genel mekanizmadan geçiyor (bkz. _hitTestInner'daki rect bloğu),
+      // sadece render (drawing-forecast.js) ve etiket içeriği farklı.
+      'pricerange', 'daterange', 'datepricerange',
     ];
     if (TWO_PT_TOOLS.includes(_activeTool)) {
       if (!_inProgress) {
@@ -1993,7 +2001,7 @@ window.DrawingManager = (() => {
           pts.push({ x: b.x, y: a.y }); // middle right (end time)
         }
       }
-    } else if (d.tool === 'rect') {
+    } else if (['rect', 'pricerange', 'daterange', 'datepricerange'].includes(d.tool)) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (a && b) {
@@ -2705,7 +2713,7 @@ window.DrawingManager = (() => {
       }
     }
 
-    if (d.tool === 'rect' && d.p1 && d.p2) {
+    if (['rect', 'pricerange', 'daterange', 'datepricerange'].includes(d.tool) && d.p1 && d.p2) {
       const a = _pt2xy(d.p1, pane);
       const b = _pt2xy(d.p2, pane);
       if (!a || !b) return false;
