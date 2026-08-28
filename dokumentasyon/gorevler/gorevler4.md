@@ -1241,3 +1241,132 @@ doğrulanması gereken — bu makineden yapılamaz):**
   değişiklik ama en riskli olanı da bu; ayrı, dikkatli bir iş olarak
   bir sonraki Görev-17 alt maddesi (ör. Görev-17.1) olarak planlanmalı,
   bu oturumda dokunulmadı.
+
+---
+
+## Görev-18 — 2026-08-28: Forecast & Measurement çizim araçları TV parity
+
+**Durum: 🟡 Faz 1 ve 2 tamamlandı ve commit'lendi, Faz 3 (Volume Profile'lar)
+SADECE ARAŞTIRMA aşamasında — kod yazılmadı, kullanıcı isteğiyle sonraki
+oturuma devredildi.**
+
+**Bağlam:** Kullanıcı sidebar'daki "Forecast & Measurement" grubunu (7 araç:
+Long/Short Position, Price Range, Date Range, Date and Price Range, Fixed
+Range Volume Profile, Anchored Volume Profile) inceletti — 5'i tamamen boş
+placeholder (`drawing-forecast.js`'te fonksiyon gövdeleri `/* Placeholder */`)
+çıktı, Long/Short Position çalışıyordu ama kullanıcı "tam istediğim gibi
+değil" dedi ve **TradingView ile birebir (görsel + etkileşim) eşleşmesini**
+istedi. Kapsam derinliği netleştirildi (AskUserQuestion ile): TV'nin kendi
+çok-sekmeli Settings modalı DEĞİL, PinTrade'in mevcut floating toolbar +
+gear-icon-settings-dialog sistemine entegre TV-parity. Fazlı ilerleme kararı
+alındı: önce Long/Short (mevcut ama bozuk), sonra sırayla Price Range →
+Date Range → Date and Price Range, en son (en karmaşık) Volume Profile'lar.
+
+Gerçek TV davranışı **canlı bir TV hesabında doğrulandı** (kullanıcı browser'da
+login oldu, ekran görüntüleri alındı) + resmi TV yardım merkezi dokümanları
+okundu — tahmine değil gözleme dayalı.
+
+### Faz 1 — Long/Short Position (commit `5dedc24`) ✅
+
+Kritik bulgu: TV'nin pozisyon-boyutlandırma UI'ı (`dsd-position-tabs.js`:
+Account size/Risk/Leverage/Qty precision, TV'nin 13 kalemlik stats listesi)
+**zaten yazılmıştı ama `drawing-forecast.js`'teki render'a hiç bağlı
+değildi** — bu yüzden iş büyük ölçüde "yeni özellik" değil "zaten var olan
+ama kopuk sistemi devreye alma" oldu. Yapılanlar:
+- `_drawPosition` tam-genişlik bar yerine TV-tarzı yüzen callout'lar +
+  seçiliyken daire/kare tutamaç işaretçileri çiziyor artık.
+- `dsd-apply.js`'te 2 bug düzeltildi: `riskType` id eşleşmezliği (hiç
+  kaydolmuyordu), `lotSize`/`leverage`/`qtyPrec`/`accCur` hiç okunmuyordu.
+- **Kritik subpane bugfix:** longpos/shortpos'un hit-test/drag kodu
+  (`drawing-core.js`) subpane-farkında `pt2xy`/`xy2pt` yerine doğrudan
+  `pane.series` çağırıyordu — RSI gibi bir subpane'e çizilen pozisyonu
+  sürüklemek yanlış fiyat üretiyordu. Düzeltildi, canlı test edildi (RSI
+  subpane açılıp üzerine pozisyon çizilip sürüklendi, doğru ölçekte kaldı).
+- **Doğrulama yöntemi (önemli, sonraki fazlarda da kullanıldı):** bu ortamda
+  gerçek fare tıklaması (`computer` tool) canvas'a `pointerdown` YERİNE
+  sadece `click` gönderiyor gibi görünüyor — `chart-pane.js`'nin
+  `pointerdown` dinleyicisi tetiklenmiyor, hiçbir çizim yerleşmiyor. Çözüm:
+  `DrawingManager.onMouseDown/onMouseMove/onMouseUp`'ı gerçek `pane` nesnesi
+  ve `{clientX, clientY, button:0}` sentetik event'iyle DOĞRUDAN JS'ten
+  çağırmak — bu, DOM event routing'ini atlayıp asıl iş mantığını
+  (yerleştirme/hit-test/drag/persistence) güvenilir şekilde test ediyor.
+  **Sonraki oturumda bu yöntemi tekrar kullan.**
+
+### Faz 2 — Price Range, Date Range, Date and Price Range (commit `de9e5f8`) ✅
+
+Bulgu: bu 3 araç `rect` ile GEOMETRİK olarak birebir aynı (2 köşe noktasıyla
+tanımlı kutu). `drawing-core.js`'teki `rect_tl/tm/tr/ml/mr/bl/bm/br` drag
+mantığı tool-adından bağımsız/generic olduğu için, bu 3 aracı `TWO_PT_TOOLS`
+listesine ve `_hitTestInner`'daki rect bloğuna eklemek YETERLİ oldu — sıfır
+ek drag kodu yazıldı. Sadece render (`drawing-forecast.js`: `_drawRangeBox` +
+`_drawCenteredLabel` ortak yardımcıları, TV formatına uygun etiketler: Price
+Range=`fiyat (%) tick`, Date Range=`N bars, Xg Ys`, Date+Price=ikisi birden)
+ve `property-toolbar.js`'te `hasFill` listesine ekleme gerekti.
+
+**Doğrulama sırasında bulunan ortam tuhaflığı (kod hatası DEĞİL):** sandbox'ta
+sayfa ilk yüklendiğinde chart'ın görünür zaman aralığı gerçek veriden ~41 gün
+İLERİDE bir "phantom future" boşluğunda kalabiliyor (`coordinateToTime`/
+`coordinateToPrice` bu durumda `null` dönüyor, tıklama hiçbir şey yapmıyor).
+Native `chart.timeScale().scrollToRealTime()`/`fitContent()` bunu DÜZELTMİYOR
+— düzeltmek için `pane.goToRealtime()` (PinTrade'in kendi, `chart-pane.js:2932`
+deki, "native scrollToRealTime phantom'ı düzeltmiyor" yorumuyla belgelenmiş
+özel metodu) çağırmak gerekiyor. **Sonraki oturumda test sırasında chart boş/
+tıklamalar işe yaramıyor görünürse ilk kontrol edilecek şey bu.**
+
+### Faz 3 — Fixed Range Volume Profile, Anchored Volume Profile ⏳ SADECE ARAŞTIRMA
+
+**Kullanıcı bu turu burada durdurup sonraki oturuma devretmeyi istedi —
+HİÇBİR KOD YAZILMADI.** Toplanan araştırma (bir sonraki oturumda tekrar
+aramaya gerek kalmasın diye buraya not düşülüyor):
+
+TV resmi dokümantasyonundan (WebSearch, `tradingview.com/support/solutions/
+43000707985-fixed-range-volume-profile-drawing-tool`) doğrulanan davranış:
+- Kırmızı bir **POC (Point of Control)** çizgisi — en çok hacmin işlem
+  gördüğü fiyat seviyesi.
+- Her fiyat satırı için **sarı (down volume) / mavi (up volume)** olarak
+  ikiye bölünmüş yatay histogram çubukları (ya da "total"/"delta" modu).
+- **Rows Layout** ayarı: "Number of Rows" seçiliyse "Row Size" girdisi
+  toplam satır sayısını belirler, ticks-per-row otomatik hesaplanır
+  (`(Histogram Top - Histogram Bottom) / Number of Rows / Tick size`).
+- **Value Area** ayarı: toplam hacmin yüzde kaçının (varsayılan %70)
+  vurgulanacağını belirler → **VAH** (Value Area High) ve **VAL** (Value
+  Area Low) sınırları hesaplanıp gösterilir.
+- Anchored Volume Profile, Fixed Range'in aynısı ama tek bir başlangıç
+  noktasından (ankraj) o ana kadar uzanan versiyonu (2 nokta yerine 1 nokta
+  + geçerli zamana kadar).
+
+**Neden bu turda yapılmadı (kasıtlı, kör ilerlemek riskli):** Bu, Faz 1/2'nin
+aksine gerçek bir histogram HESAPLAMA motoru gerektiriyor — `pane.candlesData`
+içindeki mumları p1/p2 arasındaki zaman aralığında fiyat kovalarına
+(bucket) ayırıp her kovanın hacmini toplamak, POC/VAH/VAL hesaplamak, ve
+bunu yatay çubuklar olarak çizmek. Bu, Faz 1/2'de kullanılan "mevcut rect/
+position mekanizmasını genişlet" desenine UYMUYOR — sıfırdan yeni bir
+hesaplama+render katmanı. Ayrıca `pane.candlesData`'nın yüklü/görünür veri
+olduğu, kullanıcı çok geriye bir aralık seçerse eksik hesaplayabileceği
+(zaten `_drawMeasureTool`'da da var olan, yeni bir kısıt olmayan bir
+sınırlama) not edilmeli.
+
+**Sonraki oturumda ilk iş (önerilen sıra):**
+1. `_boxXY`/`_drawRangeBox` (Faz 2, `drawing-forecast.js`) yardımcılarını
+   histogram tabanı olarak yeniden kullan — kutunun şekli/yerleştirmesi
+   `pricerange` ile aynı (2 nokta, `TWO_PT_TOOLS`+rect hit-test'e ekle).
+2. Histogram hesaplama fonksiyonu yaz: `pane.candlesData`'da `p1.time`-`p2.time`
+   arasını filtrele, `p1.price`-`p2.price` aralığını N satıra böl (Row
+   Size varsayılan ~24, TV'ninkiyle birebir aynı sayı olması ŞART değil —
+   kullanıcıya "TV ile pixel-perfect değil, davranışça benzer" olduğunu
+   netleştir), her mumun hacmini (open<close ise up, değilse down kovasına)
+   ilgili fiyat kovasına ekle.
+3. POC (en yüksek hacimli satır) + Value Area (%70'lik kümülatif hacim
+   aralığı, ortadan dışa doğru genişleyerek) hesapla.
+4. Render: her satır için up/mavi + down/sarı yığılmış yatay çubuk, POC
+   kırmızı çizgi, VAH/VAL opsiyonel ince çizgiler.
+5. Fixed Range bitince Anchored Volume Profile'ı (aynı hesaplama, sadece
+   p2.time yerine "şu an"a kadar, tek nokta + sürükle mantığı) türet.
+6. Doğrulama: Faz 1/2'de kullanılan `DrawingManager.onMouseDown` JS-API
+   test yöntemini (yukarıda açıklandı) kullan, gerçek fare tıklamasına
+   güvenme.
+
+**Kod tabanında henüz DEĞİŞEN hiçbir şey yok** — `drawing-forecast.js`'teki
+`_drawFixedVolProf`/`_drawAnchVolProf` hâlâ `/* Placeholder */`, `drawing-
+core.js`'de bu iki tool adına hiçbir referans (TWO_PT_TOOLS, hit-test, vb.)
+eklenmedi. Sonraki oturum sıfırdan (bu notlardan) başlayabilir.
