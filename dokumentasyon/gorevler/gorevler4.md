@@ -1691,3 +1691,161 @@ var olan) öne çıkıyor.
   (bir noktaya değil, çizgi boyunca herhangi bir yere) sürükleyerek tüm
   şeklin birlikte hareket ettiğini doğrulamak.
 - `node -c` ile tüm dosyalar sözdizimi temiz.
+
+---
+
+## Görev-20 — 2026-08-28: Kline/OHLCV "Havuzu" — mimari planlama (PLANLAMA, kod YAZILMADI)
+
+**Durum: Sadece tartışma/araştırma yapıldı, HİÇBİR kod değişikliği yok.**
+Kullanıcı başka bir cihazda devam edecek — bu bölüm o oturumun sıfırdan
+başlayabilmesi için mümkün olduğunca detaylı yazıldı. Kullanıcının son
+isteği: bu görev bittikten SONRA bir **TWcross indikatörü** istenecek —
+**o zaman kullanıcıdan TV'nin gerçek Pine kaynak kodu istenmeli**
+(DEMA/EMA/LinReg'de olduğu gibi, tahmin edilmemeli — bu projenin
+yerleşik kuralı).
+
+### Bağlam / kullanıcının amacı (kendi sözleriyle, önemli — gerekçe budur)
+
+> "M1Hammer botunda OHLCV kullanmayan hangi servis var?" → "M1Hammer'i
+> bütün watchlist coinlerini tarayıp ihtiyacımız olan formasyon
+> oluştuğunda sinyal vermesi... aynı veriyi gösteren şeyleri tek tüpten
+> geçirebilmek, ve tüpten çıktıktan sonra kumaşa istediğimiz şekli
+> verebilmek, yani havuzdan herkes ihtiyacı olanı çeksin, kimine 5m
+> lazım, kimine 1h... diğer botlar için de istek atmamız gerekebilir
+> ileride... bu yapacağımız şey web sayfamızın akıcı çalışmasına engel
+> olur mu, hangi seçenek akıcılığı sağlar bu da çok önemli"
+
+Yani hedef: (1) M1Hammer'ı sabit 8 coin'den TÜM watchlist'e genişletmek,
+BAN riski yaratmadan; (2) genel-amaçlı, gelecekteki botların da
+kullanacağı TEK bir OHLCV havuzu kurmak; (3) bunu yaparken sayfanın
+akıcılığını BOZMAMAK (kritik kısıt, kullanıcı iki kez vurguladı).
+
+### Bulgu 1 — M1Hammer'ın veri profili (zaten netleşti)
+
+`js/screener/m1hammer-scanner.js` — sinyal objesindeki (`_computeSignal`)
+TEK OHLCV-olmayan alan `fr` (funding rate), o da `scalpFRMonitor` →
+`binanceFRPoller` → `MarketDataStore`'un `!markPrice@arr` akışından
+geliyor — YANİ zaten kendi ayrı, zaten paylaşımlı bir havuzdan. RSI/SRSI/
+WT/fiyat/boostValue'nun TAMAMI OHLCV'den (kapanmış mum: close/high/low).
+Kurulacak kline havuzu M1Hammer'ın verisinin ~%95'ini kapsayacak, FR
+kısmına dokunmaya gerek yok.
+
+### Bulgu 2 — Coin Detail'de RSI için 3 AYRI, birbirinden habersiz kopya var
+
+`js/screener/detail-panel.js` içinde:
+1. `_fetchRsiForTf()` (satır ~396-444) — **doğru desen**: önce
+   `MarketDataStore.getKlines(sym,tf)` önbelleğine bakar, yoksa REST atıp
+   `MarketDataStore.setKlines()` ile önbelleğe YAZAR. Nerede kullanıldığı
+   ayrıca doğrulanmalı (muhtemelen periyodik "kadans" yenilemesinde).
+2. `loadSymbol()`'ın BINANCE dalı (satır ~1049-1070) — **kopya, YANLIŞ**:
+   önbelleğe HİÇ bakmadan, kullanıcı her coin'e tıkladığında 5 taze REST
+   isteği (`fapi/v1/klines`, 5 farklı TF) atıyor, sonucu önbelleğe de
+   yazmıyor. Madde 1'deki doğru fonksiyon AYNI DOSYADA varken kullanılmıyor.
+3. `loadSymbol()`'ın BYBIT dalı (satır ~945-974) — Bybit'te zaten havuz
+   yok (bilinçli, Görev-16'da netleşmişti), bu kısım dokunulmayacak.
+
+**Not:** M1Hammer'ın kendi backfill'i de `MarketDataStore.setKlines()`'e
+HİÇ yazmıyor — kendi izole iç belleğinde tutuyor (`_buf` Map'i). Yani
+M1Hammer'ın zaten çektiği BTC/ETH/SOL/BNB/XRP/DOGE/ADA/LINK verisi bile
+bugün Coin Detail'in önbellek-kontrolü tarafından GÖRÜLEMİYOR.
+
+### Bulgu 3 — Grafiğin kendi OHLCV borusu da AYRI (en büyük bulgu)
+
+`js/chart/chart-pane.js`'in kullandığı `js/data/chart-data.js`
+(`BinanceFeed`) ile bot havuzu `js/data/market-data-store.js`
+(`MarketDataStore`) **iki farklı zamanda, iki farklı amaç için
+yazılmış, birbirinden TAMAMEN habersiz iki ayrı boru**:
+- `BinanceFeed.fetchHistory()` — grafiğin kendi REST backfill'i.
+- `BinanceFeed.connectLive()` — grafiğin canlı mum güncellemesi, **WS
+  DEĞİL, her 2 saniyede bir REST** (Görev-16'da bulunmuştu).
+- `MarketDataStore`'un kline WS'i ise zaten hem ara-tık (kapanmamış bar,
+  `k.x=false`) hem kapanış (`k.x=true`) güncellemelerini alıyor VE
+  `subs.forEach`/`_emit('mds:kline',...)` bunları KOŞULSUZ (isFinal
+  filtresi olmadan) dışarı veriyor — sadece M1Hammer kendi
+  `_onKlineBar`'ında `if (!bar.isFinal) return` ile bilerek filtreliyor.
+
+**Düzeltilen yanlış varsayım (sohbet sırasında):** Önce "grafiğin canlı
+oluşan mum ihtiyacı RSI'nın 'sadece kapanmış bar' ihtiyacından temelde
+farklı, ayrı kalmalı" denmişti — YANLIŞ çıktı. Binance'in kline WS akışı
+zaten HER işlemde güncelleme gönderiyor (sadece kapanışta değil),
+`MarketDataStore` bunu ZATEN alıyor. Yani grafik de AYNI tek akıştan
+beslenebilir — kapanmamış barları da alıp "şu an oluşan mum" için
+kullanır, kapanmış barları RSI/SRSI/WT hesaplayanlar kullanır. Ayrı bir
+mekanizma İCAT ETMEYE gerek yok.
+
+### Akıcılık (fluidity) analizi — kullanıcının en kritik sorusu
+
+**Sonuç: doğru sınırlarla yapılırsa akıcılığı ARTIRIR, bozmaz.**
+- Bugünkü 2sn'lik REST polling zaten WebSocket'ten DAHA AZ akıcı —
+  birleştirme aslında bir DOWNGRADE değil, upgrade.
+- Riskli olan TEK senaryo: 500 sembolün verisi geldikçe hepsini ekrana
+  çizmeye çalışmak. Doğru tasarım: gelen her kline mesajı için SADECE o
+  an açık olan grafik penceresinin sembolüyle eşleşiyorsa repaint
+  tetiklenir; diğer tüm semboller sessizce arka plan tamponuna
+  (RSI/SRSI/WT hesaplayan buffer'lara) yazılır, canvas'a hiç dokunmaz.
+  M1Hammer zaten BUGÜN tam olarak bu disiplinle çalışıyor (8 sembol veri
+  alıyor, hiçbiri ekrana çizilmiyor) — 500 sembole çıkarken AYNI disiplin
+  korunmalı, yeni bir risk değil, mevcut deseni büyütmek.
+- WebSocket mesaj İŞLEME ucuz; pahalı olan DOM/canvas ÇİZİMİ — o zaten
+  sadece 1 (veya multi-pane'de birkaç) sembol için oluyor, sayı artmıyor.
+
+### Önerilen mimari (ÜZERİNDE ANLAŞILDI ama KOD YAZILMADI)
+
+**A) Merkezi havuz fonksiyonu — `MarketDataStore.getOrFetchKlines(sym, tf, limit)`:**
+1. `_klines` önbelleğine bak, varsa döndür (sıfır istek).
+2. Yoksa/yetersizse TEK bir REST isteği at (aynı anda birden fazla
+   çağıran varsa in-flight promise paylaşılmalı — aynı sembol+tf için
+   ikinci çağıran yeni istek ATMAMALI, ilkinin sonucunu beklemeli),
+   `setKlines()` ile önbelleğe yaz.
+3. Otomatik olarak `subscribeKlines()` ile canlı abone ol — önbellek
+   kendini günceller, bir daha REST gerekmez.
+
+Bunu kurduktan sonra:
+- M1Hammer'ın kendi `fetchKlines`/`_backfill`/`_buf` mantığı bu
+  fonksiyona yönlendirilir (kendi buffer'ını hâlâ tutabilir ama KAYNAK
+  bu fonksiyon olur, ayrıca `setKlines()` ile paylaşılan önbelleğe de
+  yazar — böylece Coin Detail onu görebilir).
+- `detail-panel.js`'in 3 kopyası (Bulgu 2) TEK bu fonksiyona indirgenir.
+- `chart-data.js`'in `BinanceFeed.fetchHistory`/`connectLive`'ı bu
+  fonksiyona yönlendirilir — 2sn'lik REST polling KALKAR, kapanmamış bar
+  güncellemeleri (zaten WS'ten geliyor) "şu an oluşan mum" için kullanılır.
+
+**B) M1Hammer'ın tüm watchlist'e genişlemesi — KATMANLI tarama (Kom1'in
+kanıtlanmış deseninin aynısı, kopya değil aynı ilke):**
+- **Ucuz/geniş katman:** TÜM watchlist sembolleri için SADECE 5m RSI
+  canlı izlenir (havuzdan, WS, backfill sonrası REST yok). Bu zaten
+  M1Hammer'ın "zorunlu tetikleyici" koşulu.
+- **Pahalı/dar katman:** SADECE 5m RSI eşiği (< 30 veya > 70) tetiklenen
+  sembol için diğer 4 TF (15m/1h/4h/1d) havuzdan istenir — nadir olacak.
+- Binance'in bağlantı başına stream sınırı (~1024) 500 sembol × 1 TF
+  (5m) için yeterli — 500×5=2500 ile karşılaştırıldığında rahat sığar,
+  bu yüzden "tüm TF'leri her sembol için sürekli tut" YERİNE bu katmanlı
+  yaklaşım gerekli, sadece optimizasyon değil, teknik bir ZORUNLULUK.
+
+### Açık kalan kapsam kararları (kullanıcı henüz onaylamadı)
+
+1. Üç parça (havuz kurulumu + M1Hammer genişletme + grafiğin borusunu
+   birleştirme) tek seferde mi, yoksa aşamalı mı (önce havuz+Coin Detail,
+   sonra M1Hammer genişletme, sonra grafik — her biri ayrı commit)?
+   **Önerim (henüz onaylanmadı): aşamalı** — kullanıcının kendi
+   "küçük/izole/geri alınabilir adımlar" ilkesiyle (Görev-17'de
+   belirlediği) tutarlı olur, grafiğin kendisine dokunmak en riskli kısım
+   olduğu için en sona bırakılmalı.
+2. M1Hammer tüm piyasaya genişleyince UI/sinyal formatına dokunulmayacak
+   (CLAUDE.md kuralı) — sadece taranan sembol sayısı artacak. Kullanıcı
+   bunu onaylamalı.
+3. Havuz şimdiden "genel amaçlı" (gelecekteki Kom3/M1-A/V3/4S botları da
+   kullanacak şekilde) mı tasarlansın, yoksa şimdilik sadece
+   M1Hammer+Coin Detail+grafik için mi? Kullanıcı "ileride diğer botlar
+   için de istek atmamız gerekebilir" dedi — bu, havuzun GENEL AMAÇLI
+   tasarlanması yönünde bir işaret, ama net onay alınmadı.
+
+### Sonraki oturumda ilk iş
+
+1. Yukarıdaki 3 açık kararı kullanıcıyla netleştir.
+2. Onay gelirse Madde A'dan (`getOrFetchKlines` + Coin Detail'in 3
+   kopyasını birleştirme) başla — en düşük risk, en hızlı doğrulanabilir.
+3. **UNUTMA:** Kullanıcı bu görev bittikten sonra bir **TWcross
+   indikatörü** isteyecek — o istek geldiğinde İLK İŞ kullanıcıdan TV'nin
+   gerçek Pine kaynak kodunu istemek (tahmin ETME, DEMA/EMA/LinReg'de
+   olduğu gibi bu projenin yerleşik kuralı).
